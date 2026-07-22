@@ -37,6 +37,19 @@ PIDS="$PIDS $!"
 
 mkdir -p /data/profile
 
+# Each container run is a fresh host identity (new hostname/PID namespace),
+# but the profile dir persists across runs via the bind mount. Browser
+# single-instance lock files record the old identity and make the browser
+# refuse to start ("profile in use by another process") even though nothing
+# else is actually running. Only one browser process is ever launched per
+# container by this script, so it's always safe to clear stale locks here.
+rm -f /data/profile/Singleton*
+rm -f /data/profile/lock /data/profile/.parentlock
+
+# Note: Chromium ignores --remote-debugging-address for a headed instance
+# and always binds CDP to 127.0.0.1 only, regardless of the flag. A worker
+# container reaches it by joining this container's network namespace
+# (docker-compose `network_mode: service:...`), not by publishing the port.
 case "${BROWSER}" in
   chromium|chrome)
     echo "Starting Chromium"
@@ -49,6 +62,8 @@ case "${BROWSER}" in
       --start-maximized \
       --window-position=0,0 \
       --user-data-dir=/data/profile \
+      --remote-debugging-port=9222 \
+      --remote-allow-origins=* \
       about:blank >/var/log/browser.log 2>&1 &
     PIDS="$PIDS $!"
     ;;

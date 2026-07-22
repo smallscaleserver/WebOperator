@@ -38,6 +38,12 @@ docker compose up browser-worker-chrome   # หรือ browser-worker-firefox
 
 เปิด `http://localhost:6080/vnc.html` (Chrome) หรือ `http://localhost:6081/vnc.html` (Firefox) แล้วใส่รหัสผ่านจาก `.env`
 
+สั่งงานผ่าน Playwright แทนการคลิกเองผ่าน noVNC (ต้องเปิด `browser-worker-chrome` ไว้ก่อน):
+
+```bash
+docker compose run --rm worker
+```
+
 ดูแผนงานละเอียดและ checklist ที่ [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md), บริบทสำหรับ AI agent (Claude Code / Codex CLI) ที่ [`AGENTS.md`](./AGENTS.md)
 
 ## สารบัญ

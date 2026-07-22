@@ -15,6 +15,7 @@ human) is picking the work back up.
 | Display/remote control | Xvfb + Fluxbox + x11vnc + noVNC | Gives a real, clickable desktop reachable from any browser tab — no native VNC client needed. |
 | Sandbox | Chromium runs with `--no-sandbox` for now | Simplest path to a working Phase 1. Real seccomp/user-namespace hardening per Playwright's official Docker guide is deferred to Phase 5. |
 | Session storage | Plain bind-mounted volume (`data/profiles/*`) for now | Placeholder for the future encrypted Session Vault (Phase 2/3). Not safe for real credentials yet — dev-only. |
+| Worker transport | `playwright-core` + `connectOverCDP`, worker container joins `browser-worker-chrome`'s network namespace (`network_mode: service:...`) | Chromium ignores `--remote-debugging-address` for a headed instance and only ever binds CDP to `127.0.0.1` — sharing the network namespace reaches it without publishing the (unauthenticated) CDP port anywhere. Firefox has no CDP equivalent; needs WebDriver BiDi later. |
 
 ## Phase 1 — Prototype
 
@@ -25,7 +26,8 @@ human) is picking the work back up.
 - [ ] เปิดเว็บ ทดลอง login ด้วยมือ
 - [ ] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`)
 - [ ] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ
-- [ ] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) / WebDriver BiDi (Firefox)
+- [x] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) — `services/worker`, verified: navigates, reads title, screenshots
+- [ ] Playwright worker เชื่อมต่อ Firefox ผ่าน WebDriver BiDi
 
 ## Phase 2 — Task Engine
 

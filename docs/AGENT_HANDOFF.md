@@ -59,3 +59,33 @@ and sessions.
 - Next: Playwright worker that connects to a running browser-worker
   container over CDP (Chromium) — first item still unchecked in Phase 1 of
   `docs/PROJECT_PLAN.md`.
+
+### 2026-07-23 22:05 ICT — Claude
+
+- Status: Done
+- Context: Added `services/worker` — a `playwright-core` worker that
+  connects to `browser-worker-chrome` over CDP. Two non-obvious issues found
+  and fixed while verifying end-to-end: (1) Chromium's profile lock files
+  (`SingletonLock`) referenced a stale container hostname across restarts
+  and made Chromium refuse to start at all — fixed by clearing lock files in
+  `entrypoint.sh` on every startup, since only one browser process is ever
+  launched per container. (2) Chromium ignores `--remote-debugging-address`
+  for a headed instance and only ever binds CDP to `127.0.0.1` even with the
+  flag set — fixed by giving the `worker` service `network_mode:
+  "service:browser-worker-chrome"` in `docker-compose.yml` instead of trying
+  to reach it over the bridge network, so the CDP port is never published or
+  exposed beyond loopback.
+- Files: `services/browser-worker/entrypoint.sh`, `services/worker/*`
+  (new), `docker-compose.yml`, `docs/PROJECT_PLAN.md`, `AGENTS.md`,
+  `README.md`.
+- Verified: `docker compose build browser-worker-chrome worker`, started
+  `browser-worker-chrome`, ran `docker compose run --rm worker` — connected,
+  logged page title "Example Domain", wrote
+  `data/worker-output/example.png` (visually confirmed it's a real render,
+  not blank/error). Re-checked noVNC still returns 200 and Chromium has a
+  normal (non-crash-looped) process tree afterward. `docker compose down`
+  exits clean, no orphaned containers.
+- Next: This worker is a one-shot proof script, not a long-running task
+  runner. Next Phase 1 items per `docs/PROJECT_PLAN.md`: Playwright
+  `storageState` save/restore for sessions, then a Control Panel with
+  Start/Stop/Take-control, then one real site adapter.

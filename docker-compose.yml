@@ -22,3 +22,14 @@ services:
     volumes:
       - ./data/profiles/firefox:/data/profile
     shm_size: "2gb"
+
+  worker:
+    build: ./services/worker
+    environment:
+      - CDP_URL=http://localhost:9222
+    volumes:
+      - ./services/worker/src:/app/src
+      - ./data/worker-output:/app/output
+    network_mode: "service:browser-worker-chrome"
+    depends_on:
+      - browser-worker-chrome

@@ -15,19 +15,29 @@ resolve something itself. Full architecture narrative is in `README.md`.
 ## Current status
 
 **Phase 1 (Prototype), in progress.** The Docker/noVNC browser scaffold
-exists and works standalone; no application/worker code exists yet.
+works, and a first Playwright worker connects to Chromium over CDP.
 
-Run it:
+Run the browser + noVNC:
 
 ```bash
 cp .env.example .env   # first time only
-docker compose up browser-worker-chrome   # or browser-worker-firefox
+docker compose up -d browser-worker-chrome   # or browser-worker-firefox
 ```
 
 Open `http://localhost:6080/vnc.html` (Chrome) or `http://localhost:6081/vnc.html`
 (Firefox), enter the VNC password from `.env`, and you get a real, clickable
 desktop with the browser open — same idea as the `noVNC Manual Takeover`
 screen described in the README's architecture.
+
+Run the Playwright worker (proves programmatic control over CDP — requires
+`browser-worker-chrome` already up, Chromium only, Firefox has no CDP):
+
+```bash
+docker compose run --rm worker
+```
+
+It connects to the already-running Chromium, navigates to a demo page, and
+writes a screenshot to `data/worker-output/example.png` on the host.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
@@ -37,9 +47,11 @@ Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 ```
 README.md                    Architecture narrative, diagrams, full roadmap prose
 docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + decision log
-docker-compose.yml            Phase 1 browser-worker services (chrome + firefox)
+docker-compose.yml            Phase 1 browser-worker services (chrome + firefox) + worker
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
+services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
+data/worker-output/           Worker output (screenshots etc.), gitignored
 ```
 
 ## Working conventions (decided — don't re-litigate without reason)
