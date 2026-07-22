@@ -40,3 +40,22 @@ and sessions.
 - Verified: Documentation-only change; no runtime tests run.
 - Next: On each future session, read `AGENTS.md`, then this file, then
   `docs/PROJECT_PLAN.md` before editing.
+
+### 2026-07-23 21:50 ICT — Claude
+
+- Status: Done
+- Context: Reviewed Codex's handoff-channel change (no secrets, consistent
+  with existing conventions) and committed/pushed it. Earlier this session
+  (separate commits) also built and verified the Phase 1 Docker/noVNC
+  browser scaffold end-to-end: built both images, started
+  `browser-worker-chrome` and `browser-worker-firefox`, confirmed noVNC
+  served on `:6080`/`:6081` with the real browser process running inside
+  each container, and confirmed clean `docker compose down` shutdown.
+- Files: `docs/AGENT_HANDOFF.md`, `AGENTS.md`, `CLAUDE.md`,
+  `docs/PROJECT_PLAN.md` (this commit); `docker-compose.yml`,
+  `services/browser-worker/*`, `.gitattributes` (earlier commit `2dbc908`).
+- Verified: `docker compose build` + `up -d` + manual process/HTTP checks for
+  both browsers, `docker compose down` clean exit, `git push` succeeded.
+- Next: Playwright worker that connects to a running browser-worker
+  container over CDP (Chromium) — first item still unchecked in Phase 1 of
+  `docs/PROJECT_PLAN.md`.
