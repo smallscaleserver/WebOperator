@@ -30,6 +30,7 @@ desktop with the browser open — same idea as the `noVNC Manual Takeover`
 screen described in the README's architecture.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
+Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
 ## Repo layout
 
@@ -62,3 +63,7 @@ data/profiles/                Bind-mounted browser profiles (gitignored, dev-onl
 
 Update the checklist in `docs/PROJECT_PLAN.md` (tick items off, add new ones)
 so the next session — in either tool — knows what's actually done.
+
+If another agent or human needs context, add a short entry to
+`docs/AGENT_HANDOFF.md` with status, files touched, verification, and the next
+recommended action. Never include secrets or browser-profile data there.

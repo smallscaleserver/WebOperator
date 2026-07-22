@@ -20,6 +20,7 @@ human) is picking the work back up.
 
 - [x] Docker เปิด Chromium/Firefox แบบเห็นหน้าจอ (`services/browser-worker`)
 - [x] เชื่อม noVNC (`http://localhost:6080` / `:6081`)
+- [x] ช่องทาง handoff ระหว่าง Codex/Claude/human (`docs/AGENT_HANDOFF.md`)
 - [ ] Control Panel มี Start/Stop/Take control
 - [ ] เปิดเว็บ ทดลอง login ด้วยมือ
 - [ ] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`)
