@@ -1,6 +1,6 @@
 # WebOperator
 
-**WebOperator** (โค้ดเนม WebSteward) คือระบบอัตโนมัติสำหรับเข้าใช้งานเว็บไซต์และ Gmail แทนคน โดยไม่ทำงานเป็นสคริปต์ยาวชุดเดียว แต่แบ่งเป็นส่วนต่าง ๆ ที่แยกความรับผิดชอบชัดเจน:
+**WebOperator** คือระบบอัตโนมัติสำหรับเข้าใช้งานเว็บไซต์และ Gmail แทนคน โดยไม่ทำงานเป็นสคริปต์ยาวชุดเดียว แต่แบ่งเป็นส่วนต่าง ๆ ที่แยกความรับผิดชอบชัดเจน:
 
 - ระบบกลางจัดคิวงาน (Task Queue)
 - Browser Worker ที่รันใน Docker
@@ -27,6 +27,19 @@ cd WebOperator
 git clone git@github.com:smallscaleserver/WebOperator.git
 ```
 
+### Phase 1 quickstart
+
+เปิด browser (Chrome หรือ Firefox) แบบเห็นหน้าจอใน Docker แล้วควบคุมผ่านเว็บด้วย noVNC:
+
+```bash
+cp .env.example .env
+docker compose up browser-worker-chrome   # หรือ browser-worker-firefox
+```
+
+เปิด `http://localhost:6080/vnc.html` (Chrome) หรือ `http://localhost:6081/vnc.html` (Firefox) แล้วใส่รหัสผ่านจาก `.env`
+
+ดูแผนงานละเอียดและ checklist ที่ [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md), บริบทสำหรับ AI agent (Claude Code / Codex CLI) ที่ [`AGENTS.md`](./AGENTS.md)
+
 ## สารบัญ
 
 - [สถาปัตยกรรมโดยรวม](#สถาปัตยกรรมโดยรวม)
@@ -45,7 +58,7 @@ git clone git@github.com:smallscaleserver/WebOperator.git
 
 ```mermaid
 flowchart TD
-    U["Web Control Panel"] --> A["WebSteward API"]
+    U["Web Control Panel"] --> A["WebOperator API"]
     A --> Q["Task Queue"]
     Q --> W["Browser Worker"]
     W --> B["Chrome / Firefox"]
@@ -266,7 +279,7 @@ stateDiagram-v2
 
 รุ่นแรกไม่ต้องพยายาม "เข้าได้ทุกเว็บ" เพราะแต่ละเว็บมี login และโครงสร้างต่างกัน ควรตั้งเป้าเป็น:
 
-> WebSteward MVP สามารถเปิด Chromium ใน Docker, แสดงและควบคุมผ่าน noVNC, เก็บ session แบบเข้ารหัส, ทำ workflow ทีละ step, ปิด popup พื้นฐาน, หยุดรอคนเมื่อพบ 2FA/CAPTCHA และดึงข้อมูลจาก Gmail API กับเว็บไซต์ตัวอย่างหนึ่งแห่งได้
+> WebOperator MVP สามารถเปิด Chromium ใน Docker, แสดงและควบคุมผ่าน noVNC, เก็บ session แบบเข้ารหัส, ทำ workflow ทีละ step, ปิด popup พื้นฐาน, หยุดรอคนเมื่อพบ 2FA/CAPTCHA และดึงข้อมูลจาก Gmail API กับเว็บไซต์ตัวอย่างหนึ่งแห่งได้
 
 โครงสร้างนี้จะขยายเป็นระบบ universal ได้จริง และไม่เปราะเท่าการสร้างบอตที่อาศัยการคลิกตามตำแหน่งหน้าจอเพียงอย่างเดียว
 

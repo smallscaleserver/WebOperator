@@ -1,0 +1,24 @@
+services:
+  browser-worker-chrome:
+    build: ./services/browser-worker
+    environment:
+      - BROWSER=chromium
+      - RESOLUTION=1366x768x24
+      - VNC_PASSWORD=${VNC_PASSWORD:-changeme}
+    ports:
+      - "6080:6080"
+    volumes:
+      - ./data/profiles/chrome:/data/profile
+    shm_size: "2gb"
+
+  browser-worker-firefox:
+    build: ./services/browser-worker
+    environment:
+      - BROWSER=firefox
+      - RESOLUTION=1366x768x24
+      - VNC_PASSWORD=${VNC_PASSWORD:-changeme}
+    ports:
+      - "6081:6080"
+    volumes:
+      - ./data/profiles/firefox:/data/profile
+    shm_size: "2gb"

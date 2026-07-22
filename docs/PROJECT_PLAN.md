@@ -1,0 +1,68 @@
+# WebOperator — Project Plan
+
+Actionable version of the roadmap in `README.md`. Update the checkboxes as
+work lands — this file (together with `AGENTS.md`) is the canonical place to
+see current status, regardless of which tool (Claude Code, Codex CLI, or a
+human) is picking the work back up.
+
+## Decision Log
+
+| Decision | Choice | Why |
+| --- | --- | --- |
+| Project name | **WebOperator** (single name, repo + product) | Repo was already public under this name; earlier "WebSteward" codename retired to avoid confusion. |
+| Core stack | TypeScript/Node.js + Playwright | Best Chromium/Firefox automation ecosystem; persistent profiles, trace/video, headed mode all supported natively. |
+| Browsers | Chrome **and** Firefox from Phase 1 | User requirement: must feel like a real PC, not a single-browser bot. |
+| Display/remote control | Xvfb + Fluxbox + x11vnc + noVNC | Gives a real, clickable desktop reachable from any browser tab — no native VNC client needed. |
+| Sandbox | Chromium runs with `--no-sandbox` for now | Simplest path to a working Phase 1. Real seccomp/user-namespace hardening per Playwright's official Docker guide is deferred to Phase 5. |
+| Session storage | Plain bind-mounted volume (`data/profiles/*`) for now | Placeholder for the future encrypted Session Vault (Phase 2/3). Not safe for real credentials yet — dev-only. |
+
+## Phase 1 — Prototype
+
+- [x] Docker เปิด Chromium/Firefox แบบเห็นหน้าจอ (`services/browser-worker`)
+- [x] เชื่อม noVNC (`http://localhost:6080` / `:6081`)
+- [ ] Control Panel มี Start/Stop/Take control
+- [ ] เปิดเว็บ ทดลอง login ด้วยมือ
+- [ ] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`)
+- [ ] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ
+- [ ] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) / WebDriver BiDi (Firefox)
+
+## Phase 2 — Task Engine
+
+- [ ] Queue และ scheduler (Redis + BullMQ)
+- [ ] Step-based workflow
+- [ ] screenshot/trace ทุกจุดสำคัญ
+- [ ] retry, timeout และ circuit breaker
+- [ ] ดาวน์โหลดและจัดเก็บข้อมูล (MinIO/S3)
+
+## Phase 3 — Gmail
+
+- [ ] Google OAuth
+- [ ] อ่าน ค้นหา และดาวน์โหลดไฟล์แนบผ่าน Gmail API
+- [ ] Browser fallback เฉพาะกรณีจำเป็น
+- [ ] Encrypted token vault
+
+## Phase 4 — Universal Adapters
+
+- [ ] ระบบ plugin สำหรับเพิ่มเว็บไซต์
+- [ ] Popup rules กลาง
+- [ ] page-state detection
+- [ ] selector หลายระดับ: role → label → text → CSS
+- [ ] workflow versioning เพื่อย้อนกลับเมื่อเว็บเปลี่ยน
+
+## Phase 5 — Production
+
+- [ ] แยก worker หลายเครื่อง
+- [ ] Chrome และ Firefox profiles (multi-user)
+- [ ] สิทธิ์ผู้ใช้และ audit log
+- [ ] domain allowlist
+- [ ] monitoring และแจ้งเตือน
+- [ ] backup/restore session vault
+- [ ] Chromium sandbox hardening (drop `--no-sandbox`, apply seccomp profile per Playwright Docker docs)
+- [ ] noVNC behind HTTPS with short-lived, per-session URLs (currently plain HTTP + static password — dev only)
+
+## Immediate next step
+
+Playwright worker (`services/`... TBD) that connects to the already-running
+`browser-worker-chrome` container over the Chrome DevTools Protocol, so tasks
+can be scripted instead of only driven by hand through noVNC. See Phase 1
+checklist above.
