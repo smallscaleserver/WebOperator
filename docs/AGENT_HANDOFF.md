@@ -89,3 +89,18 @@ and sessions.
   runner. Next Phase 1 items per `docs/PROJECT_PLAN.md`: Playwright
   `storageState` save/restore for sessions, then a Control Panel with
   Start/Stop/Take-control, then one real site adapter.
+
+### 2026-07-23 22:20 ICT — Codex
+
+- Status: Done
+- Context: Shutdown-safe checkpoint before powering off. Verified local `main`
+  is at commit `5f30513` and has no commits ahead of `origin/main`; only
+  untracked file is `note`, which contains personal Codex CLI command notes and
+  is not project work. Docker has no WebOperator services running.
+- Files: `docs/AGENT_HANDOFF.md`, `docs/PROJECT_PLAN.md`
+- Verified: `git status --short`, `git log --oneline -5`,
+  `git log --oneline origin/main..HEAD`, `docker compose ps`, `docker ps
+  --filter name=weboperator`
+- Next: On resume, read `AGENTS.md`, this file, then `docs/PROJECT_PLAN.md`.
+  Continue Phase 1 with Playwright `storageState` save/restore for sessions,
+  then the Control Panel, then one real site adapter.

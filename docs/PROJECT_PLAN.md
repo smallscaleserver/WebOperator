@@ -65,7 +65,7 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Playwright worker (`services/`... TBD) that connects to the already-running
-`browser-worker-chrome` container over the Chrome DevTools Protocol, so tasks
-can be scripted instead of only driven by hand through noVNC. See Phase 1
-checklist above.
+Add Playwright session save/restore (`storageState`) around the existing
+`services/worker` CDP proof script, so a manually prepared browser session can
+be reused by automation. After that, build the Control Panel with
+Start/Stop/Take-control and then one real site adapter.
