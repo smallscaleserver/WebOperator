@@ -50,6 +50,14 @@ docker compose run --rm worker npm run restore  # loads it into a fresh isolated
 Session files land in `data/sessions/*.json` — plaintext, dev-only, same
 caveat as `data/profiles/`.
 
+Run the example site adapter (login + popup-dismiss + extract + real session
+save, against `https://the-internet.herokuapp.com` — a practice app built
+for automation, not a real production site):
+
+```bash
+docker compose run --rm worker npm run adapter
+```
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -61,6 +69,7 @@ docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + deci
 docker-compose.yml            Phase 1 browser-worker services (chrome + firefox) + worker
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
+services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site)
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)

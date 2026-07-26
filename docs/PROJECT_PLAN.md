@@ -18,6 +18,7 @@ human) is picking the work back up.
 | Worker transport | `playwright-core` + `connectOverCDP`, worker container joins `browser-worker-chrome`'s network namespace (`network_mode: service:...`) | Chromium ignores `--remote-debugging-address` for a headed instance and only ever binds CDP to `127.0.0.1` — sharing the network namespace reaches it without publishing the (unauthenticated) CDP port anywhere. Firefox has no CDP equivalent; needs WebDriver BiDi later. |
 | Session proof method | Synthetic marker (cookie + localStorage on `example.com`), not a real login | No site adapter exists yet (separate checklist item). Proves the `storageState` save/restore mechanism generically; a real login-based proof lands with the first adapter. |
 | Session file storage | Plain JSON under `data/sessions/*` for now | Same caveat already logged for `data/profiles/*` — placeholder for the encrypted Session Vault (Phase 2/3), not safe for real credentials yet. |
+| Demo adapter target | `https://the-internet.herokuapp.com` (`/login`, `/entry_ad`) | Free, purpose-built practice app that exists specifically to be automated against; publishes its own test credentials. Sidesteps any "is it okay to automate this real site" question while still exercising a real login, a real session cookie, and a real popup-dismissal case. |
 
 ## Phase 1 — Prototype
 
@@ -27,7 +28,7 @@ human) is picking the work back up.
 - [ ] Control Panel มี Start/Stop/Take control
 - [ ] เปิดเว็บ ทดลอง login ด้วยมือ
 - [x] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`) — `services/worker` `npm run save`/`npm run restore`, verified round-trip via synthetic marker
-- [ ] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ
+- [x] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ — `services/worker/src/adapters/the-internet.ts` + `npm run adapter`, verified: dismisses popup, real login, extracts flash message, saves real session
 - [x] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) — `services/worker`, verified: navigates, reads title, screenshots
 - [ ] Playwright worker เชื่อมต่อ Firefox ผ่าน WebDriver BiDi
 
@@ -67,7 +68,7 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Build the Control Panel with Start/Stop/Take-control, then one real site
-adapter — that adapter is what turns the synthetic-marker `storageState`
-proof into an actual "log in once by hand via noVNC, reuse the session
-automatically afterward" flow.
+Build the Control Panel: Start/Stop/Take-control, a link into noVNC, and
+buttons to trigger `npm run save` / `npm run restore` / `npm run adapter`
+instead of running them by hand via `docker compose run`. That's the last
+open Phase 1 item besides Firefox/BiDi.

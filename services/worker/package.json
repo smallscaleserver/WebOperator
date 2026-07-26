@@ -6,7 +6,8 @@
   "scripts": {
     "start": "tsx src/index.ts",
     "save": "tsx src/save-session.ts",
-    "restore": "tsx src/restore-session.ts"
+    "restore": "tsx src/restore-session.ts",
+    "adapter": "tsx src/run-adapter.ts"
   },
   "dependencies": {
     "playwright-core": "^1.48.0"

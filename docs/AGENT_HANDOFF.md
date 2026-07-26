@@ -132,3 +132,37 @@ and sessions.
 - Next: Control Panel with Start/Stop/Take-control, then one real site
   adapter — the adapter is what turns this generic proof into an actual
   "log in once by hand, reuse automatically" flow.
+
+### 2026-07-27 01:20 UTC — Claude
+
+- Status: Done
+- Context: Built the example site adapter (user chose this over Control
+  Panel after I flagged their message mixed their own instruction with a
+  pasted Codex recommendation for the opposite order — confirmed via
+  AskUserQuestion). Target: `https://the-internet.herokuapp.com`, a free
+  practice app built specifically to be automated against (publishes its own
+  test credentials) — sidesteps any real-site-authorization question.
+  `services/worker/src/adapters/the-internet.ts` exports `dismissAdIfPresent`,
+  `login`, `extractSecureAreaMessage`; `run-adapter.ts` chains them: dismiss
+  popup → real login → extract flash message → `context.storageState()` to
+  `data/sessions/the-internet.json` (a *real* session now, not the synthetic
+  marker from the previous change) → screenshot.
+  Found and fixed a real bug while verifying: the site shows its ad modal via
+  `setTimeout(showAd, 500)`, not on initial render, so checking
+  `modal.isVisible()` immediately after `goto` always saw "not present" —
+  fixed by `modal.waitFor({ state: 'visible', timeout: 2000 })` instead.
+- Files: `services/worker/src/adapters/the-internet.ts` (new),
+  `services/worker/src/run-adapter.ts` (new), `package.json`,
+  `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: ran `npm run adapter` 7 times total across debugging. Confirmed
+  both branches of the popup logic (modal present → dismissed; modal absent
+  on the very next run, matching the site's own "won't reappear once closed"
+  behavior). Login succeeded each time, flash message extracted cleanly
+  after fixing a "×" close-icon text leak. Inspected
+  `data/sessions/the-internet.json` on host — contains a real `rack.session`
+  HttpOnly cookie, not a synthetic value. Viewed
+  `data/worker-output/the-internet-secure.png` — genuine logged-in Secure
+  Area page. noVNC still 200 afterward, `docker compose down` clean.
+- Next: Control Panel (Start/Stop/Take-control + buttons for
+  save/restore/adapter instead of raw `docker compose run`) is the last open
+  Phase 1 item besides Firefox/BiDi.
