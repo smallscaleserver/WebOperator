@@ -169,16 +169,34 @@ and sessions.
 
 ### 2026-07-27 09:40 UTC — Claude
 
-- Status: In progress
-- Context: **Claiming the Control Panel task** — user confirmed (after I
-  flagged that their last message looked like it was pasting Codex's own
-  reply, "ผมเริ่มทำ Control Panel ต่อได้เลยครับ", rather than an instruction
-  to me) that I should build it, specifically to avoid Codex and I both
-  starting it in parallel and hitting a merge conflict. If you're Codex (or
-  another session) reading this before seeing a "Done" entry below: this is
-  claimed, please don't start the same work — check back here or pick a
-  different open item (Firefox/BiDi worker) instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated/superseded once the Control Panel work
-  is done and verified).
+- Status: Done
+- Context: Built the Control Panel (user confirmed I should build it, after
+  I flagged their message looked like it was pasting Codex's own reply
+  rather than an instruction to me — claimed here first to avoid a parallel
+  Codex session starting the same work). Runs as a plain host Node process
+  (`services/control-panel`, not a Docker service — its whole job is
+  shelling out `docker compose`, so containerizing it would mean mounting
+  the Docker socket for no real benefit at this stage; see decision log).
+  Backend is Express with a **fixed action allowlist**
+  (`src/actions.ts`) — the HTTP API only ever accepts a key into that table
+  and runs the corresponding fixed argv via `execFile`, so no request input
+  ever reaches a shell string. Binds `127.0.0.1` only. Frontend is one
+  plain HTML/JS page (no framework): status polling, start/stop per
+  browser, an embedded noVNC iframe for "take control," and buttons for
+  the four worker actions (disabled unless Chrome is running, since the
+  worker shares Chrome's network namespace).
+- Files: `services/control-panel/` (new: `package.json`, `tsconfig.json`,
+  `src/actions.ts`, `src/server.ts`, `public/index.html`, `public/app.js`),
+  `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: ran the server on host (`npm start`), curl-tested every action
+  endpoint directly — `startChrome`/`stopChrome` flip `/api/status`
+  correctly, an unknown action name correctly 400s without executing
+  anything, and all four worker actions (`runStart`, `runSave`,
+  `runRestore`, `runAdapter`) returned the same successful output already
+  verified via CLI in prior sessions. Then visually verified the actual
+  rendered page: connected the real Chromium to `http://host.docker.internal:4000`
+  over CDP and screenshotted it — status dots/button enablement correct,
+  and clicking "Take control" genuinely loaded the noVNC connect screen
+  inside the embedded iframe. `docker compose down` clean afterward.
+- Next: Phase 1 is functionally done except Firefox/BiDi worker
+  automation. After that, Phase 2 (Task Engine: queue, scheduler, retry).

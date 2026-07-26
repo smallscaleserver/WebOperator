@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>WebOperator Control Panel</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  h2 { font-size: 1rem; margin-top: 0; }
+  .row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #999; }
+  .dot.running { background: #2ea043; }
+  .dot.stopped { background: #999; }
+  .dot.unknown { background: #d29922; }
+  button { cursor: pointer; padding: 0.4rem 0.8rem; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  iframe { width: 100%; height: 500px; border: 1px solid #ccc; margin-top: 0.5rem; display: none; }
+  pre { background: #111; color: #ddd; padding: 0.75rem; border-radius: 6px; max-height: 300px; overflow: auto; white-space: pre-wrap; }
+  .hint { color: #666; font-size: 0.85rem; }
+</style>
+</head>
+<body>
+<h1>WebOperator Control Panel</h1>
+<p class="hint">Local only (127.0.0.1) — no auth. Do not expose this to a network.</p>
+
+<section>
+  <h2>Browsers</h2>
+  <div class="row">
+    <span class="dot" id="dot-chrome"></span>
+    <strong>Chrome</strong>
+    <span id="label-chrome">checking…</span>
+    <button id="start-chrome">Start</button>
+    <button id="stop-chrome">Stop</button>
+    <button id="take-chrome">Take control</button>
+  </div>
+  <iframe id="iframe-chrome" src="about:blank"></iframe>
+
+  <div class="row">
+    <span class="dot" id="dot-firefox"></span>
+    <strong>Firefox</strong>
+    <span id="label-firefox">checking…</span>
+    <button id="start-firefox">Start</button>
+    <button id="stop-firefox">Stop</button>
+    <button id="take-firefox">Take control</button>
+  </div>
+  <iframe id="iframe-firefox" src="about:blank"></iframe>
+</section>
+
+<section>
+  <h2>Playwright worker (uses Chrome)</h2>
+  <div class="row">
+    <button class="worker-action" data-action="runStart">Run demo (navigate + screenshot)</button>
+    <button class="worker-action" data-action="runSave">Save session</button>
+    <button class="worker-action" data-action="runRestore">Restore session</button>
+    <button class="worker-action" data-action="runAdapter">Run example adapter</button>
+  </div>
+</section>
+
+<section>
+  <h2>Last output</h2>
+  <pre id="output">(nothing run yet)</pre>
+</section>
+
+<script src="app.js"></script>
+</body>
+</html>

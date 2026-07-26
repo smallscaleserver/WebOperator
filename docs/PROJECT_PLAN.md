@@ -19,13 +19,14 @@ human) is picking the work back up.
 | Session proof method | Synthetic marker (cookie + localStorage on `example.com`), not a real login | No site adapter exists yet (separate checklist item). Proves the `storageState` save/restore mechanism generically; a real login-based proof lands with the first adapter. |
 | Session file storage | Plain JSON under `data/sessions/*` for now | Same caveat already logged for `data/profiles/*` — placeholder for the encrypted Session Vault (Phase 2/3), not safe for real credentials yet. |
 | Demo adapter target | `https://the-internet.herokuapp.com` (`/login`, `/entry_ad`) | Free, purpose-built practice app that exists specifically to be automated against; publishes its own test credentials. Sidesteps any "is it okay to automate this real site" question while still exercising a real login, a real session cookie, and a real popup-dismissal case. |
+| Control Panel deployment | Runs as a plain host Node process (`services/control-panel`, `npm start`), not a Docker service | Its whole job is running `docker compose` commands. Containerizing it would mean mounting the Docker socket (Docker-out-of-Docker) just to shell back to the same Docker Desktop already on the host — real security surface (socket access ≈ root on host) for no benefit at this stage. Revisit if/when this needs to run somewhere without a host Docker CLI. |
 
 ## Phase 1 — Prototype
 
 - [x] Docker เปิด Chromium/Firefox แบบเห็นหน้าจอ (`services/browser-worker`)
 - [x] เชื่อม noVNC (`http://localhost:6080` / `:6081`)
 - [x] ช่องทาง handoff ระหว่าง Codex/Claude/human (`docs/AGENT_HANDOFF.md`)
-- [ ] Control Panel มี Start/Stop/Take control
+- [x] Control Panel มี Start/Stop/Take control — `services/control-panel`, `npm start` → `http://localhost:4000`, verified: start/stop both browsers, embedded noVNC "take control", all four worker actions run through the UI
 - [ ] เปิดเว็บ ทดลอง login ด้วยมือ
 - [x] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`) — `services/worker` `npm run save`/`npm run restore`, verified round-trip via synthetic marker
 - [x] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ — `services/worker/src/adapters/the-internet.ts` + `npm run adapter`, verified: dismisses popup, real login, extracts flash message, saves real session
@@ -68,7 +69,7 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Build the Control Panel: Start/Stop/Take-control, a link into noVNC, and
-buttons to trigger `npm run save` / `npm run restore` / `npm run adapter`
-instead of running them by hand via `docker compose run`. That's the last
-open Phase 1 item besides Firefox/BiDi.
+Phase 1 is functionally done except Firefox/BiDi worker support (Firefox
+still works fine manually via noVNC — it just has no Playwright-driven
+automation path yet, since Firefox has no CDP equivalent). After that,
+Phase 2 (Task Engine: queue, scheduler, retry) is next.

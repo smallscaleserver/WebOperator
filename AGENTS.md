@@ -14,8 +14,22 @@ resolve something itself. Full architecture narrative is in `README.md`.
 
 ## Current status
 
-**Phase 1 (Prototype), in progress.** The Docker/noVNC browser scaffold
-works, and a first Playwright worker connects to Chromium over CDP.
+**Phase 1 (Prototype), functionally done** except Firefox/BiDi worker
+automation (Firefox still works fine manually via noVNC — no
+Playwright-driven automation path for it yet, since Firefox has no CDP
+equivalent). Easiest way to use the stack now is the Control Panel:
+
+```bash
+cd services/control-panel && npm install && npm start
+```
+
+Open `http://localhost:4000` — start/stop each browser, "take control" via
+an embedded noVNC view, and run the worker actions (demo/save/restore/
+adapter) via buttons instead of typing `docker compose run` by hand. Local
+only (binds `127.0.0.1`), no auth — don't expose it to a network.
+
+Everything below also still works directly via the CLI if you'd rather not
+run the panel.
 
 Run the browser + noVNC:
 
@@ -67,6 +81,7 @@ Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 README.md                    Architecture narrative, diagrams, full roadmap prose
 docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + decision log
 docker-compose.yml            Phase 1 browser-worker services (chrome + firefox) + worker
+services/control-panel/       Host-run Express UI: start/stop, take-control (noVNC embed), worker actions
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site)
