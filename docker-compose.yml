@@ -30,6 +30,7 @@ services:
     volumes:
       - ./services/worker/src:/app/src
       - ./data/worker-output:/app/output
+      - ./data/sessions:/app/sessions
     network_mode: "service:browser-worker-chrome"
     depends_on:
       - browser-worker-chrome

@@ -39,6 +39,17 @@ docker compose run --rm worker
 It connects to the already-running Chromium, navigates to a demo page, and
 writes a screenshot to `data/worker-output/example.png` on the host.
 
+Save/restore a browser session (`storageState` — cookies + localStorage; a
+synthetic proof for now, since there's no real site adapter yet):
+
+```bash
+docker compose run --rm worker npm run save     # captures the default context's state
+docker compose run --rm worker npm run restore  # loads it into a fresh isolated context
+```
+
+Session files land in `data/sessions/*.json` — plaintext, dev-only, same
+caveat as `data/profiles/`.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -52,6 +63,7 @@ services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + brows
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
+data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)
 ```
 
 ## Working conventions (decided — don't re-litigate without reason)

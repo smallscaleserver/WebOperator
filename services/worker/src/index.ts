@@ -1,40 +1,12 @@
-import { chromium } from "playwright-core";
 import { mkdir } from "node:fs/promises";
+import { connectToChromium } from "./cdp.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
 const TARGET_URL = process.env.TARGET_URL ?? "https://example.com";
 
-const MAX_ATTEMPTS = 30;
-const RETRY_DELAY_MS = 1000;
-
-function sleep(ms: number): Promise<void> {
-  return new Promise((resolve) => setTimeout(resolve, ms));
-}
-
-async function waitForCdp(url: string): Promise<void> {
-  const versionUrl = new URL("/json/version", url).toString();
-  for (let attempt = 1; attempt <= MAX_ATTEMPTS; attempt++) {
-    try {
-      const res = await fetch(versionUrl);
-      if (res.ok) {
-        console.log(`CDP endpoint ready after ${attempt} attempt(s): ${versionUrl}`);
-        return;
-      }
-    } catch {
-      // Not up yet — browser-worker-chrome may still be starting Chromium.
-    }
-    console.log(`Waiting for CDP at ${versionUrl} (attempt ${attempt}/${MAX_ATTEMPTS})...`);
-    await sleep(RETRY_DELAY_MS);
-  }
-  throw new Error(`CDP endpoint never became ready at ${versionUrl}`);
-}
-
 async function main(): Promise<void> {
-  await waitForCdp(CDP_URL);
-
-  const browser = await chromium.connectOverCDP(CDP_URL);
-  console.log("Connected to Chromium over CDP.");
+  const browser = await connectToChromium(CDP_URL);
 
   // entrypoint.sh already opened one about:blank page — reuse it instead of
   // spawning a redundant tab.

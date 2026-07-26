@@ -104,3 +104,31 @@ and sessions.
 - Next: On resume, read `AGENTS.md`, this file, then `docs/PROJECT_PLAN.md`.
   Continue Phase 1 with Playwright `storageState` save/restore for sessions,
   then the Control Panel, then one real site adapter.
+
+### 2026-07-26 17:58 UTC — Claude
+
+- Status: Done
+- Context: Added `storageState` session save/restore to `services/worker`
+  (`npm run save`, `npm run restore`). No real site adapter exists yet, so
+  this proves the mechanism generically: sets a synthetic marker (a cookie +
+  a localStorage value, both an ISO timestamp) on `example.com` in the
+  default/visible context, saves it via `context.storageState()`, then loads
+  it into a **fresh, isolated** `browser.newContext({ storageState })` and
+  reads the marker back — confirming isolated-context creation works against
+  a real, non-Playwright-launched Chrome over CDP, not just the default
+  context. Shared the CDP connect/retry logic into `src/cdp.ts` (used by
+  `index.ts` and both new scripts).
+- Files: `services/worker/src/cdp.ts` (new), `save-session.ts` (new),
+  `restore-session.ts` (new), `index.ts` (refactored to use `cdp.ts`,
+  behavior unchanged), `package.json`, `docker-compose.yml` (added
+  `data/sessions` mount), `docs/PROJECT_PLAN.md`, `AGENTS.md`, `README.md`.
+- Verified: `docker compose build worker`, started `browser-worker-chrome`,
+  ran `save` (logged marker `2026-07-26T17:54:55.282Z`, wrote
+  `data/sessions/example.json` — inspected on host, has both the cookie and
+  the `origins[].localStorage` entry), ran `restore` (logged back the exact
+  same value for both cookie and localStorage). Re-checked noVNC still 200
+  and Chromium's process tree normal afterward (closing the isolated context
+  didn't disturb the shared browser). `docker compose down` clean.
+- Next: Control Panel with Start/Stop/Take-control, then one real site
+  adapter — the adapter is what turns this generic proof into an actual
+  "log in once by hand, reuse automatically" flow.

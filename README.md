@@ -44,6 +44,13 @@ docker compose up browser-worker-chrome   # หรือ browser-worker-firefox
 docker compose run --rm worker
 ```
 
+บันทึกและนำ session (cookie/localStorage) กลับมาใช้ใหม่ผ่าน Playwright `storageState`:
+
+```bash
+docker compose run --rm worker npm run save
+docker compose run --rm worker npm run restore
+```
+
 ดูแผนงานละเอียดและ checklist ที่ [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md), บริบทสำหรับ AI agent (Claude Code / Codex CLI) ที่ [`AGENTS.md`](./AGENTS.md)
 
 ## สารบัญ

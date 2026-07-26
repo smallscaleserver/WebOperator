@@ -16,6 +16,8 @@ human) is picking the work back up.
 | Sandbox | Chromium runs with `--no-sandbox` for now | Simplest path to a working Phase 1. Real seccomp/user-namespace hardening per Playwright's official Docker guide is deferred to Phase 5. |
 | Session storage | Plain bind-mounted volume (`data/profiles/*`) for now | Placeholder for the future encrypted Session Vault (Phase 2/3). Not safe for real credentials yet — dev-only. |
 | Worker transport | `playwright-core` + `connectOverCDP`, worker container joins `browser-worker-chrome`'s network namespace (`network_mode: service:...`) | Chromium ignores `--remote-debugging-address` for a headed instance and only ever binds CDP to `127.0.0.1` — sharing the network namespace reaches it without publishing the (unauthenticated) CDP port anywhere. Firefox has no CDP equivalent; needs WebDriver BiDi later. |
+| Session proof method | Synthetic marker (cookie + localStorage on `example.com`), not a real login | No site adapter exists yet (separate checklist item). Proves the `storageState` save/restore mechanism generically; a real login-based proof lands with the first adapter. |
+| Session file storage | Plain JSON under `data/sessions/*` for now | Same caveat already logged for `data/profiles/*` — placeholder for the encrypted Session Vault (Phase 2/3), not safe for real credentials yet. |
 
 ## Phase 1 — Prototype
 
@@ -24,7 +26,7 @@ human) is picking the work back up.
 - [x] ช่องทาง handoff ระหว่าง Codex/Claude/human (`docs/AGENT_HANDOFF.md`)
 - [ ] Control Panel มี Start/Stop/Take control
 - [ ] เปิดเว็บ ทดลอง login ด้วยมือ
-- [ ] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`)
+- [x] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`) — `services/worker` `npm run save`/`npm run restore`, verified round-trip via synthetic marker
 - [ ] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ
 - [x] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) — `services/worker`, verified: navigates, reads title, screenshots
 - [ ] Playwright worker เชื่อมต่อ Firefox ผ่าน WebDriver BiDi
@@ -65,7 +67,7 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Add Playwright session save/restore (`storageState`) around the existing
-`services/worker` CDP proof script, so a manually prepared browser session can
-be reused by automation. After that, build the Control Panel with
-Start/Stop/Take-control and then one real site adapter.
+Build the Control Panel with Start/Stop/Take-control, then one real site
+adapter — that adapter is what turns the synthetic-marker `storageState`
+proof into an actual "log in once by hand via noVNC, reuse the session
+automatically afterward" flow.

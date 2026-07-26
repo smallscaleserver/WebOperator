@@ -4,7 +4,9 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/index.ts"
+    "start": "tsx src/index.ts",
+    "save": "tsx src/save-session.ts",
+    "restore": "tsx src/restore-session.ts"
   },
   "dependencies": {
     "playwright-core": "^1.48.0"
