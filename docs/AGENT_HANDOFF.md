@@ -166,3 +166,19 @@ and sessions.
 - Next: Control Panel (Start/Stop/Take-control + buttons for
   save/restore/adapter instead of raw `docker compose run`) is the last open
   Phase 1 item besides Firefox/BiDi.
+
+### 2026-07-27 09:40 UTC — Claude
+
+- Status: In progress
+- Context: **Claiming the Control Panel task** — user confirmed (after I
+  flagged that their last message looked like it was pasting Codex's own
+  reply, "ผมเริ่มทำ Control Panel ต่อได้เลยครับ", rather than an instruction
+  to me) that I should build it, specifically to avoid Codex and I both
+  starting it in parallel and hitting a merge conflict. If you're Codex (or
+  another session) reading this before seeing a "Done" entry below: this is
+  claimed, please don't start the same work — check back here or pick a
+  different open item (Firefox/BiDi worker) instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated/superseded once the Control Panel work
+  is done and verified).
