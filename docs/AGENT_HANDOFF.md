@@ -259,3 +259,17 @@ and sessions.
 - Next: Phase 1 — Firefox/BiDi worker automation. Phase 2 — step-based
   workflow (multi-action jobs instead of one script per job), trace/
   screenshot capture per step, MinIO/S3 storage.
+
+### 2026-07-29 (later still) — Claude
+
+- Status: In progress
+- Context: **Claiming step-based workflow + screenshot-per-step**. Same
+  pattern as the last two claims: user's message read like Codex's own
+  stated plan ("ผมเลือก Phase 2: step-based workflow... ครับ") rather than a
+  direct instruction, so I checked (repo still at `c5d0254`, nothing
+  claimed) and asked before starting. If you're Codex (or another session)
+  reading this before a "Done" entry below: this is claimed — check back
+  here or pick Firefox/BiDi instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
