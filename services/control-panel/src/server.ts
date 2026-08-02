@@ -1,19 +1,14 @@
-import { execFile } from "node:child_process";
-import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-
-const execFileAsync = promisify(execFile);
+import { runAction, composePs } from "./exec.js";
+import { enqueueAction, isQueueableAction, listRecentJobs, startWorker, closeQueue } from "./queue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// services/control-panel/src -> repo root
-const REPO_ROOT = path.resolve(__dirname, "../../..");
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
 
 const PORT = Number(process.env.CONTROL_PANEL_PORT ?? 4000);
-const EXEC_OPTS = { cwd: REPO_ROOT, timeout: 120_000, maxBuffer: 5 * 1024 * 1024 };
 
 const app = express();
 app.use(express.static(PUBLIC_DIR));
@@ -47,11 +42,7 @@ function parseComposePs(stdout: string): ComposePsEntry[] {
 app.get("/api/status", async (_req, res) => {
   const status = { chrome: "unknown", firefox: "unknown" };
   try {
-    const { stdout } = await execFileAsync(
-      "docker",
-      ["compose", "ps", "--format", "json"],
-      EXEC_OPTS,
-    );
+    const stdout = await composePs();
     const entries = parseComposePs(stdout);
     status.chrome = "stopped";
     status.firefox = "stopped";
@@ -72,21 +63,43 @@ app.post("/api/action/:name", express.json(), async (req, res) => {
     res.status(400).json({ ok: false, error: `Unknown action "${name}"` });
     return;
   }
+  res.json(await runAction(name));
+});
+
+app.post("/api/enqueue/:name", async (req, res) => {
+  const { name } = req.params;
+  if (!isQueueableAction(name)) {
+    res.status(400).json({ ok: false, error: `"${name}" is not a queueable action` });
+    return;
+  }
   try {
-    const { stdout, stderr } = await execFileAsync("docker", ACTIONS[name], EXEC_OPTS);
-    res.json({ ok: true, stdout, stderr });
+    const jobId = await enqueueAction(name);
+    res.json({ ok: true, jobId });
   } catch (err) {
-    const execErr = err as { stdout?: string; stderr?: string; message: string };
-    res.json({
-      ok: false,
-      stdout: execErr.stdout ?? "",
-      stderr: execErr.stderr ?? "",
-      error: execErr.message,
-    });
+    res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.listen(PORT, "127.0.0.1", () => {
+app.get("/api/jobs", async (_req, res) => {
+  try {
+    const jobs = await listRecentJobs();
+    res.json({ jobs });
+  } catch (err) {
+    res.status(500).json({ jobs: [], error: (err as Error).message });
+  }
+});
+
+startWorker();
+
+const server = app.listen(PORT, "127.0.0.1", () => {
   console.log(`WebOperator Control Panel: http://localhost:${PORT}`);
   console.log("Bound to 127.0.0.1 only — no auth, do not expose this to a network.");
 });
+
+async function shutdown(): Promise<void> {
+  console.log("Shutting down control panel...");
+  await closeQueue();
+  server.close(() => process.exit(0));
+}
+process.on("SIGINT", shutdown);
+process.on("SIGTERM", shutdown);

@@ -69,9 +69,66 @@ document.getElementById("take-firefox").addEventListener("click", () => {
   iframe.src = showing ? "about:blank" : NOVNC_URL.firefox;
 });
 
+async function enqueueAction(name) {
+  output.textContent = `Queuing ${name}...`;
+  try {
+    const res = await fetch(`/api/enqueue/${name}`, { method: "POST" });
+    const data = await res.json();
+    output.textContent = data.ok
+      ? `Queued ${name} as job ${data.jobId} — see Jobs table below for progress.`
+      : `Failed to queue ${name}: ${data.error}`;
+  } catch (err) {
+    output.textContent = `Failed to queue ${name}: ${err}`;
+  }
+  await pollJobs();
+}
+
 document.querySelectorAll(".worker-action").forEach((btn) => {
-  btn.addEventListener("click", () => callAction(btn.dataset.action));
+  btn.addEventListener("click", () => enqueueAction(btn.dataset.action));
 });
 
+function escapeHtml(str) {
+  const div = document.createElement("div");
+  div.textContent = str;
+  return div.innerHTML;
+}
+
+function shortResult(job) {
+  if (job.state === "failed") return job.failedReason || "(failed)";
+  if (job.result) {
+    const text = job.result.ok ? job.result.stdout : job.result.error || job.result.stderr;
+    const lastLine = (text || "").trim().split("\n").filter(Boolean).pop();
+    return lastLine || (job.result.ok ? "(ok, no output)" : "(failed)");
+  }
+  return "";
+}
+
+const jobsBody = document.getElementById("jobs-body");
+
+async function pollJobs() {
+  try {
+    const res = await fetch("/api/jobs");
+    const data = await res.json();
+    const jobs = data.jobs || [];
+    jobsBody.innerHTML = jobs.length
+      ? jobs
+          .map((job) => {
+            const result = escapeHtml(shortResult(job));
+            return `<tr>
+              <td>${job.id}</td>
+              <td>${escapeHtml(job.name)}</td>
+              <td><span class="badge ${job.state}">${job.state}</span></td>
+              <td class="job-result" title="${result}">${result}</td>
+            </tr>`;
+          })
+          .join("")
+      : `<tr><td colspan="4">(no jobs yet)</td></tr>`;
+  } catch (err) {
+    console.error("jobs poll failed", err);
+  }
+}
+
 pollStatus();
+pollJobs();
 setInterval(pollStatus, 3000);
+setInterval(pollJobs, 3000);

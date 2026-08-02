@@ -216,3 +216,46 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once Phase 2 work is done and verified).
+
+### 2026-07-29 (later) — Claude
+
+- Status: Done
+- Context: Added a Redis/BullMQ queue in front of the 4 worker actions.
+  New `redis:7-alpine` compose service (`127.0.0.1:6379` only, no auth, no
+  volume — ephemeral, dev-only). Both the BullMQ producer (`Queue`) and
+  consumer (`Worker`, concurrency 1) run inside the existing Control Panel
+  process rather than a separate service — reuses the exact `docker
+  compose run --rm worker npm run <script>` execution path already built,
+  pulled the shell-exec logic out of `server.ts` into `src/exec.ts` so both
+  the old synchronous `/api/action/:name` and the new queue processor call
+  the same code. New `POST /api/enqueue/:name` (4 worker actions only —
+  browser start/stop stay synchronous, they're not automation jobs) and
+  `GET /api/jobs`. Frontend: worker-action buttons now enqueue instead of
+  blocking; new Jobs table polls every 3s.
+- Files: `docker-compose.yml` (redis service), `services/control-panel/src/exec.ts`
+  (new — shared exec logic), `src/queue.ts` (new), `src/server.ts` (routes),
+  `package.json` (added `bullmq`), `public/index.html` + `public/app.js`
+  (Jobs table, enqueue buttons), `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: `npx tsc --noEmit` clean. `curl -X POST
+  localhost:4000/api/enqueue/runStart` returned a `jobId` in ~0.26s (proves
+  async — the old endpoint blocked for several seconds). Polled
+  `/api/jobs`, watched it reach `completed` with the same output already
+  verified via CLI in prior sessions. Enqueued two jobs back-to-back and
+  checked BullMQ's `processedOn`/`finishedOn` directly (not just polling) —
+  job N+1's `processedOn` exactly equalled job N's `finishedOn`, so
+  concurrency:1 is genuinely serializing, not just appearing to. Confirmed
+  `POST /api/enqueue/<invalid>` and `.../startChrome` (valid action, but not
+  queueable) both correctly 400 without executing anything. Visually
+  verified the real UI: connected actual Chromium to
+  `http://host.docker.internal:4000` over CDP, clicked the "Run demo"
+  button for real, screenshotted the job going from `active` to
+  (confirmed via API) `completed`. `docker compose down` clean afterward.
+  One caveat: didn't get clean confirmation of the graceful-shutdown log
+  line when stopping the control-panel process via the harness's task
+  stop — Node's `SIGTERM` handling is known to be unreliable on Windows
+  (no real POSIX signals); the shutdown code itself follows the standard
+  correct pattern, just noting it's unverified specifically on this
+  platform.
+- Next: Phase 1 — Firefox/BiDi worker automation. Phase 2 — step-based
+  workflow (multi-action jobs instead of one script per job), trace/
+  screenshot capture per step, MinIO/S3 storage.

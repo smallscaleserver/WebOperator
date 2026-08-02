@@ -20,6 +20,9 @@ human) is picking the work back up.
 | Session file storage | Plain JSON under `data/sessions/*` for now | Same caveat already logged for `data/profiles/*` — placeholder for the encrypted Session Vault (Phase 2/3), not safe for real credentials yet. |
 | Demo adapter target | `https://the-internet.herokuapp.com` (`/login`, `/entry_ad`) | Free, purpose-built practice app that exists specifically to be automated against; publishes its own test credentials. Sidesteps any "is it okay to automate this real site" question while still exercising a real login, a real session cookie, and a real popup-dismissal case. |
 | Control Panel deployment | Runs as a plain host Node process (`services/control-panel`, `npm start`), not a Docker service | Its whole job is running `docker compose` commands. Containerizing it would mean mounting the Docker socket (Docker-out-of-Docker) just to shell back to the same Docker Desktop already on the host — real security surface (socket access ≈ root on host) for no benefit at this stage. Revisit if/when this needs to run somewhere without a host Docker CLI. |
+| Redis | `redis:7-alpine` compose service, bound to `127.0.0.1:6379` only, no volume | No auth on Redis by default, so loopback-only — same posture as CDP/Control Panel. Ephemeral (no persistence) is fine; job history doesn't need to survive `docker compose down` at this stage. |
+| Queue worker location | BullMQ producer *and* consumer both run inside the Control Panel process, not a separate `job-runner` service | One thing to `npm start`, reuses the exact `docker compose run --rm worker npm run <script>` path already built for the 4 worker actions. Splitting them into separate deployable processes is a Phase 5 ("แยก worker หลายเครื่อง") concern. |
+| Queue concurrency | 1 | All 4 queueable actions connect to the same shared `browser-worker-chrome` over CDP — the queue's job is to serialize access to that one browser, not parallelize it. Verified via BullMQ `processedOn` timestamps: job N+1's `processedOn` exactly equals job N's `finishedOn`. |
 
 ## Phase 1 — Prototype
 
@@ -35,10 +38,10 @@ human) is picking the work back up.
 
 ## Phase 2 — Task Engine
 
-- [ ] Queue และ scheduler (Redis + BullMQ)
+- [x] Queue และ scheduler (Redis + BullMQ) — `services/control-panel` `src/queue.ts`, Control Panel UI enqueues the 4 worker actions instead of running them synchronously; verified: async return, sequential execution (concurrency 1), retry config wired (`attempts: 2`)
 - [ ] Step-based workflow
 - [ ] screenshot/trace ทุกจุดสำคัญ
-- [ ] retry, timeout และ circuit breaker
+- [ ] retry, timeout และ circuit breaker (basic fixed-delay retry exists on queued jobs; no circuit breaker yet)
 - [ ] ดาวน์โหลดและจัดเก็บข้อมูล (MinIO/S3)
 
 ## Phase 3 — Gmail
@@ -69,7 +72,7 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Phase 1 is functionally done except Firefox/BiDi worker support (Firefox
-still works fine manually via noVNC — it just has no Playwright-driven
-automation path yet, since Firefox has no CDP equivalent). After that,
-Phase 2 (Task Engine: queue, scheduler, retry) is next.
+Phase 1 is functionally done except Firefox/BiDi worker support. Phase 2
+now has a working queue but is otherwise just started — step-based
+workflow (multi-action jobs, not just one script per job), trace/screenshot
+capture per step, and real object storage (MinIO/S3) are all still open.

@@ -18,6 +18,14 @@
   iframe { width: 100%; height: 500px; border: 1px solid #ccc; margin-top: 0.5rem; display: none; }
   pre { background: #111; color: #ddd; padding: 0.75rem; border-radius: 6px; max-height: 300px; overflow: auto; white-space: pre-wrap; }
   .hint { color: #666; font-size: 0.85rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  .badge { padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; color: #fff; }
+  .badge.completed { background: #2ea043; }
+  .badge.failed { background: #cf222e; }
+  .badge.active { background: #0969da; }
+  .badge.waiting, .badge.delayed { background: #999; }
+  .job-result { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
 </style>
 </head>
 <body>
@@ -49,12 +57,21 @@
 
 <section>
   <h2>Playwright worker (uses Chrome)</h2>
+  <p class="hint">Buttons enqueue a job — a single queue (concurrency 1) serializes access to the shared browser instead of running actions concurrently.</p>
   <div class="row">
     <button class="worker-action" data-action="runStart">Run demo (navigate + screenshot)</button>
     <button class="worker-action" data-action="runSave">Save session</button>
     <button class="worker-action" data-action="runRestore">Restore session</button>
     <button class="worker-action" data-action="runAdapter">Run example adapter</button>
   </div>
+</section>
+
+<section>
+  <h2>Jobs</h2>
+  <table>
+    <thead><tr><th>ID</th><th>Action</th><th>Status</th><th>Result</th></tr></thead>
+    <tbody id="jobs-body"><tr><td colspan="4">(no jobs yet)</td></tr></tbody>
+  </table>
 </section>
 
 <section>
