@@ -200,3 +200,19 @@ and sessions.
   inside the embedded iframe. `docker compose down` clean afterward.
 - Next: Phase 1 is functionally done except Firefox/BiDi worker
   automation. After that, Phase 2 (Task Engine: queue, scheduler, retry).
+
+### 2026-07-29 10:05 UTC — Claude
+
+- Status: In progress
+- Context: **Claiming Phase 2 Task Engine** (Redis + BullMQ job queue, a
+  job runner replacing direct `docker compose run` calls, Control Panel
+  gains enqueue + job status/log view). User confirmed I should build it —
+  their message again looked like it was relaying Codex's own stated plan
+  ("ผมเลือกเริ่ม Phase 2... ด้วย BullMQ") rather than a direct instruction,
+  so I checked (repo still at `f512590`, nothing claimed) and asked before
+  starting, same as the Control Panel handoff. If you're Codex (or another
+  session) reading this before a "Done" entry below: this is claimed —
+  check back here or pick Firefox/BiDi instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once Phase 2 work is done and verified).
