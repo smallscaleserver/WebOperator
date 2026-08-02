@@ -97,13 +97,33 @@ function shortResult(job) {
   if (job.state === "failed") return job.failedReason || "(failed)";
   if (job.result) {
     const text = job.result.ok ? job.result.stdout : job.result.error || job.result.stderr;
-    const lastLine = (text || "").trim().split("\n").filter(Boolean).pop();
+    const lastLine = (text || "")
+      .trim()
+      .split("\n")
+      .filter((line) => line && !line.startsWith("WEBOP_STEP "))
+      .pop();
     return lastLine || (job.result.ok ? "(ok, no output)" : "(failed)");
   }
   return "";
 }
 
+function renderSteps(job) {
+  const steps = job.result && job.result.steps ? job.result.steps : [];
+  if (steps.length === 0) return "<em>(no step detail)</em>";
+  return steps
+    .map((s) => {
+      const icon = s.status === "ok" ? "✅" : "❌";
+      const detail = s.detail ? `: ${escapeHtml(s.detail)}` : "";
+      const shot = s.screenshot
+        ? ` — <a href="/screenshots/${encodeURIComponent(s.screenshot)}" target="_blank">screenshot</a>`
+        : "";
+      return `<div>${icon} <strong>${escapeHtml(s.name)}</strong>${detail}${shot}</div>`;
+    })
+    .join("");
+}
+
 const jobsBody = document.getElementById("jobs-body");
+const expandedJobs = new Set();
 
 async function pollJobs() {
   try {
@@ -114,15 +134,32 @@ async function pollJobs() {
       ? jobs
           .map((job) => {
             const result = escapeHtml(shortResult(job));
-            return `<tr>
+            const isOpen = expandedJobs.has(String(job.id));
+            return `<tr class="job-row" data-job-id="${job.id}">
               <td>${job.id}</td>
               <td>${escapeHtml(job.name)}</td>
               <td><span class="badge ${job.state}">${job.state}</span></td>
               <td class="job-result" title="${result}">${result}</td>
+            </tr>
+            <tr class="steps-row" style="display:${isOpen ? "table-row" : "none"}">
+              <td colspan="4">${renderSteps(job)}</td>
             </tr>`;
           })
           .join("")
       : `<tr><td colspan="4">(no jobs yet)</td></tr>`;
+
+    jobsBody.querySelectorAll(".job-row").forEach((row) => {
+      row.addEventListener("click", () => {
+        const id = row.dataset.jobId;
+        if (expandedJobs.has(id)) {
+          expandedJobs.delete(id);
+        } else {
+          expandedJobs.add(id);
+        }
+        const stepsRow = row.nextElementSibling;
+        stepsRow.style.display = expandedJobs.has(id) ? "table-row" : "none";
+      });
+    });
   } catch (err) {
     console.error("jobs poll failed", err);
   }

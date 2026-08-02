@@ -26,6 +26,10 @@
   .badge.active { background: #0969da; }
   .badge.waiting, .badge.delayed { background: #999; }
   .job-result { max-width: 400px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-family: monospace; }
+  .job-row { cursor: pointer; }
+  .job-row:hover { background: #f6f8fa; }
+  .steps-row { background: #fafbfc; font-family: monospace; font-size: 0.85rem; }
+  .steps-row td { padding: 0.5rem; }
 </style>
 </head>
 <body>
@@ -68,6 +72,7 @@
 
 <section>
   <h2>Jobs</h2>
+  <p class="hint">Click a row to expand step-by-step detail and screenshots.</p>
   <table>
     <thead><tr><th>ID</th><th>Action</th><th>Status</th><th>Result</th></tr></thead>
     <tbody id="jobs-body"><tr><td colspan="4">(no jobs yet)</td></tr></tbody>

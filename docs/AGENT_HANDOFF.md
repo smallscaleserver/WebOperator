@@ -273,3 +273,57 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-07-29 (later still 2) — Claude
+
+- Status: Done
+- Context: Added step-level reporting + screenshot links to the Control
+  Panel's job detail. New `services/worker/src/steps.ts` exports `step(name,
+  fn, opts?)` — wraps a stage, logs `WEBOP_STEP {...}` (name/status/detail/
+  screenshot/timestamp) to stdout on success or failure, rethrows on error
+  so existing `main().catch(...)` exit-1 behavior is unchanged. Wrapped the
+  meaningful stages in all 4 worker scripts (`index.ts`, `save-session.ts`,
+  `restore-session.ts`, `run-adapter.ts`) — `run-adapter.ts`'s `login` step
+  now throws (and reports `error`) when the adapter's `login()` returns
+  `{success:false}`, instead of silently continuing. Control Panel's
+  `exec.ts` regex-parses `WEBOP_STEP` lines out of captured stdout into
+  `ActionResult.steps`; `server.ts` gained a read-only `/screenshots/*`
+  static route over the existing `data/worker-output` bind-mount directory
+  (no new plumbing — same files worker containers already write there).
+  Frontend: job rows are now clickable, expanding a sibling row with the
+  step list (✅/❌, detail text, screenshot link); expanded state tracked in
+  a `Set` so it survives the 3s poll re-render instead of collapsing.
+  Deliberately **not** live-streamed — steps are parsed from the complete
+  stdout after the job finishes, not pushed while it runs; see decision log
+  for the trade-off.
+- Files: `services/worker/src/steps.ts` (new), `index.ts`,
+  `save-session.ts`, `restore-session.ts`, `run-adapter.ts` (all wrapped),
+  `services/control-panel/src/exec.ts` (parsing + `StepEvent`/`ActionResult`
+  types), `src/server.ts` (`/screenshots` route), `public/index.html` +
+  `public/app.js` (expandable rows), `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: `npx tsc --noEmit` clean in both `services/worker` and
+  `services/control-panel`. Enqueued `runAdapter` through the real queue —
+  `result.steps` came back as all 6 expected stages
+  (`connect`/`dismiss-ad`/`login`/`extract`/`save-session`/`screenshot`),
+  each `status: "ok"`, screenshot filename attached on the last one.
+  Deliberately broke `index.ts`'s navigation (bad `TARGET_URL`) via direct
+  CLI run — confirmed the `navigate` step logged `status: "error"` with the
+  real Playwright error message as `detail`, while `connect` still showed
+  `ok` — proves failures pinpoint the actual failing stage, not just "the
+  job failed." Verified `/screenshots/the-internet-secure.png` serves the
+  identical file (byte-for-byte size match) as the one on disk. Visually
+  verified in the real Chromium (`host.docker.internal:4000` over CDP):
+  clicked a job row, screenshotted the expanded step list with a working
+  screenshot link, waited through a full 3s poll cycle, screenshotted again
+  — identical, confirming expanded state persists. `docker compose down`
+  clean.
+  Also hit and documented a real Windows gotcha while restarting the panel:
+  a harness task-stop left the previous `node` process alive holding port
+  4000 (`EADDRINUSE` on restart) — found and killed it via
+  `Get-NetTCPConnection -LocalPort 4000 -State Listen` +
+  `Stop-Process -Force`. Not deterministic (a second stop/restart cycle
+  during the same session worked cleanly), so noted as "has been observed,"
+  not "always happens," with the fix command in `AGENTS.md`.
+- Next: Firefox/BiDi (Phase 1), or continue Phase 2 — real multi-action
+  step-based workflow (a job running several distinct actions in sequence,
+  not one script per job), per-step retry, MinIO/S3 storage.

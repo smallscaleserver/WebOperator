@@ -2,16 +2,20 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-import { runAction, composePs } from "./exec.js";
+import { runAction, composePs, REPO_ROOT } from "./exec.js";
 import { enqueueAction, isQueueableAction, listRecentJobs, startWorker, closeQueue } from "./queue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
+const WORKER_OUTPUT_DIR = path.join(REPO_ROOT, "data", "worker-output");
 
 const PORT = Number(process.env.CONTROL_PANEL_PORT ?? 4000);
 
 const app = express();
 app.use(express.static(PUBLIC_DIR));
+// Read-only: the same directory worker containers already write screenshots
+// to via the existing bind mount (data/worker-output:/app/output).
+app.use("/screenshots", express.static(WORKER_OUTPUT_DIR));
 
 interface ComposePsEntry {
   Service?: string;

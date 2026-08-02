@@ -27,11 +27,20 @@ cd services/control-panel && npm install && npm start
 Open `http://localhost:4000` — start/stop each browser, "take control" via
 an embedded noVNC view, and enqueue the worker actions (demo/save/restore/
 adapter) via buttons — a Jobs table shows status/result, polling every 3s.
-Actions run one at a time (queue concurrency 1) since they share one
-browser. Local only (binds `127.0.0.1`), no auth — don't expose it to a
-network. Redis is also loopback-only (`127.0.0.1:6379`), no auth, no
-persistence — dev-only, same posture as everything else unauthenticated
-here.
+**Click a job row to expand its step-by-step breakdown** (connect, navigate,
+login, etc. — whatever that action's script reports) with ✅/❌ per step and
+a link to any screenshot it captured. Actions run one at a time (queue
+concurrency 1) since they share one browser. Local only (binds
+`127.0.0.1`), no auth — don't expose it to a network. Redis is also
+loopback-only (`127.0.0.1:6379`), no auth, no persistence — dev-only, same
+posture as everything else unauthenticated here.
+
+If restarting the panel: on Windows, stopping the process hosting it
+(e.g. a harness task-stop) has been observed to sometimes leave the
+underlying `node` process running and holding port 4000. If `npm start`
+fails with `EADDRINUSE`, find and kill it: `Get-NetTCPConnection -LocalPort
+4000 -State Listen | Select OwningProcess`, then `Stop-Process -Id <pid>
+-Force`.
 
 Everything below also still works directly via the CLI if you'd rather not
 run the panel — `docker compose run --rm worker npm run <script>` still
@@ -112,6 +121,10 @@ data/sessions/                Saved storageState session files (gitignored, dev-
   storage.
 - If you hit CAPTCHA/2FA/passkey handling, the answer is "stop and hand off
   to a human via the noVNC screen," not "try to bypass it."
+- Any new `services/worker` script should wrap its meaningful stages in
+  `step()` from `src/steps.ts` (see `run-adapter.ts` for the pattern) so
+  failures show up as a specific failed step in the Control Panel's job
+  detail, not just a stack trace buried in stdout.
 
 ## After making changes
 

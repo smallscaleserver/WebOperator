@@ -23,6 +23,8 @@ human) is picking the work back up.
 | Redis | `redis:7-alpine` compose service, bound to `127.0.0.1:6379` only, no volume | No auth on Redis by default, so loopback-only — same posture as CDP/Control Panel. Ephemeral (no persistence) is fine; job history doesn't need to survive `docker compose down` at this stage. |
 | Queue worker location | BullMQ producer *and* consumer both run inside the Control Panel process, not a separate `job-runner` service | One thing to `npm start`, reuses the exact `docker compose run --rm worker npm run <script>` path already built for the 4 worker actions. Splitting them into separate deployable processes is a Phase 5 ("แยก worker หลายเครื่อง") concern. |
 | Queue concurrency | 1 | All 4 queueable actions connect to the same shared `browser-worker-chrome` over CDP — the queue's job is to serialize access to that one browser, not parallelize it. Verified via BullMQ `processedOn` timestamps: job N+1's `processedOn` exactly equals job N's `finishedOn`. |
+| Step reporting | Post-hoc, parsed out of captured stdout (`WEBOP_STEP {...}` lines), not live-streamed | True live progress needs `spawn` + incremental parsing + BullMQ `job.updateProgress()` — real complexity for a slice that's mainly about debugging after the fact, which post-hoc parsing already delivers. Live streaming is a reasonable follow-up, not required now. |
+| Step/screenshot scope | Step name + ok/error + optional detail message + optional screenshot filename + timestamp. No DOM snapshot, console/network log capture, or full Playwright `.trace.zip` yet | README's Event Recovery Engine table wants much more (DOM snapshot, console/network errors); kept to the smallest slice that makes job failures debuggable without reading raw logs. Fuller trace capture stays open. |
 
 ## Phase 1 — Prototype
 
@@ -39,9 +41,9 @@ human) is picking the work back up.
 ## Phase 2 — Task Engine
 
 - [x] Queue และ scheduler (Redis + BullMQ) — `services/control-panel` `src/queue.ts`, Control Panel UI enqueues the 4 worker actions instead of running them synchronously; verified: async return, sequential execution (concurrency 1), retry config wired (`attempts: 2`)
-- [ ] Step-based workflow
-- [ ] screenshot/trace ทุกจุดสำคัญ
-- [ ] retry, timeout และ circuit breaker (basic fixed-delay retry exists on queued jobs; no circuit breaker yet)
+- [ ] Step-based workflow (multi-action jobs; each job today is still one script, just now internally broken into reported steps — see below)
+- [x] screenshot/trace ทุกจุดสำคัญ — partial: `services/worker/src/steps.ts` `step()` wrapper reports name/status/detail/screenshot per stage in all 4 worker scripts, parsed by `services/control-panel/src/exec.ts` and shown in an expandable job row (`/screenshots/*` static route). Full DOM/console/network trace capture still open.
+- [ ] retry, timeout และ circuit breaker (basic fixed-delay retry exists on queued jobs; no circuit breaker, no per-step retry yet)
 - [ ] ดาวน์โหลดและจัดเก็บข้อมูล (MinIO/S3)
 
 ## Phase 3 — Gmail
@@ -73,6 +75,7 @@ human) is picking the work back up.
 ## Immediate next step
 
 Phase 1 is functionally done except Firefox/BiDi worker support. Phase 2
-now has a working queue but is otherwise just started — step-based
-workflow (multi-action jobs, not just one script per job), trace/screenshot
-capture per step, and real object storage (MinIO/S3) are all still open.
+has a working queue and per-step status/screenshots; still open: real
+multi-action step-based workflow (a job that runs several distinct actions
+in sequence, not just one script), per-step retry, and object storage
+(MinIO/S3).
