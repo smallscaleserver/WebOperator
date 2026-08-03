@@ -31,11 +31,32 @@ async function loadWorkflow(name: string): Promise<WorkflowDef> {
   return parsed;
 }
 
+// Validates the *entire* workflow before anything runs, so a bad step
+// anywhere fails the job instantly with zero browser interaction and zero
+// side effects, instead of executing earlier steps (navigation, form
+// fills, session saves) before dying partway through.
+function validateWorkflow(workflow: WorkflowDef): void {
+  if (!Array.isArray(workflow.steps) || workflow.steps.length === 0) {
+    throw new Error("Workflow must have a non-empty steps array");
+  }
+  workflow.steps.forEach((workflowStep, index) => {
+    const label = `Step ${index + 1}`;
+    if (typeof workflowStep.type !== "string" || !(workflowStep.type in ACTION_HANDLERS)) {
+      throw new Error(`${label}: unknown action type "${String(workflowStep.type)}"`);
+    }
+    const params = workflowStep.params;
+    if (params !== undefined && (typeof params !== "object" || params === null || Array.isArray(params))) {
+      throw new Error(`${label} ("${workflowStep.type}"): "params" must be an object`);
+    }
+  });
+}
+
 async function main(): Promise<void> {
   if (!WORKFLOW_NAME) {
     throw new Error("WORKFLOW_NAME env var is required");
   }
   const workflow = await loadWorkflow(WORKFLOW_NAME);
+  await step("validate", async () => validateWorkflow(workflow));
 
   const browser = await step("connect", () => connectToChromium(CDP_URL));
   const context = browser.contexts()[0] ?? (await browser.newContext());

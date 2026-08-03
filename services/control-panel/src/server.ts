@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-import { runAction, composePs, listWorkflowNames, REPO_ROOT } from "./exec.js";
+import { runAction, composePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -100,6 +100,11 @@ app.post("/api/enqueue-workflow/:name", async (req, res) => {
   const known = await listWorkflowNames();
   if (!known.includes(name)) {
     res.status(400).json({ ok: false, error: `Unknown workflow "${name}"` });
+    return;
+  }
+  const validation = await validateWorkflowFile(name);
+  if (!validation.ok) {
+    res.status(400).json({ ok: false, error: validation.error });
     return;
   }
   try {

@@ -5,7 +5,7 @@ conversation that doesn't have repo access or prior context. For live,
 maintained project state, see (in this repo): `AGENTS.md` (agent
 entry point), `docs/PROJECT_PLAN.md` (checklist + decision log),
 `docs/AGENT_HANDOFF.md` (session-by-session log). This file is a snapshot
-as of **2026-08-03**, commit `56a4815`.
+as of **2026-08-03**, commit `fef76c5` (the commit that added this file).
 
 ## What WebOperator is
 

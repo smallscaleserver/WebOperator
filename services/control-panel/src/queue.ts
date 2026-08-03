@@ -65,7 +65,9 @@ export interface JobSummary {
   name: string;
   state: string;
   timestamp: number;
+  processedOn: number | null;
   finishedOn: number | null;
+  durationMs: number | null;
   result: ActionResult | null;
   failedReason: string | null;
 }
@@ -73,15 +75,21 @@ export interface JobSummary {
 export async function listRecentJobs(): Promise<JobSummary[]> {
   const jobs = await queue.getJobs(["waiting", "active", "completed", "failed", "delayed"], 0, 20);
   const summaries = await Promise.all(
-    jobs.map(async (job): Promise<JobSummary> => ({
-      id: job.id,
-      name: job.name,
-      state: await job.getState(),
-      timestamp: job.timestamp,
-      finishedOn: job.finishedOn ?? null,
-      result: (job.returnvalue as ActionResult | undefined) ?? null,
-      failedReason: job.failedReason ?? null,
-    })),
+    jobs.map(async (job): Promise<JobSummary> => {
+      const processedOn = job.processedOn ?? null;
+      const finishedOn = job.finishedOn ?? null;
+      return {
+        id: job.id,
+        name: job.name,
+        state: await job.getState(),
+        timestamp: job.timestamp,
+        processedOn,
+        finishedOn,
+        durationMs: processedOn !== null && finishedOn !== null ? finishedOn - processedOn : null,
+        result: (job.returnvalue as ActionResult | undefined) ?? null,
+        failedReason: job.failedReason ?? null,
+      };
+    }),
   );
   return summaries.sort((a, b) => b.timestamp - a.timestamp);
 }

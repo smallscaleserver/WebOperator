@@ -144,6 +144,13 @@ function shortResult(job) {
   return "";
 }
 
+function renderJobTiming(job) {
+  if (job.processedOn === null) return "";
+  const started = new Date(job.processedOn).toLocaleTimeString();
+  const duration = job.durationMs !== null ? `${(job.durationMs / 1000).toFixed(1)}s` : "(in progress)";
+  return `<div class="job-timing">Started ${escapeHtml(started)} — duration ${escapeHtml(duration)}</div>`;
+}
+
 function renderSteps(job) {
   const steps = job.result && job.result.steps ? job.result.steps : [];
   if (steps.length === 0) return "<em>(no step detail)</em>";
@@ -184,7 +191,7 @@ async function pollJobs() {
               <td class="job-result" title="${result}">${result}</td>
             </tr>
             <tr class="steps-row" style="display:${isOpen ? "table-row" : "none"}">
-              <td colspan="4">${renderSteps(job)}</td>
+              <td colspan="4">${renderJobTiming(job)}${renderSteps(job)}</td>
             </tr>`;
           })
           .join("")

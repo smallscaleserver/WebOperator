@@ -76,8 +76,10 @@ docker compose run --rm worker
 It connects to the already-running Chromium, navigates to a demo page, and
 writes a screenshot to `data/worker-output/example.png` on the host.
 
-Save/restore a browser session (`storageState` — cookies + localStorage; a
-synthetic proof for now, since there's no real site adapter yet):
+Save/restore a browser session (`storageState` — cookies + localStorage;
+this demo still uses a synthetic marker on `example.com` for a generic
+round-trip proof — the example site adapter below captures a *real*
+logged-in session the same way):
 
 ```bash
 docker compose run --rm worker npm run save     # captures the default context's state
@@ -102,6 +104,15 @@ data instead of code, proving the engine):
 ```bash
 docker compose run --rm -e WORKFLOW_NAME=the-internet-login worker npm run workflow
 ```
+
+Workflows are validated in full (every step's action `type`, `params`
+shape) before connecting to any browser — a malformed workflow fails
+instantly with zero side effects rather than partially executing. The
+Control Panel also does a cheap JSON/shape check at enqueue time (before a
+job is even created); it doesn't duplicate the full type-registry check,
+since that's what the worker-side validation already guarantees. The Jobs
+API/UI also show each job's start time and duration now, not just
+stdout/stderr/steps.
 
 Run the Firefox demo (proves Playwright can automate Firefox too — via its
 own `launchServer()`/`connect()` protocol, **not** literally WebDriver BiDi,

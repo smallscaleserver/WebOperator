@@ -524,3 +524,61 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-03 (later still) — Claude
+
+- Status: Done
+- Context: Fixed both stale docs (commit hash in
+  `docs/SUMMARY_FOR_CHATGPT.md`, "no real site adapter yet" line in
+  `AGENTS.md` — the real adapter has existed for a while now). Also
+  discovered and fixed the decision-log table in `docs/PROJECT_PLAN.md`
+  being split into two disconnected tables by an italic note paragraph
+  planted in the middle of it (the Firefox rows had no header row of their
+  own) — merged back into one contiguous table.
+  Workflow validation: `run-workflow.ts` now validates the *entire*
+  workflow (every step's `type` exists in `ACTION_HANDLERS`, `params` is an
+  object if present) via a `step("validate", ...)` call *before*
+  `step("connect", ...)` — a bad step anywhere fails the job instantly with
+  zero browser interaction, instead of executing earlier steps first.
+  Control Panel's `/api/enqueue-workflow/:name` gained a cheap JSON/shape
+  check (`validateWorkflowFile` in `exec.ts`) so genuinely broken JSON 400s
+  before a job even exists — deliberately *not* duplicating the action-type
+  registry there (lives in a separate npm project; the worker-side check
+  already guarantees no partial execution, so duplicating would only add
+  sync burden, not real safety).
+  Job-detail hardening: `ActionResult` gained `exitCode` (0 on success,
+  the real exec error code on failure when numeric); `JobSummary` gained
+  `processedOn`/`durationMs` (from BullMQ's own `job.processedOn`, already
+  tracked, just not surfaced before). UI shows a "Started X — duration Ys"
+  line above each job's expanded step list.
+- Files: `services/worker/src/run-workflow.ts`,
+  `services/control-panel/src/exec.ts`, `queue.ts`, `server.ts`,
+  `public/app.js`, `public/index.html`, `docs/SUMMARY_FOR_CHATGPT.md`,
+  `AGENTS.md`, `docs/PROJECT_PLAN.md`.
+- Verified: `npx tsc --noEmit` clean in both projects. Created a temporary
+  workflow file with an unknown action `type` — direct CLI run failed on
+  `validate` with zero `connect`/browser lines logged (proving zero side
+  effects). Through the real Control Panel: a genuinely-malformed-JSON
+  workflow file 400'd at enqueue time with a clear parse error; the
+  bad-type-but-valid-JSON file enqueued fine then failed cleanly on
+  `validate` (job state `completed`, `result.ok: false` — consistent with
+  how failures have always been represented here, not a new inconsistency).
+  Regression-checked the real `the-internet-login` workflow and
+  `runAdapter` — both still succeed, with correct `durationMs` values
+  (~5s for real work, ~1.3s for the instant validation failure). Visually
+  confirmed the "Started X — duration Ys" line renders in the real
+  Control Panel UI via the established `host.docker.internal:4000` CDP
+  screenshot technique. Removed all temporary test workflow files before
+  committing. `docker compose down` clean; re-hit and re-fixed the Windows
+  port-4000 orphan-process gotcha again restarting the panel.
+  Noted but *not* fixed (pre-existing, out of scope): a failed job's
+  "Result" column in the UI can show a raw stack-trace line instead of a
+  clean message, because `shortResult()` in `app.js` takes the last line
+  of `result.error`, which for an uncaught-exception failure can itself be
+  multi-line. Not introduced by this change — exists for any failing
+  action already.
+- Next: per-step retry, MinIO/S3, splitting the queue worker into its own
+  process, `.env.example` additions, migrating the 4 fixed actions onto
+  the workflow engine, or Phase 3 (Gmail) — whichever the user picks. Minor
+  polish candidate whenever convenient: clean up `shortResult()`'s handling
+  of multi-line error messages (noted above).
