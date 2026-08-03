@@ -396,3 +396,23 @@ and sessions.
 - Next: Firefox/BiDi (Phase 1), or continue Phase 2 — migrate the 4 fixed
   actions onto the workflow engine (optional consolidation), per-step
   retry, MinIO/S3 storage.
+
+### 2026-07-29 (session 3) — Claude
+
+- Status: In progress
+- Context: **Claiming Firefox/BiDi worker automation** — direct
+  instruction from the user this time, not a Codex-relay message, but
+  checked `git log` first anyway (repo still at `52c0645`, nothing
+  claimed) per the now-established habit before starting anything
+  nontrivial. If you're Codex (or another session) reading this before a
+  "Done" entry below: this is claimed — check back here or pick a
+  different open item instead.
+- Files: none yet — researching actual Playwright/Firefox BiDi capability
+  before designing anything (unlike Chromium's `connectOverCDP`, which is
+  stable and already proven in this repo, connecting to an
+  externally-launched Firefox over WebDriver BiDi is much less certain to
+  be supported the same way — don't want to design around an assumption
+  that turns out wrong, the way the ad-modal timing bug taught us to
+  verify rather than assume).
+- Verified: n/a yet.
+- Next: (this entry will be updated once the work is done and verified).
