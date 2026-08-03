@@ -3,6 +3,11 @@ FROM debian:bookworm-slim
 ENV DEBIAN_FRONTEND=noninteractive
 
 RUN apt-get update && apt-get install -y --no-install-recommends \
+    curl \
+    ca-certificates \
+    gnupg \
+    && curl -fsSL https://deb.nodesource.com/setup_20.x | bash - \
+    && apt-get install -y --no-install-recommends \
     xvfb \
     x11-utils \
     fluxbox \
@@ -10,8 +15,7 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     novnc \
     websockify \
     chromium \
-    firefox-esr \
-    ca-certificates \
+    nodejs \
     fonts-liberation \
     fonts-noto-cjk \
     dbus-x11 \
@@ -21,6 +25,14 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 
 RUN mkdir -p /data/profile /var/log
 VOLUME ["/data/profile"]
+
+# Firefox automation needs Playwright's own patched Firefox build -- it does
+# not speak CDP and cannot automate the vanilla firefox-esr apt package, so
+# that package is deliberately not installed above.
+WORKDIR /app
+COPY firefox-launcher/package.json ./
+RUN npm install && ./node_modules/.bin/playwright-core install firefox --with-deps
+COPY firefox-launcher/launch-firefox.js ./
 
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh

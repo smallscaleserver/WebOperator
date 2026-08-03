@@ -1,0 +1,8 @@
+{
+  "name": "firefox-launcher",
+  "version": "0.1.0",
+  "private": true,
+  "dependencies": {
+    "playwright-core": "^1.48.0"
+  }
+}

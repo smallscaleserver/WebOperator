@@ -11,6 +11,7 @@ export const ACTIONS = {
   runSave: ["compose", "run", "--rm", "worker", "npm", "run", "save"],
   runRestore: ["compose", "run", "--rm", "worker", "npm", "run", "restore"],
   runAdapter: ["compose", "run", "--rm", "worker", "npm", "run", "adapter"],
+  runFirefoxDemo: ["compose", "run", "--rm", "worker-firefox", "npm", "run", "firefox-demo"],
 } as const;
 
 export type ActionName = keyof typeof ACTIONS;

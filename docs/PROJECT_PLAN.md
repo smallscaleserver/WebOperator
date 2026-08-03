@@ -30,6 +30,11 @@ human) is picking the work back up.
 
 *The 6 generic action types (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/`screenshot`) live in `services/worker/src/actions/registry.ts`. `dismissPopup` carries forward a real lesson from `adapters/the-internet.ts`: the-internet's ad modal appears via `setTimeout(showAd, 500)`, not on initial render, so the handler waits for visibility rather than checking it immediately.*
 
+| Firefox automation mechanism | Playwright's own `launchServer()`/`connect()` protocol, **not** literally WebDriver BiDi | Empirically tested before building: Playwright has no public API for connecting to an *externally-launched* Firefox the way `connectOverCDP` works for Chromium. It needs its own patched Firefox build (`npx playwright install firefox`, not apt `firefox-esr`) and a `launchServer()` call in the browser-worker-firefox container + a separate `connect()` call from `worker-firefox` — this does work, tested directly. The original checklist wording ("BiDi") was an unverified assumption; corrected here rather than left wrong. |
+| Firefox profile persistence | Dropped | `launchServer()` explicitly rejects a `-profile` argument ("Pass userDataDir to launchPersistentContext instead"), and `launchPersistentContext` has no server/connect equivalent — Playwright forces a choice between "persistent profile, single process" and "separate connecting process," and our architecture (long-lived browser container + short-lived worker containers) needs the latter. `storageState` remains the real session-continuity mechanism (already proven for Chromium); the `data/profiles/firefox` bind mount is now unused (left in place, harmless, cheaper than restructuring further). |
+| Firefox page/context lifecycle | Tied to the connecting client, unlike Chromium | Discovered while verifying: after `worker-firefox`'s script disconnects, the page/context it created disappears from the noVNC view (confirmed via process count + a direct before/after check), even though the Firefox *server* process itself survives (same persistent-container model as Chrome). So a human watching noVNC only sees Firefox actually doing something *while* a job is running, not before or after — a real, documented difference from Chromium's persistent default page. Not fixed now; noted as a real limitation. |
+| Firefox automation scope | One demo script (`run-firefox-demo.ts`) proving the connection mechanism, not full adapter/workflow parity | Matches how Chromium's own CDP support was scoped in its first session — prove the mechanism, extend later. |
+
 ## Phase 1 — Prototype
 
 - [x] Docker เปิด Chromium/Firefox แบบเห็นหน้าจอ (`services/browser-worker`)
@@ -40,7 +45,7 @@ human) is picking the work back up.
 - [x] บันทึกและนำ browser session กลับมาใช้ (Playwright `storageState`) — `services/worker` `npm run save`/`npm run restore`, verified round-trip via synthetic marker
 - [x] ทำ adapter เว็บตัวอย่างหนึ่งเว็บ — `services/worker/src/adapters/the-internet.ts` + `npm run adapter`, verified: dismisses popup, real login, extracts flash message, saves real session
 - [x] Playwright worker เชื่อมต่อเข้า browser ผ่าน CDP (Chromium) — `services/worker`, verified: navigates, reads title, screenshots
-- [ ] Playwright worker เชื่อมต่อ Firefox ผ่าน WebDriver BiDi
+- [x] Playwright worker เชื่อมต่อ Firefox — via Playwright's own `launchServer()`/`connect()` protocol, not literally WebDriver BiDi (see decision log). `services/worker/src/firefoxConnect.ts` + `run-firefox-demo.ts`, new `worker-firefox` compose service. Verified end-to-end through direct CLI and the real Control Panel queue. Scope: connection-proof only (one demo script), not full adapter/workflow parity yet. Profile persistence and cross-job page visibility are *not* preserved for Firefox — see decision log.
 
 ## Phase 2 — Task Engine
 
@@ -78,8 +83,12 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-Phase 1 is functionally done except Firefox/BiDi worker support. Phase 2
-now has a queue, per-step status/screenshots, and a generic multi-action
-workflow engine proven against one real example workflow. Still open:
-migrating the 4 fixed actions onto the workflow engine (optional
-consolidation, not required), per-step retry, and object storage (MinIO/S3).
+**Phase 1 is now functionally complete.** Phase 2 has a queue, per-step
+status/screenshots, and a generic multi-action workflow engine proven
+against one real example workflow. Still open: migrating the 4 fixed
+actions onto the workflow engine (optional consolidation, not required),
+per-step retry, object storage (MinIO/S3), and — if it ever becomes
+worth the effort — a way to keep a Firefox page alive across worker
+connections (would need a small always-connected keep-alive client;
+not pursued now, noVNC + on-demand automation both work today, just not
+"watch it live while idle" the way Chrome does).

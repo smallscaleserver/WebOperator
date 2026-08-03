@@ -14,15 +14,19 @@ resolve something itself. Full architecture narrative is in `README.md`.
 
 ## Current status
 
-**Phase 1 (Prototype), functionally done** except Firefox/BiDi worker
-automation. **Phase 2 (Task Engine) started**: worker actions now run
-through a Redis/BullMQ queue instead of directly. Easiest way to use the
-stack now is the Control Panel:
+**Phase 1 (Prototype) is functionally complete.** **Phase 2 (Task Engine)
+started**: worker actions now run through a Redis/BullMQ queue instead of
+directly. Easiest way to use the stack now is the Control Panel:
 
 ```bash
-docker compose up -d redis browser-worker-chrome
+docker compose up -d redis browser-worker-chrome browser-worker-firefox
 cd services/control-panel && npm install && npm start
 ```
+
+Note: all three (`redis` + both browsers) need to be up for the panel to
+be fully functional — if you only start one browser, Redis-dependent calls
+(enqueue/jobs) will hang rather than error if Redis itself isn't running;
+check `docker compose ps` if something seems stuck.
 
 Open `http://localhost:4000` — start/stop each browser, "take control" via
 an embedded noVNC view, enqueue the 4 fixed worker actions
@@ -62,7 +66,8 @@ desktop with the browser open — same idea as the `noVNC Manual Takeover`
 screen described in the README's architecture.
 
 Run the Playwright worker (proves programmatic control over CDP — requires
-`browser-worker-chrome` already up, Chromium only, Firefox has no CDP):
+`browser-worker-chrome` already up; this is the Chromium/CDP path — see
+below for the separate Firefox path, which uses a different mechanism):
 
 ```bash
 docker compose run --rm worker
@@ -98,6 +103,17 @@ data instead of code, proving the engine):
 docker compose run --rm -e WORKFLOW_NAME=the-internet-login worker npm run workflow
 ```
 
+Run the Firefox demo (proves Playwright can automate Firefox too — via its
+own `launchServer()`/`connect()` protocol, **not** literally WebDriver BiDi,
+and **not** the vanilla Firefox you'd get from apt; see decision log for
+why, and for two real limitations: no profile persistence, and the page a
+job creates disappears from noVNC once that job's worker disconnects —
+Firefox is only visibly "doing something" while a job is actively running):
+
+```bash
+docker compose run --rm worker-firefox npm run firefox-demo
+```
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -109,10 +125,11 @@ docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + deci
 docker-compose.yml            browser-worker services (chrome + firefox) + worker + redis
 services/control-panel/       Host-run Express UI + BullMQ queue: start/stop, take-control, enqueue worker actions
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
-services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
+services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path
 services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot)
 services/worker/workflows/    Named JSON workflow definitions run by run-workflow.ts via the generic registry
+services/browser-worker/firefox-launcher/  Node script (launch-firefox.js) that runs Playwright's own Firefox build as a launchServer
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)
@@ -138,6 +155,12 @@ data/sessions/                Saved storageState session files (gitignored, dev-
   `step()` from `src/steps.ts` (see `run-adapter.ts` for the pattern) so
   failures show up as a specific failed step in the Control Panel's job
   detail, not just a stack trace buried in stdout.
+- Firefox automation is real but different from Chromium's: no persistent
+  profile, and a job's page disappears from noVNC once that job's worker
+  disconnects (the Firefox *server* process itself is persistent, like
+  Chrome's container — only the page/context is tied to the connection).
+  Don't assume feature parity with the Chromium/CDP path without checking
+  the decision log in `docs/PROJECT_PLAN.md` first.
 
 ## After making changes
 

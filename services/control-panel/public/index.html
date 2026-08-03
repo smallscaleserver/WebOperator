@@ -60,14 +60,16 @@
 </section>
 
 <section>
-  <h2>Playwright worker (uses Chrome)</h2>
+  <h2>Playwright worker</h2>
   <p class="hint">Buttons enqueue a job — a single queue (concurrency 1) serializes access to the shared browser instead of running actions concurrently.</p>
   <div class="row">
-    <button class="worker-action" data-action="runStart">Run demo (navigate + screenshot)</button>
-    <button class="worker-action" data-action="runSave">Save session</button>
-    <button class="worker-action" data-action="runRestore">Restore session</button>
-    <button class="worker-action" data-action="runAdapter">Run example adapter</button>
+    <button class="worker-action" data-action="runStart" data-requires="chrome">Run demo (navigate + screenshot)</button>
+    <button class="worker-action" data-action="runSave" data-requires="chrome">Save session</button>
+    <button class="worker-action" data-action="runRestore" data-requires="chrome">Restore session</button>
+    <button class="worker-action" data-action="runAdapter" data-requires="chrome">Run example adapter</button>
+    <button class="worker-action" data-action="runFirefoxDemo" data-requires="firefox">Run Firefox demo</button>
   </div>
+  <p class="hint">Firefox demo uses Playwright's own patched Firefox build (not the noVNC window's persistent state) — each run gets a fresh, isolated page; nothing carries over between runs.</p>
 </section>
 
 <section>

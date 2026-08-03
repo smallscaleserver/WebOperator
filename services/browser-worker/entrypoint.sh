@@ -68,11 +68,15 @@ case "${BROWSER}" in
     PIDS="$PIDS $!"
     ;;
   firefox)
-    echo "Starting Firefox"
-    firefox \
-      --no-remote \
-      --profile /data/profile \
-      about:blank >/var/log/browser.log 2>&1 &
+    # Automating Firefox needs Playwright's own patched build, launched via
+    # its launchServer()/connect() protocol, not bare firefox + a debugging
+    # flag -- see docs/PROJECT_PLAN.md decision log. That protocol doesn't
+    # support a persistent --profile the way this used to, in exchange for
+    # a worker container being able to connect from a separate process at
+    # all; storageState (already proven elsewhere in this project) is the
+    # real session-continuity mechanism, not the profile dir.
+    echo "Starting Firefox (via Playwright launch server)"
+    node /app/launch-firefox.js >/var/log/browser.log 2>&1 &
     PIDS="$PIDS $!"
     ;;
   *)

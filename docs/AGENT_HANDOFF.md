@@ -416,3 +416,76 @@ and sessions.
   verify rather than assume).
 - Verified: n/a yet.
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-07-29 (session 3, later) — Claude
+
+- Status: Done
+- Context: Firefox worker automation lands, via Playwright's own
+  `launchServer()`/`connect()` — **not** literally WebDriver BiDi, corrected
+  from the checklist's original (unverified) wording after real testing.
+  Key findings, all confirmed empirically before building anything:
+  (1) `npx playwright install firefox` downloads a Playwright-patched
+  Firefox build; the apt `firefox-esr` we used before cannot be automated
+  by Playwright at all, so it's removed from `services/browser-worker`'s
+  Dockerfile. (2) `launchServer()` (in the browser container) +
+  `connect()` (from a separate worker container) is the real mechanism —
+  proven directly on host before touching Docker. (3) Passing `-profile
+  <dir>` to `launchServer()` is explicitly rejected by Playwright itself,
+  which points you at `launchPersistentContext` instead — but that has no
+  server/connect equivalent, so persistent-profile and
+  separate-process-connect are mutually exclusive. Chose the split-process
+  architecture (matches Chromium's shape); `storageState` remains the real
+  session-continuity mechanism, so this costs less than it sounds.
+  (4) Discovered while verifying, not predicted: the page/context a
+  worker-firefox job creates disappears from noVNC once that job's script
+  disconnects, even though the Firefox *server* process (and Xvfb/x11vnc/
+  noVNC around it) stays up exactly like Chrome's — so Firefox is only
+  visibly "doing something" while a job is actively running, not
+  before/after. Documented plainly rather than glossed over.
+  Built: `services/browser-worker/firefox-launcher/` (Node + playwright-core
+  + `launch-firefox.js`, fixed port 9223/wsPath so it's reachable without
+  publishing an unauthenticated endpoint to the host — same posture as
+  CDP), Dockerfile updated to Node 20 via NodeSource (Debian's apt nodejs
+  is 18, too old for playwright-core 1.62), `entrypoint.sh`'s firefox
+  branch now runs the launcher instead of bare `firefox`.
+  `services/worker/src/firefoxConnect.ts` (retry-based connect, since
+  there's no CDP-style HTTP health-check endpoint to poll) +
+  `run-firefox-demo.ts` (connect → navigate → screenshot, same `step()`
+  reporting as every other script — needed zero changes to the existing
+  step-parsing/queue/UI pipeline). New `worker-firefox` compose service
+  (mirrors `worker`, pointed at `browser-worker-firefox`'s network
+  namespace). Control Panel: `runFirefoxDemo` added to `actions.ts` +
+  `QUEUEABLE_ACTIONS`; UI buttons gained `data-requires="chrome"/"firefox"`
+  so enablement checks the right browser per button instead of always
+  Chrome.
+- Files: `services/browser-worker/Dockerfile`, `entrypoint.sh`,
+  `firefox-launcher/package.json` + `launch-firefox.js` (new);
+  `services/worker/src/firefoxConnect.ts` + `run-firefox-demo.ts` (new),
+  `package.json`; `docker-compose.yml` (`worker-firefox` service);
+  `services/control-panel/src/actions.ts`, `queue.ts`, `public/index.html`
+  + `public/app.js`; `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: `docker compose build browser-worker-firefox` succeeded (~110MB
+  Firefox build + system deps via `--with-deps`). Started it — log showed
+  `Firefox server ready: ws://...`; confirmed via `ps aux` the full Firefox
+  process tree was running. Ran `run-firefox-demo` directly via
+  `docker compose run --rm worker-firefox npm run firefox-demo` — all 3
+  steps `ok`, screenshot visually confirmed as a genuine Firefox render
+  (distinct font rendering from Chromium's). Through the real Control
+  Panel: enqueued `runFirefoxDemo`, it completed with identical step
+  detail in the Jobs UI; regression-checked `runStart` (Chromium) still
+  works unaffected. Visually verified the full UI (both browsers running,
+  5 worker-action buttons, Firefox demo button, both job types in the Jobs
+  table with real results) via the established `host.docker.internal:4000`
+  CDP screenshot technique. Hit a new, separate gotcha mid-session: had
+  stopped `redis` earlier without restarting it alongside the browsers —
+  every Redis-touching Control Panel endpoint (enqueue, jobs list) hung
+  for 20+ seconds instead of erroring, until Redis came back (ioredis
+  queues commands during a connection outage rather than failing fast).
+  Documented in `AGENTS.md` so it's not mysterious next time. Also
+  re-hit the known Windows port-4000 orphan-process issue restarting the
+  panel — same fix as before. `docker compose down` clean afterward.
+- Next: Phase 1 is now functionally complete. Phase 2 continuation:
+  migrate the 4 fixed actions onto the workflow engine (optional), per-step
+  retry, MinIO/S3 storage. If ever worth the effort: a small always-connected
+  keep-alive client so a Firefox page stays visible in noVNC between jobs
+  the way Chrome's does — not pursued now.

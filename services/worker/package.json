@@ -8,7 +8,8 @@
     "save": "tsx src/save-session.ts",
     "restore": "tsx src/restore-session.ts",
     "adapter": "tsx src/run-adapter.ts",
-    "workflow": "tsx src/run-workflow.ts"
+    "workflow": "tsx src/run-workflow.ts",
+    "firefox-demo": "tsx src/run-firefox-demo.ts"
   },
   "dependencies": {
     "playwright-core": "^1.48.0"

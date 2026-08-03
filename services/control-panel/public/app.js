@@ -42,9 +42,9 @@ async function pollStatus() {
     setBrowserUi("chrome", status.chrome);
     setBrowserUi("firefox", status.firefox);
 
-    const workerButtons = document.querySelectorAll(".worker-action");
-    workerButtons.forEach((btn) => {
-      btn.disabled = status.chrome !== "running";
+    document.querySelectorAll(".worker-action").forEach((btn) => {
+      const requires = btn.dataset.requires || "chrome";
+      btn.disabled = status[requires] !== "running";
     });
   } catch (err) {
     console.error("status poll failed", err);
