@@ -1,0 +1,23 @@
+{
+  "name": "the-internet-login",
+  "steps": [
+    { "type": "navigate", "params": { "url": "https://the-internet.herokuapp.com/entry_ad" } },
+    { "type": "dismissPopup", "params": { "selector": "#modal", "closeSelector": ".modal-footer p" } },
+    { "type": "navigate", "params": { "url": "https://the-internet.herokuapp.com/login" } },
+    {
+      "type": "login",
+      "params": {
+        "usernameSelector": "#username",
+        "passwordSelector": "#password",
+        "submitSelector": "button[type='submit']",
+        "username": "tomsmith",
+        "password": "SuperSecretPassword!",
+        "flashSelector": "#flash",
+        "successClass": "success"
+      }
+    },
+    { "type": "extract", "params": { "selector": "#flash" } },
+    { "type": "saveSession", "params": { "path": "/app/sessions/the-internet-workflow.json" } },
+    { "type": "screenshot", "params": { "filename": "the-internet-workflow.png" } }
+  ]
+}

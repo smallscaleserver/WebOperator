@@ -343,3 +343,56 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-07-29 (session 2, later) — Claude
+
+- Status: Done
+- Context: Added a real multi-action workflow engine alongside the
+  existing 4 fixed actions (not replacing them). New generic action
+  registry (`services/worker/src/actions/registry.ts`) with 6 handlers —
+  `navigate`, `dismissPopup` (generalizes `adapters/the-internet.ts`'s
+  `dismissAdIfPresent`, carrying forward the `waitFor({state:"visible"})`
+  fix rather than an immediate `isVisible()` check — the site's modal
+  appears via a 500ms `setTimeout`), `login`, `extract`, `saveSession`,
+  `screenshot`. New `run-workflow.ts` reads `WORKFLOW_NAME` env, loads
+  `services/worker/workflows/<name>.json`, executes each step through the
+  registry using the existing `step()` reporting wrapper — zero changes
+  needed to the step-reporting/parsing/UI pipeline built last session, it
+  just worked. Added `workflows/the-internet-login.json`, a 7-step
+  reproduction of `run-adapter.ts`'s own flow as data instead of code, to
+  prove the engine end-to-end. `steps.ts` gained an optional `data` field
+  + `captureResult` option so `extract`'s scraped text is visible in the
+  job detail UI (not just implied by success). Control Panel: `exec.ts`
+  refactored `runAction`'s exec+parse logic into a shared `execAndParse`
+  now also used by new `runWorkflow(name)`; `queue.ts` branches the worker
+  processor on a `workflow:` job-name prefix; new `GET /api/workflows` +
+  `POST /api/enqueue-workflow/:name` (validated against real files on disk
+  before executing anything, same posture as the existing action
+  endpoint); new "Workflows" section in the UI, `renderSteps()` extended to
+  show `step.data`.
+- Files: `services/worker/src/actions/registry.ts` (new),
+  `run-workflow.ts` (new), `workflows/the-internet-login.json` (new),
+  `steps.ts` (data field), `package.json`, `Dockerfile` (+`COPY
+  workflows`), `docker-compose.yml` (+workflows bind mount),
+  `services/control-panel/src/exec.ts`, `queue.ts`, `server.ts`,
+  `public/index.html` + `public/app.js`, `docs/PROJECT_PLAN.md`,
+  `AGENTS.md`.
+- Verified: `npx tsc --noEmit` clean in both projects. Direct CLI run of
+  the workflow — all 7 steps `ok`, `5-extract`'s `data` held the real flash
+  text ("You logged into a secure area!"), screenshot file confirmed
+  identical size to source. Through the real Control Panel: `GET
+  /api/workflows` → `["the-internet-login"]`; enqueue returned a `jobId` in
+  0.24s (async, not blocking); polled to `completed` with all 8 steps
+  (including `connect`) correct; `POST /api/enqueue-workflow/not-real` →
+  400, nothing executed. Regression check: enqueued the original
+  `runAdapter` fixed action through `/api/enqueue/:name` after the
+  `exec.ts` refactor — still `completed`/`ok`, unaffected. Visually
+  verified in the real Chromium (`host.docker.internal:4000` over CDP):
+  screenshotted the new Workflows section and the expanded workflow job
+  row — step list renders correctly including the extract step's scraped
+  text inline. `docker compose down` clean. Hit the documented Windows
+  port-4000 orphan-process issue again restarting the panel mid-session —
+  confirmed the documented fix command still works.
+- Next: Firefox/BiDi (Phase 1), or continue Phase 2 — migrate the 4 fixed
+  actions onto the workflow engine (optional consolidation), per-step
+  retry, MinIO/S3 storage.

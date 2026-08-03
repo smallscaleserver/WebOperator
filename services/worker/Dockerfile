@@ -7,5 +7,6 @@ RUN npm install
 
 COPY tsconfig.json ./
 COPY src ./src
+COPY workflows ./workflows
 
 CMD ["npm", "run", "start"]

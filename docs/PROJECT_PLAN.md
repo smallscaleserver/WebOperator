@@ -25,6 +25,10 @@ human) is picking the work back up.
 | Queue concurrency | 1 | All 4 queueable actions connect to the same shared `browser-worker-chrome` over CDP — the queue's job is to serialize access to that one browser, not parallelize it. Verified via BullMQ `processedOn` timestamps: job N+1's `processedOn` exactly equals job N's `finishedOn`. |
 | Step reporting | Post-hoc, parsed out of captured stdout (`WEBOP_STEP {...}` lines), not live-streamed | True live progress needs `spawn` + incremental parsing + BullMQ `job.updateProgress()` — real complexity for a slice that's mainly about debugging after the fact, which post-hoc parsing already delivers. Live streaming is a reasonable follow-up, not required now. |
 | Step/screenshot scope | Step name + ok/error + optional detail message + optional screenshot filename + timestamp. No DOM snapshot, console/network log capture, or full Playwright `.trace.zip` yet | README's Event Recovery Engine table wants much more (DOM snapshot, console/network errors); kept to the smallest slice that makes job failures debuggable without reading raw logs. Fuller trace capture stays open. |
+| Workflow definition format | Named JSON files checked into `services/worker/workflows/*.json`, not request-supplied JSON | Auditable (it's source, reviewed like any other code), and the Control Panel only ever needs to validate a *name* against real files on disk before enqueueing — no new arbitrary-JSON-from-a-web-request input-validation surface to design. |
+| Workflow engine vs fixed actions | Added *alongside* the existing 4 fixed actions/`adapters/the-internet.ts`, not a replacement | Those were already proven working across several sessions; no reason to destabilize them to add the new generic path. Migrating the old path onto the new engine is a deliberate follow-up, not bundled into this change. |
+
+*The 6 generic action types (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/`screenshot`) live in `services/worker/src/actions/registry.ts`. `dismissPopup` carries forward a real lesson from `adapters/the-internet.ts`: the-internet's ad modal appears via `setTimeout(showAd, 500)`, not on initial render, so the handler waits for visibility rather than checking it immediately.*
 
 ## Phase 1 — Prototype
 
@@ -41,7 +45,7 @@ human) is picking the work back up.
 ## Phase 2 — Task Engine
 
 - [x] Queue และ scheduler (Redis + BullMQ) — `services/control-panel` `src/queue.ts`, Control Panel UI enqueues the 4 worker actions instead of running them synchronously; verified: async return, sequential execution (concurrency 1), retry config wired (`attempts: 2`)
-- [ ] Step-based workflow (multi-action jobs; each job today is still one script, just now internally broken into reported steps — see below)
+- [x] Step-based workflow — `services/worker/src/run-workflow.ts` + `src/actions/registry.ts` + `workflows/the-internet-login.json`: a job now runs a *sequence of generic, parameterized actions* defined as data, not one hardcoded script. Control Panel: `GET /api/workflows`, `POST /api/enqueue-workflow/:name`. Verified end-to-end through the real queue, including the `extract` step's scraped text surfacing in the job detail UI. Added alongside the existing 4 fixed actions, which are unchanged.
 - [x] screenshot/trace ทุกจุดสำคัญ — partial: `services/worker/src/steps.ts` `step()` wrapper reports name/status/detail/screenshot per stage in all 4 worker scripts, parsed by `services/control-panel/src/exec.ts` and shown in an expandable job row (`/screenshots/*` static route). Full DOM/console/network trace capture still open.
 - [ ] retry, timeout และ circuit breaker (basic fixed-delay retry exists on queued jobs; no circuit breaker, no per-step retry yet)
 - [ ] ดาวน์โหลดและจัดเก็บข้อมูล (MinIO/S3)
@@ -75,7 +79,7 @@ human) is picking the work back up.
 ## Immediate next step
 
 Phase 1 is functionally done except Firefox/BiDi worker support. Phase 2
-has a working queue and per-step status/screenshots; still open: real
-multi-action step-based workflow (a job that runs several distinct actions
-in sequence, not just one script), per-step retry, and object storage
-(MinIO/S3).
+now has a queue, per-step status/screenshots, and a generic multi-action
+workflow engine proven against one real example workflow. Still open:
+migrating the 4 fixed actions onto the workflow engine (optional
+consolidation, not required), per-step retry, and object storage (MinIO/S3).

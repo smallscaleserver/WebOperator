@@ -2,8 +2,15 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-import { runAction, composePs, REPO_ROOT } from "./exec.js";
-import { enqueueAction, isQueueableAction, listRecentJobs, startWorker, closeQueue } from "./queue.js";
+import { runAction, composePs, listWorkflowNames, REPO_ROOT } from "./exec.js";
+import {
+  enqueueAction,
+  enqueueWorkflow,
+  isQueueableAction,
+  listRecentJobs,
+  startWorker,
+  closeQueue,
+} from "./queue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -78,6 +85,25 @@ app.post("/api/enqueue/:name", async (req, res) => {
   }
   try {
     const jobId = await enqueueAction(name);
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/api/workflows", async (_req, res) => {
+  res.json({ workflows: await listWorkflowNames() });
+});
+
+app.post("/api/enqueue-workflow/:name", async (req, res) => {
+  const { name } = req.params;
+  const known = await listWorkflowNames();
+  if (!known.includes(name)) {
+    res.status(400).json({ ok: false, error: `Unknown workflow "${name}"` });
+    return;
+  }
+  try {
+    const jobId = await enqueueWorkflow(name);
     res.json({ ok: true, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

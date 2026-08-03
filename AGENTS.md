@@ -25,15 +25,18 @@ cd services/control-panel && npm install && npm start
 ```
 
 Open `http://localhost:4000` — start/stop each browser, "take control" via
-an embedded noVNC view, and enqueue the worker actions (demo/save/restore/
-adapter) via buttons — a Jobs table shows status/result, polling every 3s.
-**Click a job row to expand its step-by-step breakdown** (connect, navigate,
-login, etc. — whatever that action's script reports) with ✅/❌ per step and
-a link to any screenshot it captured. Actions run one at a time (queue
-concurrency 1) since they share one browser. Local only (binds
-`127.0.0.1`), no auth — don't expose it to a network. Redis is also
-loopback-only (`127.0.0.1:6379`), no auth, no persistence — dev-only, same
-posture as everything else unauthenticated here.
+an embedded noVNC view, enqueue the 4 fixed worker actions
+(demo/save/restore/adapter), or **run a Workflow** — a named multi-step
+JSON definition (`services/worker/workflows/*.json`) executed by a generic
+action registry (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/
+`screenshot` — see `src/actions/registry.ts`) instead of one fixed script
+per job. Both paths land in the same Jobs table, polling every 3s. **Click
+a job row to expand its step-by-step breakdown** with ✅/❌ per step, any
+scraped `extract` text, and a link to any screenshot captured. Everything
+runs one at a time (queue concurrency 1) since it all shares one browser.
+Local only (binds `127.0.0.1`), no auth — don't expose it to a network.
+Redis is also loopback-only (`127.0.0.1:6379`), no auth, no persistence —
+dev-only, same posture as everything else unauthenticated here.
 
 If restarting the panel: on Windows, stopping the process hosting it
 (e.g. a harness task-stop) has been observed to sometimes leave the
@@ -87,6 +90,14 @@ for automation, not a real production site):
 docker compose run --rm worker npm run adapter
 ```
 
+Run a workflow by name (a generic multi-step alternative to the fixed
+scripts above — `the-internet-login` reproduces the adapter's own flow as
+data instead of code, proving the engine):
+
+```bash
+docker compose run --rm -e WORKFLOW_NAME=the-internet-login worker npm run workflow
+```
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -99,7 +110,9 @@ docker-compose.yml            browser-worker services (chrome + firefox) + worke
 services/control-panel/       Host-run Express UI + BullMQ queue: start/stop, take-control, enqueue worker actions
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP
-services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site)
+services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path
+services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot)
+services/worker/workflows/    Named JSON workflow definitions run by run-workflow.ts via the generic registry
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)

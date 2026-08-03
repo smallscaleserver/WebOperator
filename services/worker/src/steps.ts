@@ -3,6 +3,7 @@ export interface StepEvent {
   status: "ok" | "error";
   detail?: string;
   screenshot?: string; // filename only, relative to OUTPUT_DIR
+  data?: unknown; // the step function's return value, when opts.captureResult is set
   at: string;
 }
 
@@ -12,7 +13,7 @@ export interface StepEvent {
 export async function step<T>(
   name: string,
   fn: () => Promise<T>,
-  opts?: { screenshot?: string },
+  opts?: { screenshot?: string; captureResult?: boolean },
 ): Promise<T> {
   try {
     const result = await fn();
@@ -20,6 +21,7 @@ export async function step<T>(
       name,
       status: "ok",
       screenshot: opts?.screenshot,
+      data: opts?.captureResult ? result : undefined,
       at: new Date().toISOString(),
     };
     console.log(`WEBOP_STEP ${JSON.stringify(event)}`);

@@ -1,9 +1,10 @@
 import { Queue, Worker } from "bullmq";
-import { runAction, type ActionResult } from "./exec.js";
+import { runAction, runWorkflow, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const QUEUE_NAME = "worker-actions";
+const WORKFLOW_JOB_PREFIX = "workflow:";
 const connection = { url: REDIS_URL };
 
 // Only the automation actions are queueable — browser start/stop are
@@ -20,14 +21,20 @@ const queue = new Queue(QUEUE_NAME, { connection });
 
 let worker: Worker | undefined;
 
-// All queueable actions connect to the same shared browser-worker-chrome
-// instance over CDP — concurrency 1 serializes access to that one browser
-// instead of racing two jobs against it.
+// All queueable actions/workflows connect to the same shared
+// browser-worker-chrome instance over CDP — concurrency 1 serializes
+// access to that one browser instead of racing jobs against it.
 export function startWorker(): Worker {
   if (worker) return worker;
   worker = new Worker(
     QUEUE_NAME,
-    async (job): Promise<ActionResult> => runAction(job.name as ActionName),
+    async (job): Promise<ActionResult> => {
+      if (job.name.startsWith(WORKFLOW_JOB_PREFIX)) {
+        const workflowName = job.data?.workflowName as string;
+        return runWorkflow(workflowName);
+      }
+      return runAction(job.name as ActionName);
+    },
     { connection, concurrency: 1 },
   );
   worker.on("failed", (job, err) => {
@@ -36,13 +43,20 @@ export function startWorker(): Worker {
   return worker;
 }
 
+const JOB_OPTS = {
+  attempts: 2,
+  backoff: { type: "fixed" as const, delay: 5000 },
+  removeOnComplete: { count: 50 },
+  removeOnFail: { count: 50 },
+};
+
 export async function enqueueAction(name: QueueableAction): Promise<string> {
-  const job = await queue.add(name, {}, {
-    attempts: 2,
-    backoff: { type: "fixed", delay: 5000 },
-    removeOnComplete: { count: 50 },
-    removeOnFail: { count: 50 },
-  });
+  const job = await queue.add(name, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function enqueueWorkflow(name: string): Promise<string> {
+  const job = await queue.add(`${WORKFLOW_JOB_PREFIX}${name}`, { workflowName: name }, JOB_OPTS);
   return job.id ?? "";
 }
 

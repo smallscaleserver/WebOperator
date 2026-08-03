@@ -34,6 +34,7 @@ services:
       - CDP_URL=http://localhost:9222
     volumes:
       - ./services/worker/src:/app/src
+      - ./services/worker/workflows:/app/workflows
       - ./data/worker-output:/app/output
       - ./data/sessions:/app/sessions
     network_mode: "service:browser-worker-chrome"
