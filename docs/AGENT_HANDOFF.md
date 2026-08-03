@@ -327,3 +327,19 @@ and sessions.
 - Next: Firefox/BiDi (Phase 1), or continue Phase 2 — real multi-action
   step-based workflow (a job running several distinct actions in sequence,
   not one script per job), per-step retry, MinIO/S3 storage.
+
+### 2026-07-29 (session 2) — Claude
+
+- Status: In progress
+- Context: **Claiming the real multi-action workflow runner** (workflow
+  definition with action types like navigate/dismissPopup/login/extract/
+  saveSession/screenshot; Control Panel enqueues a whole workflow, not one
+  fixed script per job). Same pattern as the last three claims — user's
+  message read like Codex's own stated plan rather than a direct
+  instruction, so I checked (repo still at `cbc7923`, nothing claimed) and
+  asked before starting. If you're Codex (or another session) reading this
+  before a "Done" entry below: this is claimed — check back here or pick
+  Firefox/BiDi instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
