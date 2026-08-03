@@ -489,3 +489,38 @@ and sessions.
   retry, MinIO/S3 storage. If ever worth the effort: a small always-connected
   keep-alive client so a Firefox page stays visible in noVNC between jobs
   the way Chrome's does — not pursued now.
+
+### 2026-08-03 — Claude
+
+- Status: Done
+- Context: Added `docs/SUMMARY_FOR_CHATGPT.md` — a self-contained
+  narrative progress summary for pasting into a fresh ChatGPT/Codex
+  conversation without repo access (complements the other docs, which all
+  assume repo access). Forgot to log it here at the time — this entry
+  covers that gap retroactively.
+- Files: `docs/SUMMARY_FOR_CHATGPT.md` (new).
+- Verified: reviewed for accuracy against the actual decision log/checklist
+  before committing.
+- Next: fix a stale commit-hash reference inside that same summary file
+  (it named the *previous* commit, not the one that actually added it —
+  caught by Codex reviewing it), plus a stale "no real site adapter yet"
+  line in `AGENTS.md` left over from before the adapter/workflow work
+  landed. Claimed together with workflow-validation + job-detail hardening
+  below.
+
+### 2026-08-03 (later) — Claude
+
+- Status: In progress
+- Context: **Claiming**: (1) the two stale-doc fixes above, (2) workflow
+  validation before enqueueing (reject an unknown action `type` up front
+  instead of partially executing a workflow and failing mid-way), (3)
+  modest job-detail hardening (start time, duration). User confirmed I own
+  this — same pattern as prior claims (message read like Codex's own
+  offer, "ผมเริ่มจากข้อ 1–2 ได้เลยครับ", not a direct instruction), checked
+  `git log` first (still at `fef76c5`, nothing claimed). Explicitly *not*
+  in scope this round: per-step retry, MinIO/Gmail, splitting the queue
+  worker into its own process, `.env.example` additions — those are listed
+  as later steps, not part of what was offered.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
