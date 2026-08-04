@@ -723,3 +723,19 @@ and sessions.
   Minor polish candidate whenever convenient: `shortResult()` in `app.js`
   showing a raw stack-trace line for some failures (still not fixed,
   still out of scope, noted twice now).
+
+### 2026-08-04 (session 3) — Claude
+
+- Status: In progress
+- Context: **Claiming: MinIO/S3 artifact storage, starting with
+  screenshots.** Explicit direct instruction this time (user answered
+  their own question with exactly who/what: "ให้ Claude claim ใน
+  AGENT_HANDOFF.md แล้วเริ่มจาก screenshots artifacts"), no ambiguity to
+  resolve — still checked `git log` first anyway (repo still at
+  `659772f`, nothing claimed) per the now-standard habit before starting
+  anything nontrivial. If you're Codex (or another session) reading this
+  before a "Done" entry below: this is claimed — check back here or pick
+  a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
