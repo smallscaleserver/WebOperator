@@ -1266,3 +1266,42 @@ and sessions.
   explicitly not this round. Otherwise: a live Gmail OAuth test with the
   user's own credentials, the real downloads fix, video/trace, or
   whichever else the user picks.
+
+### 2026-08-04 (session 11) — Claude
+
+- Status: In progress
+- Context: **Claiming: XC Bank login/logout flow refinements.** After
+  trying the workflow through the real UI (previous message), user asked
+  for a follow-up round. Checked `git log` first — still at `344c669`,
+  nothing new claimed. Scope: (1) `GET /login` currently *always* shows
+  the username form unless the session is already `authenticated` — a
+  "remembered username" pending session (username captured, not yet
+  authenticated) gets re-asked for username instead of skipping straight
+  to `/password`, which is the gap to close; the adapter's `login()` must
+  handle three paths now, not two: fresh (no session), remembered-
+  username (pending session, skip to password), already-authenticated
+  (skip everything). (2) New `Logout` and `Logout clean` buttons on the
+  XC Bank site itself: `Logout` clears `authenticated` but keeps the
+  session's `username` (so a subsequent `/login` correctly bounces to
+  `/password`, not the username form — matches realistic bank UX);
+  `Logout clean` deletes the session entirely + clears the cookie (next
+  `/login` shows a genuinely fresh username form) — explicitly a dev/
+  test-only reset helper, not simulating real bank behavior, documented
+  as such. (3) A new worker action/workflow for `xc-bank logout clean`
+  to reset test state programmatically, if it doesn't blow up scope —
+  assessed as small (one more registry action + one-step workflow,
+  following the exact pattern of `xcBankLogin`/`xcBankExtractDashboard`)
+  so doing it. (4) Verify all four flows for real (fresh login after
+  logout-clean, session-reuse skip, plain logout, logout-clean → fresh
+  workflow run) through the actual Control Panel queue. (5) Update
+  `README.md`/`AGENTS.md`/`docs/PROJECT_PLAN.md` — explicitly note
+  `Logout clean` is a mock-only test helper. (6) Same isolation rule as
+  before (DOM-only, no internal API/shared DB) and no Gmail/Phase 3.
+  Stack left running from the previous message (user chose to leave it
+  up after trying the UI) — reusing it rather than tearing down and
+  restarting. If you're Codex (or another session) reading this before a
+  "Done" entry below: this is claimed — check back here or pick a
+  different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
