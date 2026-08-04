@@ -1,7 +1,8 @@
 import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { connectToChromium } from "./cdp.js";
-import { step } from "./steps.js";
+import { step, stepBestEffort } from "./steps.js";
+import { uploadArtifact } from "./artifacts.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const TARGET_URL = process.env.TARGET_URL ?? "https://example.com";
@@ -42,6 +43,9 @@ async function main(): Promise<void> {
 
   console.log(`Set marker "${MARKER_KEY}" = "${markerValue}" (cookie + localStorage)`);
   console.log(`Saved storage state to ${SESSION_FILE}`);
+  await stepBestEffort("archive-session", () =>
+    uploadArtifact(SESSION_FILE, `sessions/${basename(SESSION_FILE)}`),
+  );
 
   // Deliberately not calling browser.close() — see index.ts.
   process.exit(0);

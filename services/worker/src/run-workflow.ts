@@ -119,6 +119,13 @@ async function main(): Promise<void> {
       const localPath = path.join(OUTPUT_DIR, filename);
       await stepBestEffort(`${index + 1}-archive-screenshot`, () => uploadArtifact(localPath, `screenshots/${filename}`));
     }
+
+    if (workflowStep.type === "saveSession") {
+      const sessionPath = String(params.path ?? "");
+      await stepBestEffort(`${index + 1}-archive-session`, () =>
+        uploadArtifact(sessionPath, `sessions/${path.basename(sessionPath)}`),
+      );
+    }
   }
 
   console.log(`Workflow "${workflow.name}" completed (${workflow.steps.length} steps).`);

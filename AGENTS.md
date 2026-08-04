@@ -25,16 +25,20 @@ npm start          # terminal 1: API/UI (producer) -> http://localhost:4000
 npm run worker     # terminal 2: queue consumer -- jobs don't run without this
 ```
 
-Every screenshot a job takes is also mirrored to MinIO (S3-compatible
-object storage, `weboperator-artifacts` bucket, `screenshots/*`) — console
-at `http://localhost:9001` (creds: `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`
-in `.env`, defaults `weboperator`/`changeme123`). This is best-effort and
-additive: local files under `data/worker-output/` and the Control Panel's
-`/screenshots/*` route are unchanged and remain the source of truth: a
-MinIO outage shows up as a failed `archive-screenshot` step in the job
-detail, not a failed job. If `worker`/`worker-firefox` run outside Docker
-Compose (rare), set `MINIO_ENDPOINT`/`MINIO_PORT` to reach MinIO directly —
-inside Compose this defaults correctly via service DNS.
+Every screenshot a job takes, and every session file it saves, is also
+mirrored to MinIO (S3-compatible object storage, `weboperator-artifacts`
+bucket, `screenshots/*` and `sessions/*` prefixes) — console at
+`http://localhost:9001` (creds: `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` in
+`.env`, defaults `weboperator`/`changeme123`). This is best-effort and
+additive: local files under `data/worker-output/` and `data/sessions/`
+and the Control Panel's `/screenshots/*` route are unchanged and remain
+the source of truth: a MinIO outage shows up as a failed
+`archive-screenshot`/`archive-session` step in the job detail, not a
+failed job. Session files stay plaintext dev-only in MinIO too — this is
+a second storage location, not an encryption upgrade. If
+`worker`/`worker-firefox` run outside Docker Compose (rare), set
+`MINIO_ENDPOINT`/`MINIO_PORT` to reach MinIO directly — inside Compose
+this defaults correctly via service DNS.
 
 **The API and the queue consumer are two separate processes now** — `npm
 start` only serves the UI and enqueues jobs; nothing actually *executes* a

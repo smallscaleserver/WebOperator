@@ -1,5 +1,5 @@
 import { mkdir } from "node:fs/promises";
-import { dirname } from "node:path";
+import { basename, dirname } from "node:path";
 import { connectToChromium } from "./cdp.js";
 import { step, stepBestEffort } from "./steps.js";
 import { uploadArtifact } from "./artifacts.js";
@@ -39,6 +39,9 @@ async function main(): Promise<void> {
     await context.storageState({ path: SESSION_FILE });
   });
   console.log(`Saved real logged-in session to ${SESSION_FILE}`);
+  await stepBestEffort("archive-session", () =>
+    uploadArtifact(SESSION_FILE, `sessions/${basename(SESSION_FILE)}`),
+  );
 
   const screenshotPath = `${OUTPUT_DIR}/the-internet-secure.png`;
   await step(

@@ -777,23 +777,55 @@ and sessions.
 
 ### 2026-08-04 (session 4) — Claude
 
-- Status: In progress
-- Context: **Claiming: session-file archival to MinIO.** User's explicit
-  choice ("ถ้าจะให้ Claude ทำต่อ ผมจะเลือก: session-file archival to MinIO
-  ครับ"), following on directly from the just-finished screenshot
-  archival. Checked `git log` first — still at `7da30cd`, nothing new
-  claimed. Scope as specified: archive `storageState` JSON files
+- Status: Done
+- Context: Session-file archival to MinIO. User's explicit choice
+  ("ถ้าจะให้ Claude ทำต่อ ผมจะเลือก: session-file archival to MinIO ครับ"),
+  following on directly from the just-finished screenshot archival.
+  Checked `git log` first — still at `7da30cd`, nothing new claimed.
+  Scope as specified: archive `storageState` JSON files
   (`data/sessions/*.json`) to MinIO under a `sessions/` prefix (separate
   from `screenshots/`), same best-effort/non-fatal pattern as screenshots
   (`stepBestEffort`) — a MinIO hiccup must not fail `save-session`.
-  Explicit constraint: session file *content* (cookies/tokens) must never
-  be shown in the Control Panel UI or logs — only metadata (key name,
-  upload status) — matching the existing "never log/display credentials"
-  convention. Still dev-only/plaintext in MinIO too, same caveat as the
-  local file today — not an encryption upgrade, just a second storage
-  location. If you're Codex (or another session) reading this before a
-  "Done" entry below: this is claimed — check back here or pick a
-  different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+  Constraint on session content never appearing in the UI/logs turned out
+  to already be satisfied by construction: the Control Panel has zero
+  session-related routes/UI today (confirmed by grep), and
+  `stepBestEffort` never passes `captureResult`, so the `archive-session`
+  step only ever reports name/status/timestamp/error — never file
+  content — same shape as `archive-screenshot`. Still dev-only/plaintext
+  in MinIO too, same caveat as the local file today — not an encryption
+  upgrade, just a second storage location.
+- Files: `services/worker/src/save-session.ts` (new `archive-session`
+  step after `save-storage-state`), `services/worker/src/run-adapter.ts`
+  (new `archive-session` step after its existing `save-session` step, on
+  a file that already imported `stepBestEffort`/`uploadArtifact` for
+  screenshots), `services/worker/src/run-workflow.ts` (new
+  `if (workflowStep.type === "saveSession")` archival block in the
+  execution loop, mirroring the existing `screenshot` one — covers *any*
+  workflow using the generic `saveSession` action). No changes needed to
+  `artifacts.ts`/`steps.ts` — `uploadArtifact`/`stepBestEffort` are
+  already generic, reused as-is. `docs/PROJECT_PLAN.md` (3 new/extended
+  decision-log rows + Phase 2 checklist update), `AGENTS.md` (dev-run
+  note extended to cover session archival).
+- Verified: `npx tsc --noEmit` clean (no rebuild needed — no new
+  dependency this time, only bind-mounted `src/` changes).
+  `docker compose run --rm worker npm run save` — `save-storage-state`
+  and `archive-session` both `status: "ok"`. `npm run adapter` (real
+  login, not the synthetic marker) — same, plus its existing
+  `archive-screenshot` unaffected. **Round-trip proof**: a throwaway
+  host-side script fetched both `sessions/example.json` and
+  `sessions/the-internet.json` back from `127.0.0.1:9000` and compared
+  SHA-256 hashes against the local files — byte-identical (1238B and
+  2885B respectively), script deleted after. **Non-fatal proof**:
+  `docker compose stop minio`, re-ran `npm run save` — `archive-session`
+  reported `status: "error"` (`getaddrinfo ENOTFOUND minio`) while the
+  job still exited 0 and the local session file still saved; restarted
+  MinIO after. Ran the real `the-internet-login` workflow through the
+  actual Control Panel queue (both `npm start` and `npm run worker`
+  processes up) — `6-archive-session` showed up correctly in `/api/jobs`
+  right after `6-saveSession`, alongside the existing
+  `7-archive-screenshot`. `docker compose down`; both host processes
+  confirmed actually dead afterward (port-4000 check for the API,
+  command-line search for the worker).
+- Next: wiring the Control Panel to read artifacts back from MinIO
+  instead of only local disk, migrating the 4 fixed actions onto the
+  workflow engine, or Phase 3 (Gmail) — whichever the user picks.
