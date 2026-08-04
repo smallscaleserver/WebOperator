@@ -962,9 +962,9 @@ and sessions.
 
 ### 2026-08-04 (session 7) — Claude
 
-- Status: In progress
-- Context: **Claiming: migrate the 4 fixed worker actions onto the
-  workflow engine.** Explicit direct instruction. Checked `git log` first
+- Status: Done
+- Context: Migrate the 4 fixed worker actions onto the workflow engine.
+  Explicit direct instruction. Checked `git log` first
   — still at `0b4cfba`, nothing new claimed. Scope as given: replace
   demo/save/restore/adapter with workflow JSON *to the extent the
   existing generic action registry supports it*; Control Panel buttons
@@ -993,6 +993,45 @@ and sessions.
   bolting on new action types to hit a number. If you're Codex (or
   another session) reading this before a "Done" entry below: this is
   claimed — check back here or pick a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Files: `services/worker/workflows/demo.json` (new — navigate +
+  screenshot, faithful equivalent of `index.ts`/`runStart`),
+  `services/control-panel/src/actions.ts` (removed `runStart`/
+  `runAdapter` from the `ACTIONS` table), `services/control-panel/
+  src/queue.ts` (removed them from `QUEUEABLE_ACTIONS` too),
+  `services/control-panel/public/index.html` (the two buttons now use
+  `data-workflow="demo"`/`data-workflow="the-internet-login"` instead of
+  `data-action="runStart"`/`data-action="runAdapter"` — same visible
+  button, label, position), `services/control-panel/public/app.js`
+  (`.worker-action` click handler now checks `dataset.workflow` first,
+  falling back to `dataset.action`), `docs/PROJECT_PLAN.md` (4 new
+  decision-log rows: the migration itself, why `save`/`restore` don't
+  migrate, and an unrelated stale-image fix found while regression
+  testing), `AGENTS.md` (workflow engine described as the primary path).
+  `save-session.ts`/`restore-session.ts` and their Control Panel wiring
+  are completely untouched.
+- Verified: `npx tsc --noEmit` clean in `services/control-panel`. With
+  the real stack up (both Control Panel processes, all 4 Docker
+  services): `POST /api/enqueue/runStart` and `/runAdapter` both now
+  cleanly 400 "not a queueable action" — confirms no dangling
+  half-registered path. `POST /api/enqueue-workflow/demo` ran
+  navigate→screenshot→archive-screenshot correctly, both local and MinIO
+  screenshot links returned 200. `POST /api/enqueue-workflow/
+  the-internet-login` (now what "Run example adapter" actually triggers)
+  ran its full 7-step sequence correctly, same as every prior
+  verification of that workflow. **Regression-checked what's
+  intentionally unchanged**: `runSave` and `runRestore` still enqueue and
+  complete correctly (`restore` read back the exact marker `save` had
+  just written, proving the round-trip still works end to end).
+  `runFirefoxDemo` also checked — **found and fixed an unrelated stale
+  Docker image** in the process: `worker-firefox`'s image had never been
+  rebuilt since `minio` was added to `services/worker/package.json` in an
+  earlier session (only the plain `worker` image had been), so it failed
+  with `ERR_MODULE_NOT_FOUND: minio`; `docker compose build
+  worker-firefox` fixed it, re-verified working afterward. Confirmed via
+  `curl` that the served `index.html`/`app.js` actually reflect the new
+  `data-workflow` attributes and click-handler logic, not just the source
+  files. `docker compose down`; both host processes confirmed actually
+  dead afterward (port-4000 check for the API, command-line search for
+  the worker).
+- Next: the real downloads fix, video/trace (needs a concrete workflow
+  use case), or Phase 3 (Gmail) — whichever the user picks.

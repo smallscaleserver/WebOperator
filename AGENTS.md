@@ -73,18 +73,30 @@ jobs) will hang rather than error if Redis itself isn't running; check
 `docker compose ps` if something seems stuck.
 
 Open `http://localhost:4000` — start/stop each browser, "take control" via
-an embedded noVNC view, enqueue the 4 fixed worker actions
-(demo/save/restore/adapter), or **run a Workflow** — a named multi-step
-JSON definition (`services/worker/workflows/*.json`) executed by a generic
-action registry (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/
+an embedded noVNC view, or run automation. **The workflow engine is now
+the primary orchestration path**: a named multi-step JSON definition
+(`services/worker/workflows/*.json`) executed by a generic action
+registry (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/
 `screenshot` — see `src/actions/registry.ts`) instead of one fixed script
-per job. Both paths land in the same Jobs table, polling every 3s. **Click
-a job row to expand its step-by-step breakdown** with ✅/❌ per step, any
-scraped `extract` text, and a link to any screenshot captured. Everything
-runs one at a time (queue concurrency 1) since it all shares one browser.
-Local only (binds `127.0.0.1`), no auth — don't expose it to a network.
-Redis is also loopback-only (`127.0.0.1:6379`), no auth, no persistence —
-dev-only, same posture as everything else unauthenticated here.
+per job. The "Run demo" and "Run example adapter" buttons enqueue
+workflows (`demo`, `the-internet-login`) under the hood now, not a fixed
+action — same buttons, same behavior from the UI's perspective, different
+backend path. Only "Save session" and "Restore session" remain true fixed
+actions: neither maps onto the current generic action registry (`save`
+sets a synthetic marker via bespoke inline JS with no generic
+equivalent; `restore` needs a fresh isolated context the workflow
+engine's one-shared-context-per-run model doesn't support) — see
+`docs/PROJECT_PLAN.md` decision log for the full reasoning. Their
+underlying `services/worker` npm scripts (`npm run start`/`npm run
+adapter`) still work directly via CLI even though the Panel no longer
+enqueues them as fixed actions. Every path lands in the same Jobs table,
+polling every 3s. **Click a job row to expand its step-by-step
+breakdown** with ✅/❌ per step, any scraped `extract` text, and a link to
+any screenshot captured. Everything runs one at a time (queue concurrency
+1) since it all shares one browser. Local only (binds `127.0.0.1`), no
+auth — don't expose it to a network. Redis is also loopback-only
+(`127.0.0.1:6379`), no auth, no persistence — dev-only, same posture as
+everything else unauthenticated here.
 
 If restarting either process: on Windows, stopping a process hosting it
 (e.g. a harness task-stop) has been observed to sometimes leave the

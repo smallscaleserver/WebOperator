@@ -10,7 +10,7 @@ const connection = { url: REDIS_URL };
 // Only the automation actions are queueable — browser start/stop are
 // container-lifecycle calls, not automation jobs, and stay on the existing
 // synchronous /api/action/:name path.
-export const QUEUEABLE_ACTIONS = ["runStart", "runSave", "runRestore", "runAdapter", "runFirefoxDemo"] as const;
+export const QUEUEABLE_ACTIONS = ["runSave", "runRestore", "runFirefoxDemo"] as const;
 export type QueueableAction = (typeof QUEUEABLE_ACTIONS)[number];
 
 export function isQueueableAction(value: string): value is QueueableAction {

@@ -1,0 +1,7 @@
+{
+  "name": "demo",
+  "steps": [
+    { "type": "navigate", "params": { "url": "https://example.com" } },
+    { "type": "screenshot", "params": { "filename": "example.png" } }
+  ]
+}

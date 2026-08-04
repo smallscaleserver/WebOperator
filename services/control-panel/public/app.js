@@ -84,7 +84,13 @@ async function enqueueAction(name) {
 }
 
 document.querySelectorAll(".worker-action").forEach((btn) => {
-  btn.addEventListener("click", () => enqueueAction(btn.dataset.action));
+  btn.addEventListener("click", () => {
+    if (btn.dataset.workflow) {
+      enqueueWorkflow(btn.dataset.workflow);
+    } else {
+      enqueueAction(btn.dataset.action);
+    }
+  });
 });
 
 async function enqueueWorkflow(name) {
