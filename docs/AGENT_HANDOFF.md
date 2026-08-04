@@ -1035,3 +1035,36 @@ and sessions.
   the worker).
 - Next: the real downloads fix, video/trace (needs a concrete workflow
   use case), or Phase 3 (Gmail) — whichever the user picks.
+
+### 2026-08-04 (session 8) — Claude
+
+- Status: In progress
+- Context: **Claiming: Phase 3 Gmail — OAuth/Gmail API scaffold, round
+  one.** Explicit direct instruction with a full user-specified scope.
+  Checked `git log` first — still at `ae5d9ac`, nothing new claimed.
+  Scope as given: dev/local Gmail API + OAuth scaffold only; **no browser
+  automation of the Gmail login page at all**; no plaintext
+  credentials/tokens in source or `.env`; a separate Gmail
+  adapter/service module (`services/worker/src/gmail/*`); config via env
+  vars only (`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/
+  `GOOGLE_REDIRECT_URI`); token storage either a clearly-documented
+  dev-only placeholder or no persistence at all if avoidable — **not** a
+  real encrypted vault this round, that's tracked as its own explicitly
+  unfinished checklist item; a script/command for generating the OAuth
+  consent URL and doing the callback/token exchange, as far as that's
+  doable in local dev; a minimal Gmail API read/list proof gated on
+  having a token from env/dev storage; Control Panel may get a
+  button/placeholder but a full OAuth UI flow is explicitly not required
+  if that's too big for this round; verify via TypeScript build plus a
+  readable no-token/mocked failure path (not a live Gmail call — that
+  needs real credentials/an account, and the user must be asked before
+  any live test happens). Matches the existing README/`docs/PROJECT_PLAN.md`
+  Phase 3 checklist already in the repo (Google OAuth, Gmail API read/
+  search/attachments, browser fallback only when necessary, encrypted
+  token vault as its own later item) — this claim doesn't redefine scope,
+  it's the first real slice of what was already planned. If you're Codex
+  (or another session) reading this before a "Done" entry below: this is
+  claimed — check back here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
