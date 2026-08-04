@@ -1356,3 +1356,43 @@ and sessions.
 - Next: whatever the user picks — the design-only email-notification
   scaffolding, a live Gmail OAuth test with the user's own credentials,
   the real downloads fix, video/trace, or something else entirely.
+
+### 2026-08-04 (session 12) — Claude
+
+- Status: In progress
+- Context: **Claiming: XC Bank Monitor — a continuous bot loop + Control
+  Panel dashboard page.** Explicit direct instruction with a large,
+  detailed multi-part scope. Checked `git log` first — still at
+  `30127df`, nothing new claimed. User also explicitly confirmed the
+  existing port-4000 noVNC/take-over page should stay as-is — this is a
+  *new* page/route, not a rework of anything existing. Core scope: a
+  repeatable/loop job that periodically drives the real browser
+  (DOM-only, reusing `xcBankLogin`/`xcBankExtractDashboard`, never an
+  internal API) to check XC Bank's dashboard, session-aware (reuse if
+  still logged in, re-login via the existing 3-path flow if redirected);
+  a dedup layer keyed on XC Bank's own transaction reference/id so only
+  genuinely new transactions produce a notification, in chronological
+  order, never repeated, but the transaction *table* still just shows
+  latest state; a screenshot timeline capped at 200 most-recent images
+  per monitor with local (and MinIO, if in scope) retention cleanup; a
+  new Control Panel page (`/monitors/xc-bank` or similar) distinct from
+  the existing noVNC take-control page, showing monitor status/balance/
+  transactions/notifications/screenshot timeline, polling; new
+  `/api/monitors/xc-bank` (`GET`, `POST .../start`, `POST .../stop`,
+  optional `POST .../check-once`); dev-only JSON persistent state under
+  `data/monitor-state/xc-bank.json` (no real credentials, only the mock
+  test creds already public on the XC Bank page itself, documented as
+  dev-only); must not race the existing queue's shared-browser
+  concurrency-1 model. No Gmail/Phase 3, no internal-API/shared-DB
+  channel with XC Bank — same isolation rule as every XC Bank round so
+  far. This is a substantially larger feature than prior XC Bank rounds
+  (a genuine background loop + new persistent state + new UI surface,
+  not just an adapter extension) — will research the existing queue/
+  Control Panel architecture thoroughly and go through plan mode before
+  writing code, and will flag if it looks like it needs splitting rather
+  than assuming one round covers it. If you're Codex (or another
+  session) reading this before a "Done" entry below: this is claimed —
+  check back here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
