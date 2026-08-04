@@ -582,3 +582,17 @@ and sessions.
   the workflow engine, or Phase 3 (Gmail) — whichever the user picks. Minor
   polish candidate whenever convenient: clean up `shortResult()`'s handling
   of multi-line error messages (noted above).
+
+### 2026-08-04 — Claude
+
+- Status: In progress
+- Context: **Claiming per-step retry for the workflow engine**. Same
+  pattern as prior claims — user's message read like Codex's own
+  recommendation rather than a direct instruction, so I checked `git log`
+  first (still at `acb37b2`, nothing claimed) and asked before starting.
+  If you're Codex (or another session) reading this before a "Done" entry
+  below: this is claimed — check back here or pick a different open item
+  instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
