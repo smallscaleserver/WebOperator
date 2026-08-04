@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectToChromium } from "./cdp.js";
-import { step } from "./steps.js";
+import { step, stepWithRetry, type RetryOptions } from "./steps.js";
 import { ACTION_HANDLERS, type ActionParams } from "./actions/registry.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
@@ -11,14 +11,36 @@ const WORKFLOW_NAME = process.env.WORKFLOW_NAME;
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOWS_DIR = path.resolve(__dirname, "../workflows");
 
+interface WorkflowRetryDef {
+  attempts?: number;
+  delayMs?: number;
+}
+
 interface WorkflowStepDef {
   type: string;
   params?: ActionParams;
+  retry?: WorkflowRetryDef;
 }
 
 interface WorkflowDef {
   name: string;
   steps: WorkflowStepDef[];
+}
+
+// Only read-only/idempotent actions are retried by default -- login and
+// saveSession are state-changing, so they only retry if a workflow
+// explicitly opts in via a "retry" field on that step.
+const DEFAULT_RETRYABLE_TYPES = new Set(["navigate", "dismissPopup", "extract", "screenshot"]);
+const DEFAULT_RETRY: RetryOptions = { attempts: 2, delayMs: 1000 };
+
+function resolveRetry(workflowStep: WorkflowStepDef): RetryOptions {
+  if (workflowStep.retry) {
+    return {
+      attempts: Math.max(1, workflowStep.retry.attempts ?? DEFAULT_RETRY.attempts),
+      delayMs: workflowStep.retry.delayMs ?? DEFAULT_RETRY.delayMs,
+    };
+  }
+  return DEFAULT_RETRYABLE_TYPES.has(workflowStep.type) ? DEFAULT_RETRY : { attempts: 1, delayMs: 0 };
 }
 
 async function loadWorkflow(name: string): Promise<WorkflowDef> {
@@ -48,6 +70,18 @@ function validateWorkflow(workflow: WorkflowDef): void {
     if (params !== undefined && (typeof params !== "object" || params === null || Array.isArray(params))) {
       throw new Error(`${label} ("${workflowStep.type}"): "params" must be an object`);
     }
+    const retry = workflowStep.retry;
+    if (retry !== undefined) {
+      if (typeof retry !== "object" || retry === null || Array.isArray(retry)) {
+        throw new Error(`${label} ("${workflowStep.type}"): "retry" must be an object`);
+      }
+      if (retry.attempts !== undefined && !(typeof retry.attempts === "number" && retry.attempts > 0)) {
+        throw new Error(`${label} ("${workflowStep.type}"): "retry.attempts" must be a positive number`);
+      }
+      if (retry.delayMs !== undefined && !(typeof retry.delayMs === "number" && retry.delayMs >= 0)) {
+        throw new Error(`${label} ("${workflowStep.type}"): "retry.delayMs" must be a non-negative number`);
+      }
+    }
   });
 }
 
@@ -76,7 +110,7 @@ async function main(): Promise<void> {
           ? { captureResult: true }
           : undefined;
 
-    await step(stepName, () => handler({ page, context }, params), opts);
+    await stepWithRetry(stepName, () => handler({ page, context }, params), resolveRetry(workflowStep), opts);
   }
 
   console.log(`Workflow "${workflow.name}" completed (${workflow.steps.length} steps).`);

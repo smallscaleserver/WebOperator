@@ -596,3 +596,63 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-04 (later) — Claude
+
+- Status: Done
+- Context: Added per-step retry to the workflow engine.
+  `services/worker/src/steps.ts` gained `stepWithRetry(name, fn, {attempts,
+  delayMs}, opts?)`, sharing one internal implementation with `step()`
+  (which calls it with `{attempts: 1, delayMs: 0}`) — every existing
+  script (`index.ts`, `save-session.ts`, `restore-session.ts`,
+  `run-adapter.ts`) is completely unaffected. `run-workflow.ts` gained a
+  `resolveRetry()` policy: `navigate`/`dismissPopup`/`extract`/`screenshot`
+  retry by default (2 attempts, 1s delay) since they're read-only/
+  idempotent; `login`/`saveSession` get zero implicit retry, only retrying
+  if a step explicitly sets a `retry: {attempts, delayMs}` field — matches
+  the explicit ask not to blind-retry state-changing actions.
+  `validateWorkflow()` also checks `retry` field shape (positive
+  `attempts`, non-negative `delayMs`) upfront, same as everything else
+  there. Control Panel: `StepEvent` type updated for the new optional
+  `attempt`/`attempts` fields (no behavior change, `parseSteps` already
+  forwarded them); UI shows `(attempt X/Y)` next to a step name.
+  **Found and fixed a real UX bug while verifying, not assumed**: the
+  first implementation showed attempt info on *every* successful
+  default-retryable step, even ones that succeeded on the very first try
+  (since those steps are always configured with `attempts: 2`) — pure
+  noise on every clean run. Fixed so attempt info only appears when a
+  retry actually happened (succeeded after attempt 1) or all attempts were
+  exhausted on failure; a clean first-try success stays exactly as quiet
+  as before the change.
+- Files: `services/worker/src/steps.ts`, `run-workflow.ts`,
+  `services/control-panel/src/exec.ts`, `public/app.js`,
+  `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: `npx tsc --noEmit` clean. Isolated unit-level test of
+  `stepWithRetry` (no browser involved, fast/deterministic): clean
+  first-try success emits no attempt fields; a step that fails once then
+  succeeds shows `attempt:2,attempts:2` and the elapsed time matched the
+  configured delay almost exactly (803ms for an 800ms configured delay);
+  a step that always fails exhausts all 3 configured attempts and rethrows
+  with `attempt:3,attempts:3`. Then real end-to-end proof through
+  `run-workflow.ts` and the actual Control Panel queue: a `navigate` to a
+  permanently-bad domain (fails fast via DNS error, not a slow 30s
+  actionability timeout) correctly retried twice and failed with `(after 2
+  attempts)`; a `login` step with a bad selector correctly did *not*
+  retry (single ~30s Playwright timeout, no `attempt`/`attempts` fields,
+  confirmed via wall-clock timing that only one attempt happened).
+  Regression-checked the real `the-internet-login` workflow and
+  `runAdapter` through the real Control Panel — both still succeed, and
+  after the UX fix, none of the successful steps show any attempt
+  clutter. Visually confirmed in the real Chromium
+  (`host.docker.internal:4000` CDP screenshot technique) that a step
+  which exhausted its retries renders `1-navigate (attempt 2/2): ...
+  (after 2 attempts)` in the expanded job panel, while sibling clean jobs
+  show no such text. Removed all temporary test workflow files/scripts
+  before committing. `docker compose down` clean; re-hit and re-fixed the
+  Windows port-4000 orphan-process gotcha again restarting the panel.
+- Next: MinIO/S3, splitting the queue worker into its own process,
+  `.env.example` additions, migrating the 4 fixed actions onto the
+  workflow engine, or Phase 3 (Gmail) — whichever the user picks. Minor
+  polish candidate whenever convenient: `shortResult()` in `app.js`
+  showing a raw stack-trace line for some failures (noted last session,
+  still not fixed, still out of scope).

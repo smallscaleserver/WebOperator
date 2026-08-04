@@ -20,6 +20,8 @@ export interface StepEvent {
   detail?: string;
   screenshot?: string;
   data?: unknown;
+  attempt?: number;
+  attempts?: number;
   at: string;
 }
 

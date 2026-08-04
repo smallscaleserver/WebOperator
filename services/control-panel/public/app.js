@@ -157,13 +157,14 @@ function renderSteps(job) {
   return steps
     .map((s) => {
       const icon = s.status === "ok" ? "✅" : "❌";
+      const attemptInfo = s.attempts && s.attempts > 1 ? ` (attempt ${s.attempt}/${s.attempts})` : "";
       const detail = s.detail ? `: ${escapeHtml(s.detail)}` : "";
       const data =
         s.data !== undefined && s.data !== null ? ` — <em>${escapeHtml(String(s.data))}</em>` : "";
       const shot = s.screenshot
         ? ` — <a href="/screenshots/${encodeURIComponent(s.screenshot)}" target="_blank">screenshot</a>`
         : "";
-      return `<div>${icon} <strong>${escapeHtml(s.name)}</strong>${detail}${data}${shot}</div>`;
+      return `<div>${icon} <strong>${escapeHtml(s.name)}</strong>${escapeHtml(attemptInfo)}${detail}${data}${shot}</div>`;
     })
     .join("");
 }

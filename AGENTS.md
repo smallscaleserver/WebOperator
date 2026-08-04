@@ -114,6 +114,19 @@ since that's what the worker-side validation already guarantees. The Jobs
 API/UI also show each job's start time and duration now, not just
 stdout/stderr/steps.
 
+Steps can opt into per-step retry via an optional `retry` field:
+```json
+{ "type": "navigate", "params": { "url": "..." }, "retry": { "attempts": 3, "delayMs": 2000 } }
+```
+`navigate`/`dismissPopup`/`extract`/`screenshot` retry automatically (2
+attempts, 1s delay) even without a `retry` field, since they're read-only
+or idempotent. `login`/`saveSession` never retry implicitly — only if a
+step explicitly sets `retry` — since blindly retrying a state-changing
+action risks double-submitting a form. The step UI only shows attempt
+info when it's actually informative (a retry happened, or all attempts
+were exhausted) — a clean first-try success stays exactly as quiet as
+before.
+
 Run the Firefox demo (proves Playwright can automate Firefox too — via its
 own `launchServer()`/`connect()` protocol, **not** literally WebDriver BiDi,
 and **not** the vanilla Firefox you'd get from apt; see decision log for
