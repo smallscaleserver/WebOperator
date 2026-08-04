@@ -3,14 +3,7 @@ import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
 import { runAction, composePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
-import {
-  enqueueAction,
-  enqueueWorkflow,
-  isQueueableAction,
-  listRecentJobs,
-  startWorker,
-  closeQueue,
-} from "./queue.js";
+import { enqueueAction, enqueueWorkflow, isQueueableAction, listRecentJobs, closeQueue } from "./queue.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -124,11 +117,10 @@ app.get("/api/jobs", async (_req, res) => {
   }
 });
 
-startWorker();
-
 const server = app.listen(PORT, "127.0.0.1", () => {
   console.log(`WebOperator Control Panel: http://localhost:${PORT}`);
   console.log("Bound to 127.0.0.1 only — no auth, do not expose this to a network.");
+  console.log('Job queue consumer runs separately -- start it with "npm run worker".');
 });
 
 async function shutdown(): Promise<void> {

@@ -4,7 +4,8 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "start": "tsx src/server.ts"
+    "start": "tsx src/server.ts",
+    "worker": "tsx src/worker.ts"
   },
   "dependencies": {
     "bullmq": "^5.7.0",

@@ -20,13 +20,24 @@ directly. Easiest way to use the stack now is the Control Panel:
 
 ```bash
 docker compose up -d redis browser-worker-chrome browser-worker-firefox
-cd services/control-panel && npm install && npm start
+cd services/control-panel && npm install
+npm start          # terminal 1: API/UI (producer) -> http://localhost:4000
+npm run worker     # terminal 2: queue consumer -- jobs don't run without this
 ```
 
-Note: all three (`redis` + both browsers) need to be up for the panel to
-be fully functional — if you only start one browser, Redis-dependent calls
-(enqueue/jobs) will hang rather than error if Redis itself isn't running;
-check `docker compose ps` if something seems stuck.
+**The API and the queue consumer are two separate processes now** — `npm
+start` only serves the UI and enqueues jobs; nothing actually *executes* a
+job unless `npm run worker` is also running. A job enqueued while the
+worker is down just sits in `waiting` state in Redis (not lost, not an
+error) until the worker starts. This is deliberate: restarting the API to
+pick up a UI change (or if it crashes) no longer interrupts a job that's
+mid-flight on the worker, and vice versa — verified directly by killing
+each process while the other kept working.
+
+Note: `redis` + both browsers need to be up for the panel to be fully
+functional — if you only start one browser, Redis-dependent calls (enqueue/
+jobs) will hang rather than error if Redis itself isn't running; check
+`docker compose ps` if something seems stuck.
 
 Open `http://localhost:4000` — start/stop each browser, "take control" via
 an embedded noVNC view, enqueue the 4 fixed worker actions
@@ -42,12 +53,15 @@ Local only (binds `127.0.0.1`), no auth — don't expose it to a network.
 Redis is also loopback-only (`127.0.0.1:6379`), no auth, no persistence —
 dev-only, same posture as everything else unauthenticated here.
 
-If restarting the panel: on Windows, stopping the process hosting it
+If restarting either process: on Windows, stopping a process hosting it
 (e.g. a harness task-stop) has been observed to sometimes leave the
-underlying `node` process running and holding port 4000. If `npm start`
-fails with `EADDRINUSE`, find and kill it: `Get-NetTCPConnection -LocalPort
-4000 -State Listen | Select OwningProcess`, then `Stop-Process -Id <pid>
--Force`.
+underlying `node` process running. For the API (`npm start`, holds port
+4000): `Get-NetTCPConnection -LocalPort 4000 -State Listen | Select
+OwningProcess`, then `Stop-Process -Id <pid> -Force`. For the worker
+(`npm run worker`, holds no port — this check won't find it): `Get-CimInstance
+Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine
+-like '*worker.ts*' }`, then `Stop-Process -Id <pid> -Force`. Hit this for
+*both* processes while verifying the split — check both, not just the API.
 
 Everything below also still works directly via the CLI if you'd rather not
 run the panel — `docker compose run --rm worker npm run <script>` still
@@ -147,7 +161,7 @@ Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 README.md                    Architecture narrative, diagrams, full roadmap prose
 docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + decision log
 docker-compose.yml            browser-worker services (chrome + firefox) + worker + redis
-services/control-panel/       Host-run Express UI + BullMQ queue: start/stop, take-control, enqueue worker actions
+services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path

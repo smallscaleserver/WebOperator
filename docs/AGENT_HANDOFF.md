@@ -675,3 +675,51 @@ and sessions.
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-04 (session 2, later) — Claude
+
+- Status: Done
+- Context: Split the BullMQ queue consumer out of the Control Panel API
+  process into its own process, both still inside `services/control-panel`
+  (not a new top-level service). `server.ts` no longer calls
+  `startWorker()` — it's now API/UI + producer only. New `src/worker.ts`
+  entry point (`npm run worker`) calls `startWorker()`/`closeQueue()`,
+  which already handled "no worker in this process" gracefully via
+  optional chaining, so `queue.ts` itself needed zero changes. Accepted
+  tradeoff, logged rather than hidden: the module-level `Queue` producer
+  object in `queue.ts` is created unconditionally at import time, so the
+  worker process ends up holding an unused producer connection alongside
+  its consumer connection — not worth further splitting the module for a
+  dev tool.
+- Files: `services/control-panel/src/server.ts`, `src/worker.ts` (new),
+  `package.json`, `docs/PROJECT_PLAN.md`, `AGENTS.md`.
+- Verified: `npx tsc --noEmit` clean. Ran both processes as genuinely
+  separate terminals/processes (not just separate function calls) —
+  confirmed via each process's own startup log. Enqueued a job, confirmed
+  it completed via `/api/jobs` with only the worker process's
+  `startWorker()` ever having been called (the API literally can't
+  process jobs anymore, so completion proves the separate consumer did
+  it). **The actual point of the change, proven both directions**: (1)
+  enqueued a job, killed the API process while it was still running on
+  the worker, waited, restarted the API — `/api/jobs` showed it completed
+  successfully despite the API being fully down for the entire run; (2)
+  killed the worker process with the API still up, enqueued a job —
+  correctly sat in `waiting` state (not lost, not errored) — restarted
+  the worker, confirmed it picked up and completed the pending job.
+  Regression-checked `runAdapter` end to end afterward.
+  **Hit and had to work around the Windows orphan-process gotcha for
+  *both* processes this time**, not just the API: `TaskStop` on the
+  worker process left it running in the background too (confirmed via
+  `Get-CimInstance Win32_Process` search, since the worker holds no port
+  so the existing `Get-NetTCPConnection` check doesn't catch it) — this
+  briefly produced a false-negative test result (a job "mysteriously"
+  completed despite the worker supposedly being stopped) until caught and
+  fixed. Documented the detection method for the worker process
+  specifically in `AGENTS.md` so this doesn't cost time again.
+  `docker compose down` clean; both host processes confirmed actually
+  dead before finishing.
+- Next: MinIO/S3, `.env.example` additions, migrating the 4 fixed actions
+  onto the workflow engine, or Phase 3 (Gmail) — whichever the user picks.
+  Minor polish candidate whenever convenient: `shortResult()` in `app.js`
+  showing a raw stack-trace line for some failures (still not fixed,
+  still out of scope, noted twice now).

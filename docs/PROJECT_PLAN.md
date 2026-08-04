@@ -21,7 +21,7 @@ human) is picking the work back up.
 | Demo adapter target | `https://the-internet.herokuapp.com` (`/login`, `/entry_ad`) | Free, purpose-built practice app that exists specifically to be automated against; publishes its own test credentials. Sidesteps any "is it okay to automate this real site" question while still exercising a real login, a real session cookie, and a real popup-dismissal case. |
 | Control Panel deployment | Runs as a plain host Node process (`services/control-panel`, `npm start`), not a Docker service | Its whole job is running `docker compose` commands. Containerizing it would mean mounting the Docker socket (Docker-out-of-Docker) just to shell back to the same Docker Desktop already on the host — real security surface (socket access ≈ root on host) for no benefit at this stage. Revisit if/when this needs to run somewhere without a host Docker CLI. |
 | Redis | `redis:7-alpine` compose service, bound to `127.0.0.1:6379` only, no volume | No auth on Redis by default, so loopback-only — same posture as CDP/Control Panel. Ephemeral (no persistence) is fine; job history doesn't need to survive `docker compose down` at this stage. |
-| Queue worker location | BullMQ producer *and* consumer both run inside the Control Panel process, not a separate `job-runner` service | One thing to `npm start`, reuses the exact `docker compose run --rm worker npm run <script>` path already built for the 4 worker actions. Splitting them into separate deployable processes is a Phase 5 ("แยก worker หลายเครื่อง") concern. |
+| Queue worker location | ~~BullMQ producer *and* consumer both run inside the Control Panel process~~ **Superseded**: split into two processes (`npm start` = API/UI producer, `npm run worker` = consumer) within the same `services/control-panel` project — see the later "queue consumer split" row below. |
 | Queue concurrency | 1 | All 4 queueable actions connect to the same shared `browser-worker-chrome` over CDP — the queue's job is to serialize access to that one browser, not parallelize it. Verified via BullMQ `processedOn` timestamps: job N+1's `processedOn` exactly equals job N's `finishedOn`. |
 | Step reporting | Post-hoc, parsed out of captured stdout (`WEBOP_STEP {...}` lines), not live-streamed | True live progress needs `spawn` + incremental parsing + BullMQ `job.updateProgress()` — real complexity for a slice that's mainly about debugging after the fact, which post-hoc parsing already delivers. Live streaming is a reasonable follow-up, not required now. |
 | Step/screenshot scope | Step name + ok/error + optional detail message + optional screenshot filename + timestamp. No DOM snapshot, console/network log capture, or full Playwright `.trace.zip` yet | README's Event Recovery Engine table wants much more (DOM snapshot, console/network errors); kept to the smallest slice that makes job failures debuggable without reading raw logs. Fuller trace capture stays open. |
@@ -36,6 +36,9 @@ human) is picking the work back up.
 | Per-step retry defaults | Only `navigate`/`dismissPopup`/`extract`/`screenshot` retry by default (2 attempts, 1s fixed delay); `login`/`saveSession` get zero implicit retry, only if a workflow step explicitly sets `retry` | The first four are read-only or idempotent — safe to retry blindly. `login`/`saveSession` are state-changing; blind retry risks double-submitting a form or writing a session file mid-failure. Matches the explicit ask: retry the safe stuff by default, require an explicit opt-in for anything state-changing. |
 | Per-step retry backoff | Fixed delay, no cap on `attempts` beyond "must be positive" | Consistent with the existing job-level retry policy (also fixed delay). Workflow JSON is trusted source (reviewed like any other code), not untrusted input, so an artificial attempts cap isn't adding real safety — the existing 120s exec timeout is already the outer bound. |
 | Attempt info visibility | Only shown when it's actually informative: on success, only if it took more than one attempt; always shown once all attempts are exhausted on failure | First implementation showed `(attempt 1/2)` on *every* successful default-retryable step, even ones that succeeded immediately — pure noise. Caught by testing the real workflow end-to-end and comparing before/after, not assumed; fixed same-session. |
+| Queue consumer split | Split into two processes within `services/control-panel`: `src/server.ts` (`npm start`) is now API/UI + producer only; new `src/worker.ts` (`npm run worker`) is the consumer only. Not a separate top-level service/project. | Restarting the panel used to also kill whatever job was mid-flight, since one process owned both roles. Verified both directions directly: killed the API process while a job was actively running on the worker — job still completed; killed the worker with the API up — the next enqueued job correctly sat in `waiting` (not lost) until the worker came back and picked it up. |
+| Redundant Queue connection in the worker process | Accepted, not fixed | `queue.ts`'s module-level `Queue` producer object is created unconditionally at import time regardless of which entry point imports it, so the worker process ends up holding an unused producer connection to Redis alongside its consumer connection. Splitting `queue.ts` further into producer-only/consumer-only modules would remove this, but it's a harmless extra Redis client, not worth the extra file churn for a dev tool. |
+| Windows orphan-process gotcha, take two | Confirmed the same issue documented for the Control Panel API process also affects the new worker process | The worker holds no port, so the `Get-NetTCPConnection -LocalPort 4000` check used to detect the API's orphaned process doesn't apply — verify via `Get-CimInstance Win32_Process | Where CommandLine -like '*worker.ts*'` instead. Hit and had to work around this again while verifying this very change. |
 
 *The 6 generic action types (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/`screenshot`) live in `services/worker/src/actions/registry.ts`. `dismissPopup` carries forward a real lesson from `adapters/the-internet.ts`: the-internet's ad modal appears via `setTimeout(showAd, 500)`, not on initial render, so the handler waits for visibility rather than checking it immediately.*
 
@@ -53,7 +56,7 @@ human) is picking the work back up.
 
 ## Phase 2 — Task Engine
 
-- [x] Queue และ scheduler (Redis + BullMQ) — `services/control-panel` `src/queue.ts`, Control Panel UI enqueues the 4 worker actions instead of running them synchronously; verified: async return, sequential execution (concurrency 1), retry config wired (`attempts: 2`). Job API/UI now also surfaces start time + duration (`processedOn`/`durationMs`) and exit code, not just stdout/stderr/steps.
+- [x] Queue และ scheduler (Redis + BullMQ) — `services/control-panel` `src/queue.ts`, Control Panel UI enqueues the 4 worker actions instead of running them synchronously; verified: async return, sequential execution (concurrency 1), retry config wired (`attempts: 2`). Job API/UI now also surfaces start time + duration (`processedOn`/`durationMs`) and exit code, not just stdout/stderr/steps. The queue consumer now runs as its own process (`npm run worker`), separate from the API/UI (`npm start`) — verified a job survives the API process being killed mid-run, and a job enqueued while the worker is down correctly waits rather than being lost.
 - [x] Step-based workflow — `services/worker/src/run-workflow.ts` + `src/actions/registry.ts` + `workflows/the-internet-login.json`: a job now runs a *sequence of generic, parameterized actions* defined as data, not one hardcoded script. Control Panel: `GET /api/workflows`, `POST /api/enqueue-workflow/:name`. Verified end-to-end through the real queue, including the `extract` step's scraped text surfacing in the job detail UI. Added alongside the existing 4 fixed actions, which are unchanged. Workflows are now validated in full (every step's action `type` checked against the registry) *before* connecting to any browser, so a malformed workflow fails instantly with zero side effects instead of partially executing — verified directly (a bad `type` fails on a `validate` step with no `connect` line ever logged) and through the real Control Panel (a genuinely-broken-JSON file 400s at enqueue time, before a job even exists).
 - [x] screenshot/trace ทุกจุดสำคัญ — partial: `services/worker/src/steps.ts` `step()` wrapper reports name/status/detail/screenshot per stage in all 4 worker scripts, parsed by `services/control-panel/src/exec.ts` and shown in an expandable job row (`/screenshots/*` static route). Full DOM/console/network trace capture still open.
 - [x] retry (partial) — whole-job retry already existed; now also **per-step retry** in the workflow engine (`services/worker/src/steps.ts` `stepWithRetry`), configurable via an optional `retry: {attempts, delayMs}` field per step, with safe defaults (`navigate`/`dismissPopup`/`extract`/`screenshot` retry automatically, `login`/`saveSession` require explicit opt-in). Verified: a genuinely-flaky step recovers and reports which attempt succeeded; an always-failing step exhausts its attempts and reports the count; a clean first-try success shows no attempt noise. No circuit breaker yet, no timeout-per-step beyond Playwright's own action timeouts.
@@ -76,7 +79,7 @@ human) is picking the work back up.
 
 ## Phase 5 — Production
 
-- [ ] แยก worker หลายเครื่อง
+- [x] แยก worker หลายเครื่อง (partial) — the queue consumer is now a separate *process* from the Control Panel API (`services/control-panel` `npm run worker`); still runs on the same host today, not literally distributed across machines yet, but the architectural split (independent restart/crash, independent scaling) is done.
 - [ ] Chrome และ Firefox profiles (multi-user)
 - [ ] สิทธิ์ผู้ใช้และ audit log
 - [ ] domain allowlist
@@ -87,12 +90,11 @@ human) is picking the work back up.
 
 ## Immediate next step
 
-**Phase 1 is now functionally complete.** Phase 2 has a queue, per-step
-status/screenshots, and a generic multi-action workflow engine proven
-against one real example workflow. Still open: migrating the 4 fixed
-actions onto the workflow engine (optional consolidation, not required),
-per-step retry, object storage (MinIO/S3), and — if it ever becomes
-worth the effort — a way to keep a Firefox page alive across worker
-connections (would need a small always-connected keep-alive client;
-not pursued now, noVNC + on-demand automation both work today, just not
-"watch it live while idle" the way Chrome does).
+**Phase 1 is now functionally complete.** Phase 2 has a queue (now running
+as an independently-restartable process), per-step status/screenshots with
+retry, and a generic multi-action workflow engine proven against one real
+example workflow. Still open: migrating the 4 fixed actions onto the
+workflow engine (optional consolidation, not required), object storage
+(MinIO/S3), `.env.example` additions, and — if it ever becomes worth the
+effort — a way to keep a Firefox page alive across worker connections
+(would need a small always-connected keep-alive client; not pursued now).
