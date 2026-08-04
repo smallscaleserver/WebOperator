@@ -247,17 +247,33 @@ docker compose run --rm -e WORKFLOW_NAME=xc-bank-login-extract worker npm run wo
 
 Two-page login (`/login` username-only → `/password` password-only →
 session cookie → `/dashboard`), test account `demo_user`/`demo_pass`
-(mock only, documented on the page itself — not a real secret). The
-dashboard's transaction data is deterministic per session + a 10-second
-time window (stable if you refresh quickly, changes automatically once
-the window rolls over, or immediately via the dev-only
-`POST /dev/regenerate`) — proves extraction reads the live page, not a
-hard-coded value. Runs through the same workflow engine as everything
-else (`xc-bank-login-extract` shows up in the Control Panel's Workflows
-section automatically, no special-casing needed). Has design-only fields
-reserved for a *future* email-notification feature (see decision log) —
-nothing email-related is implemented, and XC Bank never talks to Gmail/
-Google APIs directly, by design.
+(mock only, documented on the page itself — not a real secret). Login
+has three paths, all handled by `adapters/xc-bank.ts`'s `login()`:
+**fresh** (no session — fills username then password), **remembered-
+username** (a pending session — `/login` redirects straight to
+`/password`, matching real bank UX, only password gets filled), and
+**already-authenticated** (`/login` redirects straight to `/dashboard`,
+nothing filled). The dashboard has `Logout` and `Logout clean` buttons:
+`Logout` clears the authenticated flag but keeps the username remembered
+(next `/login` goes to `/password`); **`Logout clean` is a dev/test-only
+full reset** (clears the session and cookie entirely, next `/login`
+shows a fresh username form) — it does **not** simulate real bank
+behavior, it exists purely to reset test state, and is documented as
+such everywhere it's mentioned. A matching `xcBankLogoutClean` worker
+action/workflow (`xc-bank-logout-clean.json`) does the same reset
+programmatically — run it before `xc-bank-login-extract` to force a
+fresh-login test.
+
+The dashboard's transaction data is deterministic per session + a
+10-second time window (stable if you refresh quickly, changes
+automatically once the window rolls over, or immediately via the
+dev-only `POST /dev/regenerate`) — proves extraction reads the live
+page, not a hard-coded value. Both XC Bank workflows run through the
+same workflow engine as everything else (they show up in the Control
+Panel's Workflows section automatically, no special-casing needed). Has
+design-only fields reserved for a *future* email-notification feature
+(see decision log) — nothing email-related is implemented, and XC Bank
+never talks to Gmail/Google APIs directly, by design.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).

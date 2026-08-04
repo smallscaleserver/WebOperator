@@ -194,6 +194,36 @@ screenshot
   ไม่ได้ hard-code ไว้ หรือกดปุ่ม "Regenerate data (dev-only)" บนหน้า
   dashboard เพื่อบังคับเปลี่ยนข้อมูลทันที
 
+**17. ทดสอบ Login/Logout flow ทั้งหมด**
+
+Login มี 3 แบบ (`xcBankLogin` step แสดงผลต่างกันตามสถานการณ์) — ทดสอบผ่าน
+noVNC (Take control ที่ Chrome) หรือเปิด <http://localhost:4100/login>
+เองก็ได้:
+
+- **Fresh login** (ยังไม่มี cookie เลย) — เห็นหน้า username ก่อน กรอก
+  `demo_user` กด Continue แล้วค่อยเห็นหน้า password ปกติ. Step
+  `xcBankLogin` จะขึ้น "fresh two-step login"
+- **Session reuse** (login ค้างอยู่แล้ว, ยังไม่ logout) — เปิด `/login`
+  ซ้ำจะเด้งตรงไป `/dashboard` เลย ไม่ต้องกรอกอะไร. Step ขึ้น "session
+  reused, password step skipped"
+- **Logout** (ปุ่ม `Logout` บนหน้า `/dashboard`) — เว็บจะจำ username ไว้
+  เปิด `/login` อีกครั้งจะเด้งไปหน้า password ตรง ๆ ไม่ต้องกรอก username
+  ซ้ำ (เหมือนธนาคารจริงที่จำ username ไว้ให้). Step `xcBankLogin` รอบ
+  ถัดไปจะขึ้น "Username remembered as demo_user (site skipped straight
+  to password)"
+- **Logout clean** (ปุ่ม `Logout clean` บนหน้า `/dashboard` หรือ
+  `/password`) — **เป็น dev/test helper เท่านั้น ไม่ใช่พฤติกรรมของ
+  ธนาคารจริง** — ล้าง session/cookie ทั้งหมด เปิด `/login` อีกครั้งจะเห็น
+  หน้า username ใหม่ทั้งหมด (fresh) เหมือนไม่เคย login มาก่อน. ใช้รีเซ็ต
+  สถานะทดสอบให้กลับไปเริ่มจากศูนย์ได้ง่าย ๆ โดยไม่ต้องรอ session
+  หมดอายุเอง
+
+**Reset state ผ่าน workflow (ไม่ต้องคลิกเอง)**: รัน workflow
+`xc-bank-logout-clean` ก่อน (ทำหน้าที่เดียวกับกดปุ่ม Logout clean แต่ทำ
+ผ่าน browser automation จริง ไม่ใช่เรียก endpoint ตรง ๆ) แล้วค่อยรัน
+`xc-bank-login-extract` — step `xcBankLogin` ต้องขึ้น "fresh two-step
+login" อีกครั้ง ยืนยันว่า reset สำเร็จจริง ไม่ใช่แค่ endpoint ตอบ 200
+
 หยุด `xc-bank` พร้อมกับ service อื่นตอนข้อ 13 (`docker compose down`)
 ตามปกติ ไม่ต้องทำอะไรเพิ่ม
 

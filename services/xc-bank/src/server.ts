@@ -1,6 +1,6 @@
 import express from "express";
 import cookieParser from "cookie-parser";
-import { createSession, getSession, type Session } from "./sessions.js";
+import { createSession, deleteSession, getSession, type Session } from "./sessions.js";
 import { generateDashboard } from "./transactions.js";
 
 const PORT = Number(process.env.PORT ?? 3000);
@@ -76,6 +76,12 @@ function dashboardPage(session: Session): string {
       <form method="post" action="/dev/regenerate" style="margin-top:1rem;">
         <button type="submit">Regenerate data (dev-only)</button>
       </form>
+      <form method="post" action="/logout" style="margin-top:0.5rem;display:inline-block;">
+        <button id="logout-btn" type="submit">Logout</button>
+      </form>
+      <form method="post" action="/logout-clean" style="margin-top:0.5rem;display:inline-block;">
+        <button id="logout-clean-btn" type="submit">Logout clean</button>
+      </form>
     </div>`,
   );
 }
@@ -88,6 +94,15 @@ app.get("/login", (req, res) => {
   const session = getSession(req.cookies[COOKIE_NAME]);
   if (session?.authenticated) {
     res.redirect("/dashboard");
+    return;
+  }
+  // A pending session (username already captured by a prior POST
+  // /login, not yet authenticated) means the site "remembers" the
+  // username -- skip straight to the password page instead of asking
+  // again, matching real bank UX. Only a session-less visitor (or one
+  // that used "Logout clean") sees the username form below.
+  if (session?.username) {
+    res.redirect("/password");
     return;
   }
   const error = req.query.error ? `<p class="error">Unknown username. Try "${DEMO_USERNAME}".</p>` : "";
@@ -137,6 +152,9 @@ app.get("/password", (req, res) => {
           <input id="password" name="password" type="password" autofocus />
           <button type="submit">Sign in</button>
         </form>
+        <form method="post" action="/logout-clean" style="margin-top:0.75rem;">
+          <button id="logout-clean-btn" type="submit">Logout clean</button>
+        </form>
       </div>`,
     ),
   );
@@ -164,6 +182,25 @@ app.get("/dashboard", (req, res) => {
     return;
   }
   res.send(dashboardPage(session));
+});
+
+// Plain logout: clears `authenticated` but keeps `username` on the same
+// session -- a subsequent /login correctly bounces to /password (the
+// site "remembers" who you were signing in as), matching real bank UX.
+app.post("/logout", (req, res) => {
+  const session = getSession(req.cookies[COOKIE_NAME]);
+  if (session) session.authenticated = false;
+  res.redirect("/login");
+});
+
+// Logout clean: a dev/test-only full reset, NOT simulating real bank
+// behavior -- deletes the session entirely and clears the cookie, so the
+// next /login shows a genuinely fresh username form. Exists so
+// WebOperator's adapter/workflow tests can reset state on demand.
+app.post("/logout-clean", (req, res) => {
+  deleteSession(req.cookies[COOKIE_NAME]);
+  res.clearCookie(COOKIE_NAME);
+  res.redirect("/login");
 });
 
 // Dev-only: forces a fresh seed immediately, without waiting for the

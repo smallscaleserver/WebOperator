@@ -6,7 +6,13 @@ import type { Page } from "playwright-core";
 const BASE_URL = process.env.XC_BANK_BASE_URL ?? "http://xc-bank:3000";
 
 export interface LoginResult {
-  alreadyAuthenticated: boolean;
+  // "fresh": no session at all -- filled both username and password.
+  // "remembered-username": a pending session already had the username
+  // (from a prior partial login, or after a plain /logout) -- the site
+  // redirected /login straight to /password, so only password was filled.
+  // "already-authenticated": a fully authenticated session was still
+  // active -- /login redirected straight to /dashboard, nothing filled.
+  path: "fresh" | "remembered-username" | "already-authenticated";
 }
 
 export async function login(
@@ -15,13 +21,19 @@ export async function login(
 ): Promise<LoginResult> {
   await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
 
-  // An existing session cookie makes /login redirect straight to
-  // /dashboard server-side -- detect that instead of blindly filling a
-  // form that may not be there.
   if (/\/dashboard$/.test(page.url())) {
-    return { alreadyAuthenticated: true };
+    return { path: "already-authenticated" };
   }
 
+  if (/\/password$/.test(page.url())) {
+    // Username already remembered by the site -- don't re-fill it.
+    await page.fill("#password", credentials.password);
+    await page.click("button[type=submit]");
+    await page.waitForURL(/\/dashboard$/);
+    return { path: "remembered-username" };
+  }
+
+  // Still on /login: a genuinely fresh session, fill both steps.
   await page.fill("#username", credentials.username);
   await page.click("button[type=submit]");
 
@@ -30,7 +42,27 @@ export async function login(
   await page.click("button[type=submit]");
 
   await page.waitForURL(/\/dashboard$/);
-  return { alreadyAuthenticated: false };
+  return { path: "fresh" };
+}
+
+export interface LogoutCleanResult {
+  wasAlreadyClean: boolean;
+}
+
+// Dev/test-only reset utility -- clicks the real "Logout clean" button
+// via the DOM (never a raw request to the route), same isolation posture
+// as every other adapter function here. Idempotent: if there's no
+// session at all, there's nothing to click and this is a no-op.
+export async function logoutClean(page: Page): Promise<LogoutCleanResult> {
+  await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
+
+  if (/\/login$/.test(page.url())) {
+    return { wasAlreadyClean: true };
+  }
+
+  await page.click("#logout-clean-btn");
+  await page.waitForURL(/\/login$/);
+  return { wasAlreadyClean: false };
 }
 
 export interface ExtractedTransaction {

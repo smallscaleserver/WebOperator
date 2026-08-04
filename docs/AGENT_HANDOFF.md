@@ -1269,8 +1269,8 @@ and sessions.
 
 ### 2026-08-04 (session 11) — Claude
 
-- Status: In progress
-- Context: **Claiming: XC Bank login/logout flow refinements.** After
+- Status: Done
+- Context: XC Bank login/logout flow refinements. After
   trying the workflow through the real UI (previous message), user asked
   for a follow-up round. Checked `git log` first — still at `344c669`,
   nothing new claimed. Scope: (1) `GET /login` currently *always* shows
@@ -1302,6 +1302,57 @@ and sessions.
   restarting. If you're Codex (or another session) reading this before a
   "Done" entry below: this is claimed — check back here or pick a
   different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Files: `services/xc-bank/src/sessions.ts` (+`deleteSession()`),
+  `services/xc-bank/src/server.ts` (`GET /login` now redirects a pending
+  session to `/password`, not just an authenticated one to `/dashboard`;
+  new `POST /logout` and `POST /logout-clean` routes; `Logout`/`Logout
+  clean` buttons on `/dashboard`, `Logout clean` also on `/password` as
+  an escape hatch), `services/worker/src/adapters/xc-bank.ts` (`login()`
+  now returns a 3-way `path` — `fresh`/`remembered-username`/
+  `already-authenticated` — instead of a boolean; new `logoutClean()`,
+  DOM-click only), `services/worker/src/actions/registry.ts`
+  (`xcBankLogin`'s summary string updated for the 3-way result; new
+  `xcBankLogoutClean` action), `services/worker/src/run-workflow.ts`
+  (`xcBankLogoutClean` added to both the `captureResult` branch and the
+  auto-retry set, since it's idempotent), new
+  `services/worker/workflows/xc-bank-logout-clean.json`,
+  `docs/PROJECT_PLAN.md` (4 new decision-log rows + updated Test Fixtures
+  entry), `AGENTS.md` (XC Bank section rewritten for the 3 login paths +
+  logout semantics), `README.md` (new step 17 covering all four flows +
+  a workflow-based reset note).
+- Verified: `npx tsc --noEmit` clean in both `services/xc-bank` and
+  `services/worker`. Local smoke test first (fast iteration): fresh
+  login, already-authenticated redirect, plain logout, and the
+  remembered-username redirect to `/password` all confirmed directly via
+  `curl` with a cookie jar; confirmed the actual HTML shows the username
+  form pre-login and the right logout button(s) on `/password` vs.
+  `/dashboard`. Then in Docker: rebuilt `services/xc-bank`'s image,
+  restarted it (noticed `browser-worker-chrome` had also stopped for an
+  unrelated reason — restarted it too, giving a conveniently-fresh
+  cookie-free browser to test against). Ran the real `xc-bank-login-
+  extract` workflow via `docker compose run` twice — fresh, then session-
+  reused, both reporting correctly. Wrote a throwaway adapter-level test
+  script (deleted after) that exercised the full sequence end to end
+  against the real running site: `logoutClean` (setup) → `login()`
+  reports `fresh` → click the real `#logout-btn` → lands on `/password`
+  (not `/login` — confirms the redirect chain, initially a red herring
+  in a background-task timeout until traced to the *correct* behavior:
+  `/login` itself auto-redirects to `/password` now) → `login()` again
+  reports `remembered-username` and did not re-fill username → `logout
+  Clean()` again → `login()` reports `fresh` again. All three paths and
+  both logout semantics proven at the code level, not just the route
+  level. Then through the **real Control Panel queue**: cleaned up a
+  duplicate `npm run worker` process left over from hitting `EADDRINUSE`
+  on a still-running API from the previous message (confirmed only one
+  worker process remained via the documented command-line search), ran
+  `xc-bank-logout-clean` then `xc-bank-login-extract` back-to-back — the
+  login step reported `fresh two-step login` immediately after the
+  reset, proving it works through the whole system, not just directly
+  against the adapter. Visually confirmed the resulting dashboard
+  screenshot (Read tool) matches the extracted summary. Per the user's
+  explicit instruction this time (unlike the previous round): `docker
+  compose down`; both host processes confirmed actually dead afterward
+  (port-4000 check for the API, command-line search for the worker).
+- Next: whatever the user picks — the design-only email-notification
+  scaffolding, a live Gmail OAuth test with the user's own credentials,
+  the real downloads fix, video/trace, or something else entirely.

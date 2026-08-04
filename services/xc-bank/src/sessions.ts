@@ -24,3 +24,10 @@ export function getSession(id: string | undefined): Session | undefined {
   if (!id) return undefined;
   return sessions.get(id);
 }
+
+// Used by "Logout clean" -- a full reset, distinct from a plain logout
+// (which only flips `authenticated`, keeping `username` remembered).
+export function deleteSession(id: string | undefined): void {
+  if (!id) return;
+  sessions.delete(id);
+}

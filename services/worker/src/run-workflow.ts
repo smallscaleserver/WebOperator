@@ -33,13 +33,15 @@ interface WorkflowDef {
 // saveSession are state-changing, so they only retry if a workflow
 // explicitly opts in via a "retry" field on that step. xcBankLogin is
 // state-changing the same way; xcBankExtractDashboard is read-only like
-// extract.
+// extract; xcBankLogoutClean is idempotent by design (a no-op if already
+// clean), safe to retry.
 const DEFAULT_RETRYABLE_TYPES = new Set([
   "navigate",
   "dismissPopup",
   "extract",
   "screenshot",
   "xcBankExtractDashboard",
+  "xcBankLogoutClean",
 ]);
 const DEFAULT_RETRY: RetryOptions = { attempts: 2, delayMs: 1000 };
 
@@ -118,7 +120,8 @@ async function main(): Promise<void> {
         ? { screenshot: String(params.filename ?? "") }
         : workflowStep.type === "extract" ||
             workflowStep.type === "xcBankLogin" ||
-            workflowStep.type === "xcBankExtractDashboard"
+            workflowStep.type === "xcBankExtractDashboard" ||
+            workflowStep.type === "xcBankLogoutClean"
           ? { captureResult: true }
           : undefined;
 

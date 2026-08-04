@@ -96,16 +96,21 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   },
 
   // XC Bank (services/xc-bank) is an isolated mock third-party site --
-  // these two actions only ever touch it through the DOM via `page`,
+  // these three actions only ever touch it through the DOM via `page`,
   // exactly like any other adapter in this registry; see
   // adapters/xc-bank.ts and docs/PROJECT_PLAN.md's decision log.
   xcBankLogin: async ({ page }, params) => {
     const username = requireString(params, "username");
     const password = requireString(params, "password");
     const result = await xcBank.login(page, { username, password });
-    return result.alreadyAuthenticated
-      ? `Already authenticated as ${username} (session reused, password step skipped)`
-      : `Logged in as ${username} (fresh two-step login)`;
+    switch (result.path) {
+      case "already-authenticated":
+        return `Already authenticated as ${username} (session reused, password step skipped)`;
+      case "remembered-username":
+        return `Username remembered as ${username} (site skipped straight to password)`;
+      case "fresh":
+        return `Logged in as ${username} (fresh two-step login)`;
+    }
   },
 
   xcBankExtractDashboard: async ({ page }) => {
@@ -115,5 +120,15 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
     // reusing the existing data-rendering path instead of new UI code.
     console.log("XC Bank dashboard:", JSON.stringify(summary, null, 2));
     return `Balance: $${summary.balance.toFixed(2)} | ${summary.transactionCount} transaction(s)`;
+  },
+
+  // Dev/test-only reset helper -- clicks XC Bank's real "Logout clean"
+  // button, not a raw request to its route. Not simulating real bank
+  // behavior; exists purely so a workflow can reset test state on demand.
+  xcBankLogoutClean: async ({ page }) => {
+    const result = await xcBank.logoutClean(page);
+    return result.wasAlreadyClean
+      ? "Already clean (no session to log out of)"
+      : "Logged out and cleared session (next login will be fresh)";
   },
 };
