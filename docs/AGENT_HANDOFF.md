@@ -1478,3 +1478,50 @@ and sessions.
   real (a mock outbox in XC Bank + correlating with WebOperator's Gmail
   ingestion), a live Gmail OAuth test with the user's own credentials,
   the real downloads fix, video/trace, or whichever else the user picks.
+
+### 2026-08-04 (session 13) — Claude
+
+- Status: In progress
+- Context: **Claiming: fix `/monitors/xc-bank` not rendering, then
+  redesign `/` into a "Control Center" with an extensible multi-monitor
+  registry.** Explicit direct instruction reporting a real bug in the
+  session-12 work. Checked `git log` first — still at `f928ed3`, nothing
+  new claimed. **Root cause already reproduced empirically, not guessed**:
+  started the real stack, curled the page directly — the HTML shell
+  loads fine (200, full markup), but `<script src="xc-bank-monitor.js">`
+  is a *relative* path; at URL `/monitors/xc-bank` (no trailing slash) a
+  browser resolves that relative to `/monitors/`, requesting
+  `/monitors/xc-bank-monitor.js` (confirmed 404) instead of the actual
+  `/xc-bank-monitor.js` (confirmed 200, served correctly by the existing
+  static middleware). So the static skeleton renders but the page's own
+  JS never loads — nothing dynamic (status, balance, notifications,
+  transactions, screenshots, button handlers) ever populates, which
+  matches the user's report exactly. Fix: use an absolute script path.
+  Beyond that immediate fix, broader scope: (1) `/monitors/xc-bank` needs
+  a readable empty state (no screenshots yet) and readable errors if
+  Redis/MinIO/the browser aren't ready, not a blank page; previous-
+  screenshot browsing up to the existing 200-item retention cap. (2)
+  Redesign `/` into a "Control Center" — existing browser controls/
+  noVNC/worker actions/workflows all stay, plus a new "Monitors" section
+  listing every registered monitor (name, running/stopped/error status,
+  latest summary, last checked, link to its detail page, Start/Stop/
+  Check-once buttons) rendered from data, not hardcoded to XC Bank. (3)
+  A monitor registry on the Control Panel side (e.g. `MONITORS = [{id,
+  name, ...}]`) plus `GET /api/monitors` (plural, new) so `/` can render
+  whatever's registered automatically — this round only has XC Bank, but
+  the structure must support more without UI rework. (4) Confirm
+  `GET /api/monitors/xc-bank` already returns everything the UI needs
+  (it does, from session 12 — `running`/`lastCheckedAt`/`lastError`/
+  `latestBalance`/`notifications`/`latestTransactions`/`screenshots`).
+  (5) Confirm `/screenshots/*` and `/api/artifacts/:kind/:filename`
+  (both pre-existing, unrelated to this bug) still work — regression
+  check, not a code change. No Gmail/Phase 3, same isolation rule as
+  every XC Bank round (monitor still reads DOM/worker output only). Will
+  go through plan mode given the registry-refactor scope before writing
+  the broader redesign, though the immediate script-path bug fix is
+  small and unambiguous. If you're Codex (or another session) reading
+  this before a "Done" entry below: this is claimed — check back here or
+  pick a different open item instead.
+- Files: none yet — root cause found, planning the broader fix now.
+- Verified: n/a (root-cause reproduction only so far)
+- Next: (this entry will be updated once the work is done and verified).
