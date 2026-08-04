@@ -889,3 +889,39 @@ and sessions.
 - Next: MinIO-backed downloads/video artifacts, migrating the 4 fixed
   actions onto the workflow engine, or Phase 3 (Gmail) — whichever the
   user picks.
+
+### 2026-08-04 (session 6) — Claude
+
+- Status: In progress
+- Context: **Claiming: downloads/video artifact archival.** Explicit
+  direct instruction with a full user-specified scope. Checked `git log`
+  first — still at `0940fbb`, nothing new claimed. Scope as given: add
+  archival for downloads and video/trace if a real producer exists (it
+  doesn't — checked the worker, no download or video/trace capability
+  exists at all today, unlike screenshots/sessions which already existed
+  before their archival rounds); same MinIO backend + local fallback;
+  distinct prefixes (`screenshots/`, `downloads/`, `videos/`, `traces/`,
+  `sessions/`); Control Panel gets a safe server-side read route, same
+  pattern as the existing screenshots route; never expose session
+  content; MinIO down/missing file → readable JSON error, not a crash;
+  regression check on the existing screenshots paths; end-to-end verify
+  through the real queue with SHA-256 comparison. User's own explicit
+  guidance: since video/trace has no real source, start with downloads
+  and add a placeholder/design note for video/trace instead — this round
+  is "artifact abstraction supporting multiple types," not full
+  production coverage of every type; don't force-enable Playwright
+  tracing/video without a clear workflow use case. Plan (approved):
+  add a new `download` worker action (genuinely new capability, not just
+  archival of something that already existed), a demo workflow against
+  `the-internet.herokuapp.com/download` (confirmed live during planning
+  via curl), archive it the same way as screenshots/sessions, generalize
+  the Control Panel's artifact route to `/api/artifacts/:kind/:filename`
+  with an explicit allowlist that deliberately excludes `sessions`, and
+  document video/trace as deferred (both are context-creation-time
+  Playwright options, can't be retrofitted onto the shared default page
+  the way `download` reuses it). If you're Codex (or another session)
+  reading this before a "Done" entry below: this is claimed — check back
+  here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
