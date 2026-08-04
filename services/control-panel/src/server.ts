@@ -16,6 +16,7 @@ import {
 } from "./queue.js";
 import { getArtifactStream } from "./artifacts.js";
 import { loadState as loadMonitorState } from "./monitor.js";
+import { listMonitorSummaries } from "./monitors-registry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -188,6 +189,17 @@ app.get("/api/jobs", async (_req, res) => {
     res.json({ jobs });
   } catch (err) {
     res.status(500).json({ jobs: [], error: (err as Error).message });
+  }
+});
+
+// Data-driven listing for the "/" Control Center's Monitors section --
+// see monitors-registry.ts. Currently just XC Bank; a future second
+// monitor appears here automatically without this route changing.
+app.get("/api/monitors", async (_req, res) => {
+  try {
+    res.json({ ok: true, monitors: await listMonitorSummaries() });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 

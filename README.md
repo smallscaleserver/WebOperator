@@ -229,10 +229,18 @@ login" อีกครั้ง ยืนยันว่า reset สำเร�
 หน้าแยกต่างหากจาก noVNC — ไม่ใช่หน้าควบคุม browser เอง เป็นแค่หน้าดูผล
 (read-only) ของ bot ที่วนเข้าไปเช็ค XC Bank dashboard เองเป็นระยะ
 
-เปิด <http://localhost:4000> แล้วกดลิงก์ **XC Bank Monitor** ใต้หัวข้อ
-"XC Bank Monitor" (หรือเปิด <http://localhost:4000/monitors/xc-bank>
-ตรง ๆ) — จะเห็นสถานะ (running/stopped), last checked, ยอดคงเหลือ,
-notifications, ตารางรายการล่าสุด และ screenshot timeline
+เปิด <http://localhost:4000> (หน้านี้คือ Control Center รวม — browser
+controls/noVNC/worker actions/workflows เดิมยังอยู่ครบ) แล้วดูหัวข้อ
+**Monitors** — จะเห็น card ของ XC Bank พร้อมสถานะ (running/stopped/
+error), summary ล่าสุด, last checked และปุ่ม Start/Stop/Check once
+ในตัว, กด **Open →** เพื่อเข้าหน้ารายละเอียด
+(<http://localhost:4000/monitors/xc-bank>) — จะเห็นสถานะเต็ม, ยอดคงเหลือ,
+notifications, ตารางรายการล่าสุด และ screenshot timeline เป็นรูปจริง
+(คลิกรูปเพื่อเปิดเต็มในแท็บใหม่)
+
+หัวข้อ Monitors บนหน้าแรกอ่านข้อมูลจาก `GET /api/monitors` แบบ dynamic
+— ถ้าในอนาคตมี monitor เว็บอื่นเพิ่มเข้ามา จะโผล่ในหน้านี้ให้เองโดยไม่ต้อง
+แก้ UI
 
 - กด **Check once** — ทดสอบการเช็คครั้งเดียวก่อน ควรเห็นยอดคงเหลือ/
   รายการธุรกรรมขึ้นจริงภายในไม่กี่วินาที (ผ่าน real browser automation

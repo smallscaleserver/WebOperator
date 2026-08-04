@@ -306,6 +306,24 @@ Dev interval defaults to 20s (`XC_BANK_MONITOR_INTERVAL_MS` env var,
 verifying this: BullMQ's `getJobSchedulers()` exposes the scheduler's
 own id as `.key`, not `.id` — see decision log.
 
+**`/` is the Control Center** — browsers/noVNC, worker actions,
+workflows, monitors, and jobs all in one page. Its Monitors section is
+data-driven from `services/control-panel/src/monitors-registry.ts`
+(`GET /api/monitors`), not hardcoded to XC Bank: adding a second monitor
+later means writing its own state module + one `getSummary()` function
++ one more registry entry — `/`, `app.js`, and the registry's own route
+never need to change again. Each monitor card's Start/Stop/Check-once
+buttons call `/api/monitors/<id>/start|stop|check-once` by convention
+(the same shape XC Bank's own routes already use). The monitor detail
+page (`/monitors/xc-bank` and any future one) shipped with a real bug
+its first round — a relative `<script src="...">` path that 404s once
+the page is under a path segment like `/monitors/xc-bank` (browsers
+resolve it relative to `/monitors/`, not `/`) — always use an absolute
+path (`/xc-bank-monitor.js`) for a monitor page's own script. The
+screenshot timeline renders real `<img>` thumbnails (via the existing
+local `/screenshots/:filename` route) linking to the full-size image in
+a new tab, not just text links.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -317,6 +335,7 @@ docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + deci
 docker-compose.yml            browser-worker services (chrome + firefox) + worker + redis
 services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
 services/control-panel/src/monitor.ts  XC Bank Monitor: state/dedup/retention (dev-only JSON state)
+services/control-panel/src/monitors-registry.ts  Data-driven monitor listing for "/" + GET /api/monitors -- add future monitors here
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path

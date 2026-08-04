@@ -31,11 +31,19 @@
   .steps-row { background: #fafbfc; font-family: monospace; font-size: 0.85rem; }
   .steps-row td { padding: 0.5rem; }
   .job-timing { color: #666; margin-bottom: 0.4rem; }
+  .monitor-card { border: 1px solid #eee; border-radius: 6px; padding: 0.6rem 0.8rem; margin-bottom: 0.5rem; }
+  .monitor-card:last-child { margin-bottom: 0; }
+  .monitor-card .row { margin-bottom: 0.3rem; }
+  .dot.error { background: #cf222e; }
 </style>
 </head>
 <body>
 <h1>WebOperator Control Panel</h1>
-<p class="hint">Local only (127.0.0.1) — no auth. Do not expose this to a network.</p>
+<p class="hint">
+  The control center for this stack — browsers/noVNC, worker actions and
+  workflows, and continuous site monitors all in one place. Local only
+  (127.0.0.1) — no auth. Do not expose this to a network.
+</p>
 
 <section>
   <h2>Browsers</h2>
@@ -80,9 +88,9 @@
 </section>
 
 <section>
-  <h2>XC Bank Monitor</h2>
-  <p class="hint">Continuous bot that periodically checks XC Bank's dashboard through the real browser and tracks new transactions. Read-only status page, not browser control.</p>
-  <a href="/monitors/xc-bank">Open XC Bank Monitor &rarr;</a>
+  <h2>Monitors</h2>
+  <p class="hint">Continuous bots that periodically check a site's dashboard through the real browser (DOM extraction only, never an internal API) and track new activity. Rendered from <code>GET /api/monitors</code> — a future second monitor shows up here automatically.</p>
+  <div id="monitors-list">(loading…)</div>
 </section>
 
 <section>

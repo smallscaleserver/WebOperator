@@ -230,8 +230,68 @@ async function pollJobs() {
   }
 }
 
+async function callMonitorAction(id, action) {
+  try {
+    await fetch(`/api/monitors/${id}/${action}`, { method: "POST" });
+  } catch (err) {
+    console.error(`monitor ${id} ${action} failed`, err);
+  }
+  await loadMonitors();
+}
+
+function renderMonitors(monitors) {
+  const el = document.getElementById("monitors-list");
+  if (!monitors || monitors.length === 0) {
+    el.innerHTML = "<em>(no monitors registered)</em>";
+    return;
+  }
+  el.innerHTML = monitors
+    .map((m) => {
+      const dotClass = m.lastError ? "error" : m.running ? "running" : "stopped";
+      const statusLabel = m.lastError ? "error" : m.running ? "running" : "stopped";
+      const summary = m.summary ? escapeHtml(m.summary) : "(no data yet)";
+      const lastChecked = m.lastCheckedAt ? escapeHtml(m.lastCheckedAt) : "never";
+      const errorLine = m.lastError ? `<div class="error">${escapeHtml(m.lastError)}</div>` : "";
+      return `<div class="monitor-card">
+        <div class="row">
+          <span class="dot ${dotClass}"></span>
+          <strong>${escapeHtml(m.name)}</strong>
+          <span class="hint">${statusLabel}</span>
+          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="start" ${m.running ? "disabled" : ""}>Start</button>
+          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="stop" ${m.running ? "" : "disabled"}>Stop</button>
+          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="check-once">Check once</button>
+          <a href="${m.detailPath}">Open &rarr;</a>
+        </div>
+        <div class="hint">${summary} — last checked: ${lastChecked}</div>
+        ${errorLine}
+      </div>`;
+    })
+    .join("");
+
+  el.querySelectorAll("[data-monitor-action]").forEach((btn) => {
+    btn.addEventListener("click", () => callMonitorAction(btn.dataset.monitor, btn.dataset.monitorAction));
+  });
+}
+
+async function loadMonitors() {
+  const el = document.getElementById("monitors-list");
+  try {
+    const res = await fetch("/api/monitors");
+    const data = await res.json();
+    if (!data.ok) {
+      el.innerHTML = `<p class="error">Failed to load monitors: ${escapeHtml(data.error || "unknown error")}</p>`;
+      return;
+    }
+    renderMonitors(data.monitors);
+  } catch (err) {
+    el.innerHTML = `<p class="error">Failed to load monitors: ${escapeHtml(String(err))}</p>`;
+  }
+}
+
 pollStatus();
 pollJobs();
 loadWorkflows();
+loadMonitors();
 setInterval(pollStatus, 3000);
 setInterval(pollJobs, 3000);
+setInterval(loadMonitors, 3000);

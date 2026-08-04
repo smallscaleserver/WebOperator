@@ -65,17 +65,22 @@ function renderTransactions(transactions) {
 function renderScreenshots(screenshots) {
   const el = document.getElementById("screenshots");
   if (!screenshots || screenshots.length === 0) {
-    el.innerHTML = "<em>(none yet)</em>";
+    el.innerHTML = "<em>No screenshots yet — click \"Check once\" or \"Start monitor\" to begin.</em>";
     return;
   }
   el.innerHTML = screenshots
     .map((s) => {
       const local = `/screenshots/${encodeURIComponent(s.filename)}`;
       const minio = `/api/artifacts/screenshots/${encodeURIComponent(s.filename)}`;
+      // Thumbnail links to the full-size local image in a new tab (the
+      // simplest form of "open full-size" -- no modal component needed).
+      // MinIO stays as a small secondary text link, still only ever via
+      // the existing server-side-proxied artifact route, never a direct
+      // unproxied MinIO URL.
       return `<div class="screenshot-entry">
-        <a href="${local}" target="_blank">local</a>
+        <a href="${local}" target="_blank"><img src="${local}" alt="${escapeHtml(s.capturedAt)}" loading="lazy" /></a>
+        <div>${escapeHtml(s.capturedAt)}</div>
         <a href="${minio}" target="_blank">MinIO</a>
-        ${escapeHtml(s.capturedAt)}
       </div>`;
     })
     .join("");

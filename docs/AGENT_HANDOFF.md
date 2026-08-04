@@ -1481,10 +1481,10 @@ and sessions.
 
 ### 2026-08-04 (session 13) — Claude
 
-- Status: In progress
-- Context: **Claiming: fix `/monitors/xc-bank` not rendering, then
-  redesign `/` into a "Control Center" with an extensible multi-monitor
-  registry.** Explicit direct instruction reporting a real bug in the
+- Status: Done
+- Context: Fix `/monitors/xc-bank` not rendering, then redesign `/` into
+  a "Control Center" with an extensible multi-monitor registry. Explicit
+  direct instruction reporting a real bug in the
   session-12 work. Checked `git log` first — still at `f928ed3`, nothing
   new claimed. **Root cause already reproduced empirically, not guessed**:
   started the real stack, curled the page directly — the HTML shell
@@ -1522,6 +1522,60 @@ and sessions.
   small and unambiguous. If you're Codex (or another session) reading
   this before a "Done" entry below: this is claimed — check back here or
   pick a different open item instead.
-- Files: none yet — root cause found, planning the broader fix now.
-- Verified: n/a (root-cause reproduction only so far)
-- Next: (this entry will be updated once the work is done and verified).
+- Files: `services/control-panel/public/xc-bank-monitor.html` (the
+  actual fix — relative `xc-bank-monitor.js` → absolute
+  `/xc-bank-monitor.js`; plus thumbnail CSS sizing),
+  `services/control-panel/public/xc-bank-monitor.js`
+  (`renderScreenshots()` now builds real `<img>` thumbnails linking to
+  the full-size local image in a new tab, MinIO kept as a small
+  secondary text link; clearer empty-state text), new
+  `services/control-panel/src/monitors-registry.ts` (listing-layer-only
+  registry — `MonitorSummary`, one `getXcBankSummary()`,
+  `listMonitorSummaries()`), `services/control-panel/src/server.ts`
+  (new `GET /api/monitors` — every existing route, including the
+  per-monitor `/api/monitors/xc-bank/*` ones from last round,
+  untouched), `services/control-panel/public/index.html` (intro
+  paragraph now describes the page as the Control Center; the static
+  single XC Bank link replaced with a `<div id="monitors-list">`
+  container + monitor-card CSS — Browsers/Workflows/Jobs sections and
+  the noVNC take-control flow completely unchanged, confirmed via diff
+  review), `services/control-panel/public/app.js` (+`loadMonitors()`/
+  `renderMonitors()`/`callMonitorAction()`, same polling pattern as the
+  existing `pollStatus`/`pollJobs`), `docs/PROJECT_PLAN.md` (5 new
+  decision-log rows), `AGENTS.md` (Control Center + registry section,
+  repo-layout entry), `README.md` (updated step 18).
+- Verified: `npx tsc --noEmit` clean. Full real stack. **Confirmed the
+  actual bug fix**: curled the exact URL a browser would request for the
+  script from `/monitors/xc-bank` post-fix (`/xc-bank-monitor.js`,
+  absolute) — 200; confirmed the served HTML now contains the absolute
+  path. `node --check` on both modified JS files (syntax-clean). **Went
+  a step further than "the page loads"**: wrote a Node harness with a
+  minimal DOM stub, loaded the page's *actual, unmodified* JS file,
+  fetched real data from the live `GET /api/monitors/xc-bank`, ran the
+  real `renderScreenshots()`/`renderNotifications()`/
+  `renderTransactions()` functions against it, and confirmed every URL
+  the produced HTML references (thumbnail `src`, click-through `href`,
+  MinIO link) resolves to 200 against the real server — stronger
+  evidence than confirming the page merely loads. `GET /api/monitors`
+  confirmed listing XC Bank with a live, accurate summary matching
+  `GET /api/monitors/xc-bank` directly. **Readable-failure re-check,
+  this time for real** (the original bug meant this was never actually
+  exercised before): stopped `xc-bank`, triggered a check, confirmed
+  `lastError` populated with a readable message in both
+  `GET /api/monitors/xc-bank` and the new `GET /api/monitors` list (a
+  first check of this came back showing no error — turned out to be my
+  own verification checking too early, before the real 30s Playwright
+  navigation timeout had elapsed; confirmed against the actual state
+  file on disk that the error genuinely had been captured correctly).
+  Restarted `xc-bank`, confirmed full recovery (a subsequent check
+  succeeded with a real balance). Regression-checked `/screenshots/*`
+  and `/api/artifacts/screenshots/:filename` (both still 200 on a known
+  file) and confirmed `/` still renders every pre-existing section
+  (Browsers/Playwright worker/Workflows/Gmail/Jobs/Last output) alongside
+  the new Monitors section. All debug scripts deleted before committing;
+  monitor state reset to clean. `docker compose down`; both host
+  processes confirmed actually dead afterward (port-4000 check for the
+  API, command-line search for the worker).
+- Next: turning the design-only email-notification fields into something
+  real, a live Gmail OAuth test with the user's own credentials, the
+  real downloads fix, video/trace, or whichever else the user picks.
