@@ -164,7 +164,16 @@ function renderSteps(job) {
       const shot = s.screenshot
         ? ` — <a href="/screenshots/${encodeURIComponent(s.screenshot)}" target="_blank">screenshot</a>`
         : "";
-      return `<div>${icon} <strong>${escapeHtml(s.name)}</strong>${escapeHtml(attemptInfo)}${detail}${data}${shot}</div>`;
+      // Only link to the MinIO copy when its archive step actually
+      // succeeded -- avoids a dead link when archival failed or MinIO
+      // was down for that particular job.
+      const archiveStepName = s.name.replace(/screenshot$/, "archive-screenshot");
+      const archived = steps.some((other) => other.name === archiveStepName && other.status === "ok");
+      const minioLink =
+        s.screenshot && archived
+          ? ` — <a href="/api/artifacts/screenshots/${encodeURIComponent(s.screenshot)}" target="_blank">MinIO</a>`
+          : "";
+      return `<div>${icon} <strong>${escapeHtml(s.name)}</strong>${escapeHtml(attemptInfo)}${detail}${data}${shot}${minioLink}</div>`;
     })
     .join("");
 }

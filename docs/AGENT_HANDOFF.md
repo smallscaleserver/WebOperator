@@ -832,31 +832,60 @@ and sessions.
 
 ### 2026-08-04 (session 5) — Claude
 
-- Status: In progress
-- Context: **Claiming: wiring the Control Panel to read artifacts back
-  from MinIO.** Explicit direct instruction with a full user-specified
-  scope. Checked `git log` first — still at `7898dcd`, nothing new
-  claimed. Scope as given:
-  - New Control Panel route/API to read screenshot artifacts from MinIO.
-  - Job step detail UI gets a MinIO artifact link *in addition to* the
-    existing local `/screenshots/*` link, not replacing it.
-  - Session file content must never be exposed in the UI/log — if a
-    session archive is shown at all, metadata/key/status only, never
-    content.
-  - The existing `/screenshots/*` route must keep working unchanged —
-    explicit regression check.
-  - If MinIO is down, the Control Panel's UI/API must fail readably
-    (a clear error), not crash or hang the whole panel.
-  - If `minio` needs to be added as a `services/control-panel` npm
-    dependency, run `npm install` and commit the updated
-    `package-lock.json`.
-  - End-to-end verification through the real Control Panel queue: run a
-    workflow, confirm `archive-screenshot`, then actually open/fetch the
-    artifact from MinIO via the Control Panel and confirm it matches the
-    local screenshot.
-  If you're Codex (or another session) reading this before a "Done" entry
-  below: this is claimed — check back here or pick a different open item
-  instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Status: Done
+- Context: Wiring the Control Panel to read artifacts back from MinIO.
+  Explicit direct instruction with a full user-specified scope. Checked
+  `git log` first — still at `7898dcd`, nothing new claimed. Scope as
+  given: new route/API to read screenshots from MinIO; job step detail UI
+  gets a MinIO link *in addition to* the existing local
+  `/screenshots/*` link; session content never exposed in UI/log;
+  `/screenshots/*` regression-checked; MinIO down → readable failure, not
+  a crash; new `minio` dep in `services/control-panel` installed and
+  `package-lock.json` committed; end-to-end verification through the real
+  queue. Chose a server-side streaming proxy route over a browser-facing
+  presigned-URL redirect specifically so every failure mode (MinIO down,
+  object missing, bad filename) is caught in one place and returned as a
+  clear JSON error, rather than the browser hitting a raw, unhandled
+  connection error against MinIO directly.
+- Files: `services/control-panel/src/artifacts.ts` (new — `getArtifactStream`,
+  same shape as the worker's own `artifacts.ts` but read-only, separate
+  project so not shared code), `services/control-panel/src/server.ts`
+  (new `GET /api/artifacts/screenshots/:filename` route — filename
+  validated against a strict allowlist regex before touching MinIO, same
+  defensive posture as the existing fixed action allowlist in
+  `actions.ts`), `services/control-panel/public/app.js` (`renderSteps()`
+  now adds a "MinIO" link next to the existing "screenshot" link, only
+  when that step's matching `archive-*` step reports `status: "ok"` —
+  avoids a dead link), `services/control-panel/package.json` +
+  `package-lock.json` (new `minio` dependency), `docs/PROJECT_PLAN.md` (5
+  new decision-log rows + Phase 2 checklist update), `AGENTS.md` (new
+  paragraph on the MinIO read path).
+- Verified: `npx tsc --noEmit` clean after `npm install`. Ran the real
+  `the-internet-login` workflow through the actual Control Panel queue
+  (both `npm start`/`npm run worker` up, all 4 Docker services up) —
+  `archive-screenshot` succeeded. `curl
+  /api/artifacts/screenshots/the-internet-workflow.png` returned the
+  image; SHA-256 hash matched the local file in `data/worker-output/`
+  exactly (proving it's genuinely coming from MinIO, not coincidentally
+  serving something else). **Regression check**: `/screenshots/*` still
+  serves the same file unchanged. **Fail-readable check**: `docker
+  compose stop minio`, hit the new route — got a clean `502` JSON error,
+  and `/api/status`/`/api/jobs` kept responding normally throughout (the
+  Control Panel process never went down). Caught and fixed two real bugs
+  during this check, not assumed correct: (1) a connection-refused error
+  is a Node `AggregateError` with an **empty** `.message` (the real
+  detail is in `.code`, e.g. `"ECONNREFUSED"`) — first version returned
+  the useless `"MinIO unavailable: "`, fixed to fall back to `.code`; (2)
+  a missing object is a `S3Error` with `.code === "NoSuchKey"`, **not**
+  reflected in `.message` either — first version misclassified every
+  not-found as a generic 502, fixed to check `.code` directly and now
+  correctly returns 404. Re-verified both fixes directly (blank-message
+  case now reads `"MinIO unavailable: ECONNREFUSED"`; a genuinely missing
+  object now returns 404 with a clear message) before considering this
+  done. Restarted MinIO after. Confirmed the served `app.js` reflects the
+  UI change (`curl /app.js | grep minioLink`). `docker compose down`;
+  both host processes confirmed actually dead afterward (port-4000 check
+  for the API, command-line search for the worker).
+- Next: MinIO-backed downloads/video artifacts, migrating the 4 fixed
+  actions onto the workflow engine, or Phase 3 (Gmail) — whichever the
+  user picks.

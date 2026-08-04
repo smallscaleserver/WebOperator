@@ -40,6 +40,18 @@ a second storage location, not an encryption upgrade. If
 `MINIO_ENDPOINT`/`MINIO_PORT` to reach MinIO directly — inside Compose
 this defaults correctly via service DNS.
 
+The Control Panel also reads screenshots *back* from MinIO now, not just
+local disk: each job step's `screenshot` link in the expandable step
+detail gets a second "MinIO" link (`GET
+/api/artifacts/screenshots/:filename`) alongside it, shown only when that
+job's `archive-screenshot` step actually succeeded. The local
+`/screenshots/*` route is unchanged and still the source of truth — the
+MinIO route is a second, independently-failing read path: if MinIO is
+down or the object is missing, it returns a clear JSON error (502/404),
+it does not affect any other route or crash the panel. No equivalent
+route exists for session files — the Control Panel has no session UI at
+all, so there's nothing to expose there.
+
 **The API and the queue consumer are two separate processes now** — `npm
 start` only serves the UI and enqueues jobs; nothing actually *executes* a
 job unless `npm run worker` is also running. A job enqueued while the
