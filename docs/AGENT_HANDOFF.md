@@ -656,3 +656,22 @@ and sessions.
   polish candidate whenever convenient: `shortResult()` in `app.js`
   showing a raw stack-trace line for some failures (noted last session,
   still not fixed, still out of scope).
+
+### 2026-08-04 (session 2) — Claude
+
+- Status: In progress
+- Context: **Claiming: split the BullMQ queue consumer out of the
+  Control Panel process into its own process.** This time the user's
+  message genuinely mixed two conflicting choices (their own typed
+  instruction "migrate fixed actions onto the workflow engine" vs.
+  Codex's separately-relayed recommendation to split the queue worker) —
+  asked directly which to do and who should do it; user chose the
+  queue-worker split, explicitly confirmed Claude owns it and to claim
+  here before starting. Repo was still at `d654f43`, nothing claimed, when
+  checked. If you're Codex (or another session) reading this before a
+  "Done" entry below: this is claimed — check back here or pick a
+  different open item (e.g. migrating fixed actions onto the workflow
+  engine) instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
