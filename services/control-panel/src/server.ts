@@ -109,21 +109,43 @@ app.post("/api/enqueue-workflow/:name", async (req, res) => {
   }
 });
 
-// Reads a screenshot back from MinIO instead of local disk -- an
+// Kinds readable through the artifact API. "sessions" is deliberately
+// never in this set -- session content must never be exposed through
+// this route, full stop, not just "nothing links to it" like before.
+// "downloads"/"videos"/"traces" have no producer yet (see decision log in
+// docs/PROJECT_PLAN.md for why downloads specifically is blocked) --
+// reads for those kinds correctly 404 ("not found") until a producer
+// exists; the kind itself is accepted now so the route won't need
+// another shape change once one does.
+const READABLE_ARTIFACT_KINDS = new Set(["screenshots", "downloads", "videos", "traces"]);
+
+// Reads an artifact back from MinIO instead of local disk -- an
 // additional, best-effort-populated source alongside the existing
-// /screenshots/* static route (unchanged, still the source of truth).
-// Filename validated against a strict allowlist before it ever reaches
-// MinIO, and every failure mode (bad name, MinIO down, object missing)
-// returns a clear JSON error instead of crashing the process.
-app.get("/api/artifacts/screenshots/:filename", async (req, res) => {
-  const { filename } = req.params;
+// /screenshots/* static route (unchanged, still the source of truth for
+// screenshots). Same URL shape as before for the screenshots case
+// (/api/artifacts/screenshots/foo.png still matches), just generalized to
+// accept other kinds too. Filename validated against a strict allowlist
+// before it ever reaches MinIO, and every failure mode (bad kind, bad
+// name, MinIO down, object missing) returns a clear JSON error instead of
+// crashing the process.
+app.get("/api/artifacts/:kind/:filename", async (req, res) => {
+  const { kind, filename } = req.params;
+  if (!READABLE_ARTIFACT_KINDS.has(kind)) {
+    res.status(400).json({ ok: false, error: `Unknown or unreadable artifact kind "${kind}"` });
+    return;
+  }
   if (!/^[\w.-]+$/.test(filename)) {
     res.status(400).json({ ok: false, error: "Invalid filename" });
     return;
   }
   try {
-    const stream = await getArtifactStream(`screenshots/${filename}`);
-    res.setHeader("Content-Type", "image/png");
+    const stream = await getArtifactStream(`${kind}/${filename}`);
+    if (kind === "screenshots") {
+      res.setHeader("Content-Type", "image/png");
+    } else {
+      res.setHeader("Content-Type", "application/octet-stream");
+      res.setHeader("Content-Disposition", `attachment; filename="${encodeURIComponent(filename)}"`);
+    }
     stream.on("error", (err) => {
       if (!res.headersSent) {
         res.status(502).json({ ok: false, error: (err as Error).message });
@@ -144,7 +166,7 @@ app.get("/api/artifacts/screenshots/:filename", async (req, res) => {
     const message = error.message || error.code || String(error);
     res.status(notFound ? 404 : 502).json({
       ok: false,
-      error: notFound ? `Artifact not found in MinIO: ${filename}` : `MinIO unavailable: ${message}`,
+      error: notFound ? `Artifact not found in MinIO: ${kind}/${filename}` : `MinIO unavailable: ${message}`,
     });
   }
 });

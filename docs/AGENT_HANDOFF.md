@@ -892,36 +892,70 @@ and sessions.
 
 ### 2026-08-04 (session 6) — Claude
 
-- Status: In progress
-- Context: **Claiming: downloads/video artifact archival.** Explicit
-  direct instruction with a full user-specified scope. Checked `git log`
-  first — still at `0940fbb`, nothing new claimed. Scope as given: add
-  archival for downloads and video/trace if a real producer exists (it
-  doesn't — checked the worker, no download or video/trace capability
-  exists at all today, unlike screenshots/sessions which already existed
-  before their archival rounds); same MinIO backend + local fallback;
-  distinct prefixes (`screenshots/`, `downloads/`, `videos/`, `traces/`,
-  `sessions/`); Control Panel gets a safe server-side read route, same
-  pattern as the existing screenshots route; never expose session
-  content; MinIO down/missing file → readable JSON error, not a crash;
-  regression check on the existing screenshots paths; end-to-end verify
-  through the real queue with SHA-256 comparison. User's own explicit
-  guidance: since video/trace has no real source, start with downloads
-  and add a placeholder/design note for video/trace instead — this round
-  is "artifact abstraction supporting multiple types," not full
-  production coverage of every type; don't force-enable Playwright
-  tracing/video without a clear workflow use case. Plan (approved):
-  add a new `download` worker action (genuinely new capability, not just
-  archival of something that already existed), a demo workflow against
-  `the-internet.herokuapp.com/download` (confirmed live during planning
-  via curl), archive it the same way as screenshots/sessions, generalize
-  the Control Panel's artifact route to `/api/artifacts/:kind/:filename`
-  with an explicit allowlist that deliberately excludes `sessions`, and
-  document video/trace as deferred (both are context-creation-time
-  Playwright options, can't be retrofitted onto the shared default page
-  the way `download` reuses it). If you're Codex (or another session)
-  reading this before a "Done" entry below: this is claimed — check back
-  here or pick a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Status: Done (scope changed mid-implementation — see below)
+- Context: Claimed as downloads/video artifact archival with a full
+  user-specified scope (see original claim text preserved in git history
+  at `3b09861`). Checked `git log` first — was at `0940fbb`, nothing new
+  claimed. Implemented a new `download` worker action (Playwright
+  `waitForEvent("download")` + `download.saveAs()`) and a demo workflow
+  against `the-internet.herokuapp.com/download` (page structure confirmed
+  live via curl during planning). **Empirically found a real
+  architectural blocker while verifying it, not a code bug**: both
+  `download.saveAs()` and `download.createReadStream()` fail to retrieve
+  actual file bytes when Playwright connects via `connectOverCDP` to
+  Chromium running as a raw external process in a *separate container*
+  from the worker — confirmed twice (shared default page, and a fresh
+  Playwright-created context), same failure both times, ruling out a
+  shared-context timing issue. Root cause: the worker and
+  `browser-worker-chrome` share a network namespace but not a
+  filesystem, and Playwright's download-artifact retrieval assumes local
+  filesystem access to wherever Chromium wrote the file. Stopped and
+  asked the user how to proceed rather than guessing or quietly shipping
+  something broken; user chose (matching their own stated fallback):
+  defer downloads the same way as video/trace — document the blocker and
+  the real fix in the decision log, don't build a live producer this
+  round — and directed the remaining effort at making the **generalized
+  artifact-read abstraction** solid, which was the actual stated goal for
+  this round anyway.
+- Files: **Reverted** (not shipped): `services/worker/src/actions/registry.ts`,
+  `services/worker/src/run-workflow.ts`, `services/worker/src/steps.ts`
+  changes for the `download` action, and the
+  `services/worker/workflows/the-internet-download.json` demo workflow —
+  all reverted to their pre-session state via `git checkout`/`rm` once the
+  blocker was confirmed and the user chose to defer, so nothing
+  non-functional or half-working landed. **Shipped**:
+  `services/control-panel/src/server.ts` — generalized
+  `GET /api/artifacts/screenshots/:filename` (single-kind, from session 5)
+  into `GET /api/artifacts/:kind/:filename` with an explicit
+  `READABLE_ARTIFACT_KINDS` allowlist (`screenshots`, `downloads`,
+  `videos`, `traces` — `sessions` deliberately never included, so session
+  content is now excluded by an active check rather than just "no route
+  exists"). `docs/PROJECT_PLAN.md` (5 new decision-log rows: the downloads
+  blocker with full root-cause detail, the real fix left undone on
+  purpose, video/trace deferral, and the route generalization itself),
+  `AGENTS.md` (updated artifact-route description).
+- Verified: `npx tsc --noEmit` clean in both `services/worker` (after
+  revert, confirms it's back to known-good) and `services/control-panel`.
+  Ran the real `the-internet-login` workflow through the actual queue for
+  a fresh screenshot. **Regression check**: `/api/artifacts/screenshots/*`
+  (same URL shape as before the generalization) and local
+  `/screenshots/*` both still return the identical file — SHA-256 hash
+  matched across the MinIO copy, the local copy, and the on-disk file, all
+  three identical. **Allowlist check**: `/api/artifacts/sessions/*` and an
+  unknown kind (`/api/artifacts/bogus/*`) both correctly 400 "Unknown or
+  unreadable artifact kind"; `/api/artifacts/downloads/*`,
+  `/api/artifacts/videos/*`, `/api/artifacts/traces/*` all correctly 404
+  "Artifact not found" (kind is valid, no object exists — proves the
+  route is genuinely generic, not screenshots-only in disguise).
+  **Fail-readable check**: `docker compose stop minio`, confirmed a clean
+  502 from the artifact route while `/api/status`/other routes kept
+  responding normally; restarted MinIO, confirmed the route works again.
+  `docker compose down`; both host processes confirmed actually dead
+  afterward (port-4000 check for the API, command-line search for the
+  worker).
+- Next: the real downloads fix (shared Docker volume between
+  `browser-worker-chrome`/`worker` + raw CDP `Page.setDownloadBehavior` +
+  worker-side file-watching — deliberately deferred, see decision log),
+  video/trace (same treatment, needs a concrete workflow use case first),
+  migrating the 4 fixed actions onto the workflow engine, or Phase 3
+  (Gmail) — whichever the user picks.
