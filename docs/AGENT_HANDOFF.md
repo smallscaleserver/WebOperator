@@ -829,3 +829,34 @@ and sessions.
 - Next: wiring the Control Panel to read artifacts back from MinIO
   instead of only local disk, migrating the 4 fixed actions onto the
   workflow engine, or Phase 3 (Gmail) — whichever the user picks.
+
+### 2026-08-04 (session 5) — Claude
+
+- Status: In progress
+- Context: **Claiming: wiring the Control Panel to read artifacts back
+  from MinIO.** Explicit direct instruction with a full user-specified
+  scope. Checked `git log` first — still at `7898dcd`, nothing new
+  claimed. Scope as given:
+  - New Control Panel route/API to read screenshot artifacts from MinIO.
+  - Job step detail UI gets a MinIO artifact link *in addition to* the
+    existing local `/screenshots/*` link, not replacing it.
+  - Session file content must never be exposed in the UI/log — if a
+    session archive is shown at all, metadata/key/status only, never
+    content.
+  - The existing `/screenshots/*` route must keep working unchanged —
+    explicit regression check.
+  - If MinIO is down, the Control Panel's UI/API must fail readably
+    (a clear error), not crash or hang the whole panel.
+  - If `minio` needs to be added as a `services/control-panel` npm
+    dependency, run `npm install` and commit the updated
+    `package-lock.json`.
+  - End-to-end verification through the real Control Panel queue: run a
+    workflow, confirm `archive-screenshot`, then actually open/fetch the
+    artifact from MinIO via the Control Panel and confirm it matches the
+    local screenshot.
+  If you're Codex (or another session) reading this before a "Done" entry
+  below: this is claimed — check back here or pick a different open item
+  instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
