@@ -774,3 +774,26 @@ and sessions.
   the Control Panel to read artifacts back from MinIO instead of only
   local disk, migrating the 4 fixed actions onto the workflow engine, or
   Phase 3 (Gmail) — whichever the user picks.
+
+### 2026-08-04 (session 4) — Claude
+
+- Status: In progress
+- Context: **Claiming: session-file archival to MinIO.** User's explicit
+  choice ("ถ้าจะให้ Claude ทำต่อ ผมจะเลือก: session-file archival to MinIO
+  ครับ"), following on directly from the just-finished screenshot
+  archival. Checked `git log` first — still at `7da30cd`, nothing new
+  claimed. Scope as specified: archive `storageState` JSON files
+  (`data/sessions/*.json`) to MinIO under a `sessions/` prefix (separate
+  from `screenshots/`), same best-effort/non-fatal pattern as screenshots
+  (`stepBestEffort`) — a MinIO hiccup must not fail `save-session`.
+  Explicit constraint: session file *content* (cookies/tokens) must never
+  be shown in the Control Panel UI or logs — only metadata (key name,
+  upload status) — matching the existing "never log/display credentials"
+  convention. Still dev-only/plaintext in MinIO too, same caveat as the
+  local file today — not an encryption upgrade, just a second storage
+  location. If you're Codex (or another session) reading this before a
+  "Done" entry below: this is claimed — check back here or pick a
+  different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
