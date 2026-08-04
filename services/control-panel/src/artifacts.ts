@@ -14,3 +14,11 @@ const BUCKET = process.env.MINIO_BUCKET ?? "weboperator-artifacts";
 export async function getArtifactStream(objectName: string): Promise<Readable> {
   return client.getObject(BUCKET, objectName);
 }
+
+// Used by the XC Bank monitor's screenshot retention (keep only the 200
+// most recent) -- best-effort by design, same posture as archival
+// itself: a MinIO outage must not block retention from at least
+// cleaning up the local copy.
+export async function removeArtifact(objectName: string): Promise<void> {
+  await client.removeObject(BUCKET, objectName);
+}

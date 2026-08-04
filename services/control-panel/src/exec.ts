@@ -80,6 +80,61 @@ export async function runWorkflow(name: string): Promise<ActionResult> {
   return execAndParse(["compose", "run", "--rm", "-e", `WORKFLOW_NAME=${name}`, "worker", "npm", "run", "workflow"]);
 }
 
+// Same as runWorkflow, but for the one workflow (xc-bank-monitor-check)
+// whose screenshot filename is supplied per-run via
+// run-workflow.ts's ${ENV_VAR} substitution -- needed so the XC Bank
+// monitor's screenshot timeline gets a distinct file per check instead
+// of the fixed name xc-bank-login-extract.json always overwrites.
+export async function runXcBankMonitorCheck(screenshotFilename: string): Promise<ActionResult> {
+  return execAndParse([
+    "compose",
+    "run",
+    "--rm",
+    "-e",
+    "WORKFLOW_NAME=xc-bank-monitor-check",
+    "-e",
+    `XC_BANK_MONITOR_SCREENSHOT_FILENAME=${screenshotFilename}`,
+    "worker",
+    "npm",
+    "run",
+    "workflow",
+  ]);
+}
+
+export interface XcBankTransaction {
+  id: string;
+  direction: string;
+  amount: number;
+  counterparty: string;
+  timestamp: string;
+  balanceAfter: number;
+}
+
+export interface XcBankDashboard {
+  balance: number;
+  transactionCount: number;
+  transactions: XcBankTransaction[];
+}
+
+// Mirrors parseSteps()'s approach: services/worker/src/actions/registry.ts's
+// xcBankExtractDashboard prints a single-line `XC_BANK_DASHBOARD {...}`
+// marker specifically so this can pull the full structured detail back
+// out of the job's own stdout -- reading our own child process's output,
+// not talking to XC Bank directly, so the isolation rule (WebOperator
+// never uses an internal XC Bank API/DB) is unaffected.
+export function parseXcBankDashboard(stdout: string): XcBankDashboard | undefined {
+  for (const line of stdout.split("\n")) {
+    const match = line.match(/^XC_BANK_DASHBOARD (.+)$/);
+    if (!match) continue;
+    try {
+      return JSON.parse(match[1]) as XcBankDashboard;
+    } catch {
+      // fall through -- treat as unparseable, same as a malformed WEBOP_STEP line
+    }
+  }
+  return undefined;
+}
+
 export async function listWorkflowNames(): Promise<string[]> {
   try {
     const entries = await readdir(WORKFLOWS_DIR);

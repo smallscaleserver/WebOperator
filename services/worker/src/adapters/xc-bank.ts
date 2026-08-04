@@ -70,6 +70,8 @@ export interface ExtractedTransaction {
   direction: string;
   amount: number;
   counterparty: string;
+  timestamp: string;
+  balanceAfter: number;
 }
 
 export interface DashboardSummary {
@@ -102,7 +104,16 @@ export async function extractDashboard(page: Page): Promise<DashboardSummary> {
     const direction = (await row.getAttribute("data-direction")) ?? "";
     const amountText = (await row.locator(".tx-amount").textContent()) ?? "";
     const counterparty = ((await row.locator(".tx-counterparty").textContent()) ?? "").trim();
-    transactions.push({ id, direction, amount: parseCurrency(amountText), counterparty });
+    const timestamp = ((await row.locator(".tx-timestamp").textContent()) ?? "").trim();
+    const balanceAfterText = (await row.locator(".tx-balance-after").textContent()) ?? "";
+    transactions.push({
+      id,
+      direction,
+      amount: parseCurrency(amountText),
+      counterparty,
+      timestamp,
+      balanceAfter: parseCurrency(balanceAfterText),
+    });
   }
 
   return { balance, transactionCount: transactions.length, transactions };

@@ -224,6 +224,43 @@ noVNC (Take control ที่ Chrome) หรือเปิด <http://localhost
 `xc-bank-login-extract` — step `xcBankLogin` ต้องขึ้น "fresh two-step
 login" อีกครั้ง ยืนยันว่า reset สำเร็จจริง ไม่ใช่แค่ endpoint ตอบ 200
 
+**18. ทดสอบ XC Bank Monitor (bot วนตรวจต่อเนื่อง)**
+
+หน้าแยกต่างหากจาก noVNC — ไม่ใช่หน้าควบคุม browser เอง เป็นแค่หน้าดูผล
+(read-only) ของ bot ที่วนเข้าไปเช็ค XC Bank dashboard เองเป็นระยะ
+
+เปิด <http://localhost:4000> แล้วกดลิงก์ **XC Bank Monitor** ใต้หัวข้อ
+"XC Bank Monitor" (หรือเปิด <http://localhost:4000/monitors/xc-bank>
+ตรง ๆ) — จะเห็นสถานะ (running/stopped), last checked, ยอดคงเหลือ,
+notifications, ตารางรายการล่าสุด และ screenshot timeline
+
+- กด **Check once** — ทดสอบการเช็คครั้งเดียวก่อน ควรเห็นยอดคงเหลือ/
+  รายการธุรกรรมขึ้นจริงภายในไม่กี่วินาที (ผ่าน real browser automation
+  เหมือน `xc-bank-login-extract` — session-aware เหมือนกันทุกอย่าง)
+- กด **Start monitor** — bot จะเช็คทันทีหนึ่งรอบ แล้ววนเช็คซ้ำทุก ~20
+  วินาที (ปรับได้ผ่าน env var `XC_BANK_MONITOR_INTERVAL_MS`) — ปล่อยทิ้ง
+  ไว้สักครู่แล้วรีเฟรชหน้า ควรเห็น "Last checked" ขยับเองโดยไม่ต้องกด
+  อะไรเพิ่ม
+- รอให้ transaction data เปลี่ยน (รอเกิน ~10 วินาทีต่อรอบ หรือกดปุ่ม
+  "Regenerate data" บนหน้า dashboard เอง) แล้วดูที่หัวข้อ
+  **Notifications** — ควรเห็นเฉพาะรายการที่ *ใหม่จริง* เท่านั้น
+  เรียงตามเวลา ไม่ซ้ำรายการเดิม
+- กด **Stop monitor** — bot จะหยุดเช็คต่อ (ไม่ kill job ที่กำลังรันอยู่
+  ถ้ามี ปล่อยให้จบตามปกติ) รอเกิน 1 รอบแล้วดู "Last checked" ต้องไม่ขยับ
+  อีก
+- ปิด/เปิด Control Panel processes ใหม่ทั้งคู่ แล้วเข้าหน้า Monitor
+  อีกครั้ง — ข้อมูลเดิม (notifications ที่เคยเห็น, ยอดคงเหลือล่าสุด)
+  ต้องยังอยู่ครบ (เก็บใน `data/monitor-state/xc-bank.json` ไม่ใช่แค่
+  memory ของ process) และรายการที่เคยแจ้งแล้วจะไม่แจ้งซ้ำ
+- Screenshot timeline เก็บแค่ 200 รูปล่าสุด รูปเก่ากว่านั้นจะถูกลบทั้ง
+  local disk และ MinIO (ถ้ามี) อัตโนมัติเมื่อเกิน — ทดสอบเต็มรูปแบบต้อง
+  ปล่อยให้รันนาน (~200 รอบ), ปกติไม่จำเป็นต้องทดสอบเองเว้นแต่สงสัยเรื่อง
+  retention
+
+`data/monitor-state/xc-bank.json` เป็น dev-only state ไม่มี credential
+จริงเก็บอยู่ (มีแค่ test username/password ของ mock bank เอง) ลบไฟล์นี้
+ได้ตลอดเวลาถ้าอยากรีเซ็ต monitor ให้เริ่มนับใหม่จากศูนย์
+
 หยุด `xc-bank` พร้อมกับ service อื่นตอนข้อ 13 (`docker compose down`)
 ตามปกติ ไม่ต้องทำอะไรเพิ่ม
 

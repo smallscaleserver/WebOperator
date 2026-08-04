@@ -115,10 +115,12 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
 
   xcBankExtractDashboard: async ({ page }) => {
     const summary = await xcBank.extractDashboard(page);
-    // Full structured detail goes to stdout (captured in the job's own
-    // stdout field); the returned string is what the Jobs UI shows,
-    // reusing the existing data-rendering path instead of new UI code.
-    console.log("XC Bank dashboard:", JSON.stringify(summary, null, 2));
+    // Single-line, prefixed marker -- same convention as WEBOP_STEP in
+    // steps.ts -- so a caller (e.g. the Control Panel's XC Bank monitor)
+    // can reliably grep the full structured detail out of stdout. The
+    // returned string below is what the regular Jobs UI shows, reusing
+    // the existing data-rendering path instead of new UI code there.
+    console.log(`XC_BANK_DASHBOARD ${JSON.stringify(summary)}`);
     return `Balance: $${summary.balance.toFixed(2)} | ${summary.transactionCount} transaction(s)`;
   },
 

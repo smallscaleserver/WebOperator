@@ -1359,9 +1359,9 @@ and sessions.
 
 ### 2026-08-04 (session 12) — Claude
 
-- Status: In progress
-- Context: **Claiming: XC Bank Monitor — a continuous bot loop + Control
-  Panel dashboard page.** Explicit direct instruction with a large,
+- Status: Done
+- Context: XC Bank Monitor — a continuous bot loop + Control Panel
+  dashboard page. Explicit direct instruction with a large,
   detailed multi-part scope. Checked `git log` first — still at
   `30127df`, nothing new claimed. User also explicitly confirmed the
   existing port-4000 noVNC/take-over page should stay as-is — this is a
@@ -1392,7 +1392,89 @@ and sessions.
   writing code, and will flag if it looks like it needs splitting rather
   than assuming one round covers it. If you're Codex (or another
   session) reading this before a "Done" entry below: this is claimed —
-  check back here or pick a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+  check back here or pick a different open item instead. Went through
+  plan mode with a comprehensive design before writing any code; decided
+  to do it as one round (not split) since it decomposed into
+  independently-testable pieces comparable in size to the Gmail scaffold
+  and original MinIO rounds, both of which shipped fine as one round
+  earlier this session.
+- Files: `services/worker/src/run-workflow.ts` (new `resolveParams()` —
+  generic `${ENV_VAR}` substitution for string params, applied before
+  building step opts), `services/worker/workflows/xc-bank-monitor-check.json`
+  (new — reuses `xcBankLogin`/`xcBankExtractDashboard`/`screenshot`
+  unchanged, just a dynamic screenshot filename via the new
+  substitution), `services/worker/src/actions/registry.ts`
+  (`xcBankExtractDashboard` now logs a single-line `XC_BANK_DASHBOARD
+  {...}` marker instead of pretty-printed JSON — same convention as
+  `WEBOP_STEP`), `services/worker/src/adapters/xc-bank.ts`
+  (`ExtractedTransaction` gained `timestamp`/`balanceAfter` — the DOM
+  cells already existed, just weren't read before; needed for
+  chronological dedup and the notification display),
+  `services/control-panel/src/exec.ts` (+`runXcBankMonitorCheck()`,
+  +`parseXcBankDashboard()` mirroring the existing `parseSteps()`
+  pattern), `services/control-panel/src/artifacts.ts`
+  (+`removeArtifact()`, best-effort MinIO deletion for retention),
+  `services/control-panel/src/monitor.ts` (new — dev-only JSON state at
+  `data/monitor-state/xc-bank.json`, `checkOnce()` with dedup + 200-item
+  screenshot retention, `loadState()`), `services/control-panel/src/
+  queue.ts` (+monitor branch in the shared concurrency-1 Worker,
+  +`startMonitorSchedule`/`stopMonitorSchedule`/`isMonitorScheduled`/
+  `enqueueMonitorCheckOnce` via BullMQ's Job Scheduler API),
+  `services/control-panel/src/server.ts` (new `/api/monitors/xc-bank`
+  routes + `/monitors/xc-bank` page route — every existing route
+  untouched), `services/control-panel/public/xc-bank-monitor.html` +
+  `.js` (new — status/balance/notifications/transactions/screenshot
+  timeline, Start/Stop/Check-once, its own small polling script rather
+  than growing `app.js`), `services/control-panel/public/index.html`
+  (one new link section added — the noVNC take-control section and
+  everything else on that page is byte-for-byte untouched, confirmed via
+  diff review before committing), `docs/PROJECT_PLAN.md` (10 new
+  decision-log rows + Test Fixtures entry), `AGENTS.md` (new XC Bank
+  Monitor section + repo-layout entries), `README.md` (new step 18).
+- Verified: `npx tsc --noEmit` clean in both projects, re-checked after
+  every fix. Full real stack (xc-bank, browser-worker-chrome, minio,
+  redis, both Control Panel processes). `check-once` genuinely extracts
+  live balance/transactions (confirmed the local screenshot file and its
+  MinIO copy both exist). **Dedup**: 4 consecutive real checks showed
+  `seenRefs` growing monotonically by exactly each check's new-batch
+  size (7→14→20→28) with zero re-additions — proven both by construction
+  (`Set`-backed filter, architecturally cannot double-add) and
+  empirically; an exact "two checks land in the identical 10s window"
+  timing test turned out impractical (each check's own round trip is
+  5-8s, comparable to the window itself) and unnecessary given the
+  above. **Scheduler**: start → an immediate check fires → waited 25s
+  past the 20s interval → `lastCheckedAt` advanced with zero manual
+  trigger → stop → waited another 25s → `lastCheckedAt` did not advance
+  again. **Found and fixed a real bug**: `getJobSchedulers()`'s entries
+  expose the scheduler's id as `.key`, not `.id` (confirmed by querying
+  a live queue directly) — the first version always reported
+  `running: false` even with the scheduler genuinely active; fixed,
+  re-verified. **Full Control Panel restart persistence**: killed both
+  host processes entirely, restarted fresh — `seenRefs`/`notifications`
+  counts and `lastCheckedAt` all survived (JSON file, not in-memory
+  state, confirmed as the real source of truth), and a check afterward
+  correctly continued deduping from where it left off (85→90, not
+  reset). **Retention, simulated rather than 200 real checks** (would
+  take over an hour at the dev interval): seeded 205 fake screenshot
+  entries (10 backed by real placeholder files at the removal boundary,
+  2 also uploaded to MinIO), triggered one real check pushing the total
+  to 206 — confirmed exactly 200 remained, precisely the correct 6
+  oldest were deleted from local disk, and both MinIO objects among them
+  were gone too (`GET /api/artifacts/screenshots/*` 404s afterward).
+  **Readable-failure check**: stopping `browser-worker-chrome` turned out
+  to not test anything, since `docker compose run`'s `depends_on`
+  auto-restarts it — stopped `xc-bank` itself instead (not a `worker`
+  dependency) and confirmed a real failure
+  (`net::ERR_ADDRESS_UNREACHABLE`) surfaces as a clear `lastError`
+  string, the Control Panel stayed fully responsive throughout, and a
+  subsequent check succeeded normally once `xc-bank` was restarted —
+  genuine recovery, not just an error path existing. **Regression
+  check**: `/`, `/api/status`, `/api/workflows`, `/app.js` all confirmed
+  unaffected. All debug/test scripts and synthetic seed data deleted
+  before committing; monitor state reset to clean. `docker compose
+  down`; both host processes confirmed actually dead afterward
+  (port-4000 check for the API, command-line search for the worker).
+- Next: turning the design-only email-notification fields into something
+  real (a mock outbox in XC Bank + correlating with WebOperator's Gmail
+  ingestion), a live Gmail OAuth test with the user's own credentials,
+  the real downloads fix, video/trace, or whichever else the user picks.

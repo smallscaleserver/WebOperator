@@ -1,0 +1,77 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>XC Bank Monitor — WebOperator Control Panel</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 900px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  h1 a { font-size: 0.55em; font-weight: normal; margin-left: 1rem; }
+  section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  h2 { font-size: 1rem; margin-top: 0; }
+  .row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #999; }
+  .dot.running { background: #2ea043; }
+  .dot.stopped { background: #999; }
+  button { cursor: pointer; padding: 0.4rem 0.8rem; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .hint { color: #666; font-size: 0.85rem; }
+  .error { color: #b00020; font-size: 0.9rem; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  .badge { padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; color: #fff; }
+  .badge.credit { background: #2ea043; }
+  .badge.debit { background: #cf222e; }
+  .notification { padding: 0.5rem; border-bottom: 1px solid #eee; font-size: 0.9rem; }
+  .notification:last-child { border-bottom: none; }
+  .screenshot-grid { display: flex; flex-wrap: wrap; gap: 0.5rem; }
+  .screenshot-entry { font-size: 0.75rem; color: #666; text-align: center; }
+  .screenshot-entry a { display: block; }
+  .balance { font-size: 1.5rem; font-weight: bold; }
+</style>
+</head>
+<body>
+<h1>XC Bank Monitor <a href="/">&larr; Control Panel</a></h1>
+<p class="hint">
+  Read-only status view — not a browser-control page. The bot checks XC
+  Bank's dashboard periodically through the real browser (DOM extraction
+  only, session-aware login), the same way a manual workflow run does.
+</p>
+
+<section>
+  <h2>Status</h2>
+  <div class="row">
+    <span class="dot" id="status-dot"></span>
+    <span id="status-label">checking…</span>
+    <button id="start-btn">Start monitor</button>
+    <button id="stop-btn">Stop monitor</button>
+    <button id="check-once-btn">Check once</button>
+  </div>
+  <p class="hint" id="last-checked">Last checked: —</p>
+  <p class="error" id="last-error" style="display:none;"></p>
+  <p class="balance">Balance: <span id="balance">—</span></p>
+</section>
+
+<section>
+  <h2>Notifications (new transactions, newest first)</h2>
+  <div id="notifications"><em>(none yet)</em></div>
+</section>
+
+<section>
+  <h2>Latest transactions (from the most recent check)</h2>
+  <table>
+    <thead><tr>
+      <th>Time</th><th>Type</th><th>Counterparty</th><th>Amount</th><th>Balance</th><th>Ref</th>
+    </tr></thead>
+    <tbody id="transactions"><tr><td colspan="6">(no data yet)</td></tr></tbody>
+  </table>
+</section>
+
+<section>
+  <h2>Screenshot timeline (newest first, up to 200 kept)</h2>
+  <div class="screenshot-grid" id="screenshots"><em>(none yet)</em></div>
+</section>
+
+<script src="xc-bank-monitor.js"></script>
+</body>
+</html>

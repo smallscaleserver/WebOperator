@@ -275,6 +275,37 @@ design-only fields reserved for a *future* email-notification feature
 (see decision log) — nothing email-related is implemented, and XC Bank
 never talks to Gmail/Google APIs directly, by design.
 
+**XC Bank Monitor** (`/monitors/xc-bank`, a separate page from `/` —
+the noVNC take-control page is untouched) is a continuous check loop
+built on top of the above: a BullMQ **Job Scheduler**
+(`services/control-panel/src/queue.ts`) periodically enqueues a check
+through the *same* concurrency-1 queue/worker as every manual job, so it
+can never race one on the shared browser. Each check reuses the existing
+`xcBankLogin`/`xcBankExtractDashboard` actions unchanged (session-aware
+for free — reuses if still logged in, re-logs-in via the 3-path flow
+above if not) via a dedicated `xc-bank-monitor-check.json` workflow, and
+dedupes new transactions by XC Bank's own reference/id
+(`services/control-panel/src/monitor.ts`), never re-notifying one
+already seen. Dev-only JSON state at `data/monitor-state/xc-bank.json`
+(gitignored, same posture as `data/sessions/`/`data/gmail-tokens/`) —
+no real credentials, only the mock test creds already public on the XC
+Bank page. Screenshot timeline capped at 200 most recent, oldest pruned
+both locally and from MinIO. API: `GET /api/monitors/xc-bank`,
+`POST .../start`, `POST .../stop` (halts future ticks, doesn't kill an
+in-flight check), `POST .../check-once`.
+
+```bash
+docker compose up -d xc-bank browser-worker-chrome minio redis
+# with both Control Panel processes up:
+curl -X POST http://localhost:4000/api/monitors/xc-bank/start
+curl http://localhost:4000/api/monitors/xc-bank   # or open /monitors/xc-bank in a browser
+```
+
+Dev interval defaults to 20s (`XC_BANK_MONITOR_INTERVAL_MS` env var,
+10-30s is the intended dev range). A real bug was caught and fixed while
+verifying this: BullMQ's `getJobSchedulers()` exposes the scheduler's
+own id as `.key`, not `.id` — see decision log.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -285,10 +316,11 @@ README.md                    Architecture narrative, diagrams, full roadmap pros
 docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + decision log
 docker-compose.yml            browser-worker services (chrome + firefox) + worker + redis
 services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
+services/control-panel/src/monitor.ts  XC Bank Monitor: state/dedup/retention (dev-only JSON state)
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path
-services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot/xcBankLogin/xcBankExtractDashboard)
+services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot/xcBankLogin/xcBankExtractDashboard/xcBankLogoutClean)
 services/worker/workflows/    Named JSON workflow definitions run by run-workflow.ts via the generic registry
 services/worker/src/gmail/    Phase 3 Gmail OAuth/API scaffold, dev/local, host-run (not in Docker) -- see decision log
 services/browser-worker/firefox-launcher/  Node script (launch-firefox.js) that runs Playwright's own Firefox build as a launchServer
@@ -296,6 +328,7 @@ services/xc-bank/             Isolated mock third-party bank site (Node/Express,
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)
+data/monitor-state/           XC Bank Monitor's dev-only JSON state (gitignored, no real credentials)
 ```
 
 ## Working conventions (decided — don't re-litigate without reason)

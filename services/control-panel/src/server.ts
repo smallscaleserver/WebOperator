@@ -3,8 +3,19 @@ import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
 import { runAction, composePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
-import { enqueueAction, enqueueWorkflow, isQueueableAction, listRecentJobs, closeQueue } from "./queue.js";
+import {
+  enqueueAction,
+  enqueueWorkflow,
+  isQueueableAction,
+  listRecentJobs,
+  closeQueue,
+  enqueueMonitorCheckOnce,
+  isMonitorScheduled,
+  startMonitorSchedule,
+  stopMonitorSchedule,
+} from "./queue.js";
 import { getArtifactStream } from "./artifacts.js";
+import { loadState as loadMonitorState } from "./monitor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -178,6 +189,55 @@ app.get("/api/jobs", async (_req, res) => {
   } catch (err) {
     res.status(500).json({ jobs: [], error: (err as Error).message });
   }
+});
+
+// XC Bank monitor: a continuous check loop, isolated to its own JSON
+// state file and BullMQ Job Scheduler -- read-only status combines the
+// persisted state (fs-based, no Redis needed) with the scheduler's own
+// authoritative running/stopped signal (needs Redis). If Redis/Docker
+// aren't reachable, every route below returns a clear JSON error instead
+// of hanging or crashing the process (matches the same posture already
+// documented for /api/enqueue*/api/jobs elsewhere in this file).
+app.get("/api/monitors/xc-bank", async (_req, res) => {
+  try {
+    const [state, running] = await Promise.all([loadMonitorState(), isMonitorScheduled()]);
+    res.json({ ok: true, running, ...state });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/xc-bank/start", async (_req, res) => {
+  try {
+    await startMonitorSchedule();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/xc-bank/stop", async (_req, res) => {
+  try {
+    await stopMonitorSchedule();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/xc-bank/check-once", async (_req, res) => {
+  try {
+    const jobId = await enqueueMonitorCheckOnce();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// A separate page from the noVNC take-control UI -- deliberately not a
+// browser-control surface, just a read-only view of the monitor's state.
+app.get("/monitors/xc-bank", (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "xc-bank-monitor.html"));
 });
 
 const server = app.listen(PORT, "127.0.0.1", () => {

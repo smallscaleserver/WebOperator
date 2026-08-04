@@ -45,6 +45,26 @@ const DEFAULT_RETRYABLE_TYPES = new Set([
 ]);
 const DEFAULT_RETRY: RetryOptions = { attempts: 2, delayMs: 1000 };
 
+// Lets a workflow step reference an env var instead of a hardcoded
+// literal, e.g. { "filename": "${SOME_VAR}" } -- useful whenever a
+// caller needs to control a per-run value (a unique screenshot filename,
+// for instance) without a dedicated workflow JSON file per invocation.
+// An unresolved (unset) var becomes "", which trips existing param
+// validation (e.g. screenshot's requireString) with a clear error rather
+// than silently using a garbled literal filename.
+function resolveParams(params: ActionParams): ActionParams {
+  const resolved: ActionParams = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (typeof value === "string") {
+      const match = value.match(/^\$\{(\w+)\}$/);
+      resolved[key] = match ? (process.env[match[1]] ?? "") : value;
+    } else {
+      resolved[key] = value;
+    }
+  }
+  return resolved;
+}
+
 function resolveRetry(workflowStep: WorkflowStepDef): RetryOptions {
   if (workflowStep.retry) {
     return {
@@ -113,7 +133,7 @@ async function main(): Promise<void> {
     if (!handler) {
       throw new Error(`Unknown workflow action type "${workflowStep.type}"`);
     }
-    const params = workflowStep.params ?? {};
+    const params = resolveParams(workflowStep.params ?? {});
     const stepName = `${index + 1}-${workflowStep.type}`;
     const opts =
       workflowStep.type === "screenshot"
