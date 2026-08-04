@@ -1,0 +1,8 @@
+{
+  "name": "xc-bank-login-extract",
+  "steps": [
+    { "type": "xcBankLogin", "params": { "username": "demo_user", "password": "demo_pass" } },
+    { "type": "xcBankExtractDashboard", "params": {} },
+    { "type": "screenshot", "params": { "filename": "xc-bank-dashboard.png" } }
+  ]
+}

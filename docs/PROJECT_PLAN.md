@@ -64,8 +64,13 @@ human) is picking the work back up.
 | Gmail read proof scope | `list-messages.ts` prints only message count + IDs, never subjects/snippets/bodies | Minimal existence proof, not a mail reader — avoids dumping potentially sensitive content to stdout/logs by default for a feature whose whole point right now is just proving the auth plumbing works. |
 | Control Panel Gmail surface | Static informational `<section>` only (env vars/CLI commands, dev-only token caveat) — no new JS, no new API route, no button | Explicit instruction: a full OAuth UI (spawning/tracking the local listener process from the Panel, surfacing the consent URL, knowing when the callback lands) is a real feature with its own design questions, correctly out of scope for this round. |
 | README testing guide, feature work paused | Explicit instruction to stop feature work for a round and document how to actually test everything shipped through Phase 2 — replaced the stale "Phase 1 quickstart" (predated the Control Panel/MinIO/workflow engine entirely) with a full step-by-step guide + troubleshooting section in `README.md`, ran every step for real rather than just checking command syntax | No feature work landed this round by design — this is a checklist/docs-only note, not a Phase 3 status change. See `docs/AGENT_HANDOFF.md` session 9 for the explicit "don't start new feature work, including Gmail/Phase 3, until the user has tested and given direction" note for other sessions/tools picking this up. |
+| XC Bank isolation architecture | New `services/xc-bank` (Node/Express, in-memory state only, no database) is a genuinely separate service, reached by the worker **only** over HTTP (`http://xc-bank:3000` inside Compose, same service-DNS mechanism already proven for `minio`) — no shared code, no shared Redis/BullMQ/MinIO, no shared `data/` files, no internal API calls. `services/worker/src/adapters/xc-bank.ts` extracts exclusively via Playwright DOM locators, never an internal endpoint | Explicit requirement: XC Bank must be indistinguishable, architecturally, from a real third-party site like `the-internet.herokuapp.com` — the whole point is proving extraction reads live DOM state. Verified structurally, not just by convention: grepped `services/worker/src` and `services/control-panel/src` for any `xc-bank` import path — the only matches are the adapter's own HTTP base-URL string and comments; nothing imports `services/xc-bank` source. |
+| XC Bank deterministic data generation | A small self-contained seeded PRNG (mulberry32, no new dependency), seeded from `sessionId + regenerateEpoch + a 10-second time-window bucket` | Balances "provably not hard-coded" against "verifiable by a human without a race": stable within one 10s window (three rapid requests returned identical data, confirmed directly), changes automatically once the window rolls over (confirmed directly — 11s wait produced a different balance), and a dev-only `POST /dev/regenerate` endpoint forces a fresh seed immediately by bumping a per-session epoch, without waiting for the window. |
+| XC Bank two new workflow action types | `xcBankLogin`/`xcBankExtractDashboard` added to `services/worker/src/actions/registry.ts`'s registry, wired into `run-workflow.ts` (the latter added to the auto-retry set like `extract`, since it's read-only; the former left out, like `login`, since it's state-changing) — both return a short human-readable string (not the raw object) so the *existing* Jobs UI `String(s.data)` rendering already displays a clean summary with zero `app.js` changes. Full structured detail (`{balance, transactionCount, transactions}`) still goes to `console.log`, inspectable via the job's captured stdout | Reuses the exact `captureResult`/step-reporting mechanism `extract` already established, rather than adding new UI code for one adapter. Verified for real, twice in a row without restarting the browser container: first run reported "Logged in as demo_user (fresh two-step login)"; second run (same shared browser session, cookie still present) reported "Already authenticated as demo_user (session reused, password step skipped)" — both branches of the login logic genuinely exercised, not just read in the code. |
+| XC Bank Control Panel integration | No Control Panel code changes at all — the existing dynamic Workflows section (`GET /api/workflows` + `app.js`'s `loadWorkflows()`) already lists every file under `services/worker/workflows/*.json` with a run button | Direct continuation of the fixed-action-migration decision (workflow engine is the primary path) — confirmed `xc-bank-login-extract` appeared in `GET /api/workflows`'s response automatically the moment the JSON file existed, no restart-triggering code change needed. |
+| Future Gmail/email notification design (XC Bank) — design-only, not implemented | `Transaction` (`services/xc-bank/src/transactions.ts`) carries `notificationSubjectTemplate` and `notificationStatus` (always `"mock-only"` this round) — fields a *future* round could use to generate an email-shaped payload from a transaction, without a schema change. No mock outbox, no email generation, no SMTP, no Gmail API call, no OAuth exists yet for this — XC Bank does not talk to Gmail/Google APIs directly, ever; that boundary stays with WebOperator's own separate Gmail ingestion (Phase 3, already scaffolded in `services/worker/src/gmail/`, untouched this round). A future implementation would add a mock outbox/event log *inside* XC Bank (still isolated, still HTTP-only from WebOperator's side) that logs notification-shaped records when transactions generate; WebOperator's Gmail ingestion would separately read real Gmail via its own OAuth scaffold and correlate by reference/id, amount, and timestamp — no real email sending, no shared DB, no internal API between the two sides, matching the same isolation rule as everything else in this feature. | Explicit user instruction: reserve the shape now, build nothing email-related this round, don't start Phase 3 work. |
 
-*The 6 generic action types (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/`screenshot`) live in `services/worker/src/actions/registry.ts`. `dismissPopup` carries forward a real lesson from `adapters/the-internet.ts`: the-internet's ad modal appears via `setTimeout(showAd, 500)`, not on initial render, so the handler waits for visibility rather than checking it immediately.*
+*8 generic action types now live in `services/worker/src/actions/registry.ts`: the original 6 (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/`screenshot`) plus `xcBankLogin`/`xcBankExtractDashboard`. `dismissPopup` carries forward a real lesson from `adapters/the-internet.ts`: the-internet's ad modal appears via `setTimeout(showAd, 500)`, not on initial render, so the handler waits for visibility rather than checking it immediately.*
 
 ## Phase 1 — Prototype
 
@@ -113,6 +118,10 @@ human) is picking the work back up.
 - [ ] Chromium sandbox hardening (drop `--no-sandbox`, apply seccomp profile per Playwright Docker docs)
 - [ ] noVNC behind HTTPS with short-lived, per-session URLs (currently plain HTTP + static password — dev only)
 
+## Test Fixtures
+
+- [x] XC Bank — `services/xc-bank`, an isolated mock third-party bank site for practicing browser automation against, in the same relationship as `the-internet.herokuapp.com` except self-hosted. Two-page login (`/login` username → `/password` password → session cookie → `/dashboard`), test account `demo_user`/`demo_pass` (mock only, documented on the page itself), transaction dashboard with deterministic-per-session-and-time-window data (changes automatically over time, forceable via a dev-only regenerate endpoint). Strictly isolated from WebOperator — no shared code/DB/queue/artifact store, HTTP/browser only, verified structurally via grep, not just by convention. Adapter: `services/worker/src/adapters/xc-bank.ts` + workflow `xc-bank-login-extract.json`, reusing the existing workflow engine/MinIO archival/Control Panel Workflows UI unchanged. Design-only scaffolding for a future email-notification feature (see decision log) — not implemented, not Phase 3 work.
+
 ## Immediate next step
 
 **Phase 1 is now functionally complete.** Phase 2 has a queue (now running
@@ -126,11 +135,17 @@ readable back through a kind-parameterized Control Panel route). **Phase
 (`services/worker/src/gmail/*`) — auth URL generation, local callback
 token exchange, a minimal read-only list proof — with zero browser
 automation of Gmail and a plaintext dev-only token placeholder, explicitly
-not the real encrypted vault yet. Still open: a live test against a real
-Google Cloud OAuth client/account (needs the user's own credentials and
-explicit go-ahead), search/message-content/attachment reading, the
-encrypted token vault, the real downloads fix (shared volume + raw CDP +
-file-watching, deliberately deferred — see decision log), video/trace
-(needs a concrete workflow use case first), and — if it ever becomes worth
-the effort — a way to keep a Firefox page alive across worker connections
-(would need a small always-connected keep-alive client; not pursued now).
+not the real encrypted vault yet. **A new isolated test fixture, XC
+Bank**, is also in place (`services/xc-bank` + its adapter/workflow) —
+a self-hosted mock third-party site for practicing browser automation
+without depending on a real external site staying stable, with
+design-only scaffolding for a future email-notification feature (see
+decision log; nothing email-related is built yet). Still open: a live
+test against a real Google Cloud OAuth client/account (needs the user's
+own credentials and explicit go-ahead), search/message-content/
+attachment reading, the encrypted token vault, the real downloads fix
+(shared volume + raw CDP + file-watching, deliberately deferred — see
+decision log), video/trace (needs a concrete workflow use case first),
+and — if it ever becomes worth the effort — a way to keep a Firefox page
+alive across worker connections (would need a small always-connected
+keep-alive client; not pursued now).

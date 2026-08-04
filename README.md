@@ -153,6 +153,52 @@ Troubleshooting ด้านล่างถ้า Ctrl+C ไม่พอ
 
 ---
 
+#### ทดสอบ XC Bank (mock bank site, เสริม)
+
+`services/xc-bank` เป็นเว็บธนาคารจำลองที่แยกจาก WebOperator เด็ดขาด (ไม่
+share code/DB/queue ใด ๆ — สื่อสารกันได้ทาง browser/HTTP เท่านั้น
+เหมือนเว็บภายนอกจริง) สร้างไว้สำหรับฝึก/ทดสอบ browser automation โดยไม่
+ต้องพึ่งเว็บภายนอก
+
+**14. เริ่ม xc-bank เพิ่มจากข้อ 2**
+
+```bash
+docker compose up -d xc-bank
+```
+
+ทดสอบว่าเข้าถึงได้จาก host: เปิด <http://localhost:4100/login> — จะเห็น
+หน้า login พร้อม test account ที่ประกาศอยู่บนหน้าเว็บ (`demo_user` /
+`demo_pass` — เป็น mock เท่านั้น ไม่ใช่ credential จริง)
+
+**15. รัน XC Bank workflow**
+
+ที่ Control Panel (<http://localhost:4000>) กดปุ่ม `Run
+"xc-bank-login-extract"` ใต้หัวข้อ "Workflows" (ปรากฏอัตโนมัติทันทีที่
+`services/worker/workflows/xc-bank-login-extract.json` มีอยู่ ไม่ต้อง
+setup เพิ่ม) — จะ login สองหน้า (`/login` → `/password`) แล้วเข้า
+`/dashboard`, ดึงยอดคงเหลือและรายการธุรกรรมจาก DOM จริง แล้วถ่าย
+screenshot
+
+**16. ตรวจผลลัพธ์**
+
+- คลิกแถว job ในตาราง Jobs เพื่อดู step detail — step
+  `xcBankExtractDashboard` จะโชว์สรุปยอดคงเหลือ/จำนวนธุรกรรมที่ดึงมาได้
+  จริง (เช่น `Balance: $3222.55 | 8 transaction(s)`)
+- คลิกลิงก์ **screenshot**/**MinIO** ของ step `screenshot` เพื่อดูภาพหน้า
+  dashboard จริง
+- รัน workflow ซ้ำอีกครั้งโดยไม่ปิด `browser-worker-chrome` — step
+  `xcBankLogin` รอบสองควรขึ้นว่า "session reused, password step skipped"
+  (session cookie ยังอยู่จากรอบแรก) แทนที่จะ login ใหม่ทั้งหมด
+- รีเฟรชหน้า `/dashboard` เร็ว ๆ (ภายใน ~10 วินาที) ยอดจะเท่าเดิม รอเกิน
+  10 วินาทีแล้วรีเฟรชใหม่ ยอดจะเปลี่ยน — พิสูจน์ว่าดึงจากหน้าเว็บจริง
+  ไม่ได้ hard-code ไว้ หรือกดปุ่ม "Regenerate data (dev-only)" บนหน้า
+  dashboard เพื่อบังคับเปลี่ยนข้อมูลทันที
+
+หยุด `xc-bank` พร้อมกับ service อื่นตอนข้อ 13 (`docker compose down`)
+ตามปกติ ไม่ต้องทำอะไรเพิ่ม
+
+---
+
 #### Troubleshooting
 
 **Docker daemon ไม่ทำงาน**

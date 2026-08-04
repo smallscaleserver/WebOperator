@@ -31,8 +31,16 @@ interface WorkflowDef {
 
 // Only read-only/idempotent actions are retried by default -- login and
 // saveSession are state-changing, so they only retry if a workflow
-// explicitly opts in via a "retry" field on that step.
-const DEFAULT_RETRYABLE_TYPES = new Set(["navigate", "dismissPopup", "extract", "screenshot"]);
+// explicitly opts in via a "retry" field on that step. xcBankLogin is
+// state-changing the same way; xcBankExtractDashboard is read-only like
+// extract.
+const DEFAULT_RETRYABLE_TYPES = new Set([
+  "navigate",
+  "dismissPopup",
+  "extract",
+  "screenshot",
+  "xcBankExtractDashboard",
+]);
 const DEFAULT_RETRY: RetryOptions = { attempts: 2, delayMs: 1000 };
 
 function resolveRetry(workflowStep: WorkflowStepDef): RetryOptions {
@@ -108,7 +116,9 @@ async function main(): Promise<void> {
     const opts =
       workflowStep.type === "screenshot"
         ? { screenshot: String(params.filename ?? "") }
-        : workflowStep.type === "extract"
+        : workflowStep.type === "extract" ||
+            workflowStep.type === "xcBankLogin" ||
+            workflowStep.type === "xcBankExtractDashboard"
           ? { captureResult: true }
           : undefined;
 

@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Page, BrowserContext } from "playwright-core";
+import * as xcBank from "../adapters/xc-bank.js";
 
 export interface ActionContext {
   page: Page;
@@ -92,5 +93,27 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const filename = requireString(params, "filename");
     await mkdir(OUTPUT_DIR, { recursive: true });
     await page.screenshot({ path: join(OUTPUT_DIR, filename) });
+  },
+
+  // XC Bank (services/xc-bank) is an isolated mock third-party site --
+  // these two actions only ever touch it through the DOM via `page`,
+  // exactly like any other adapter in this registry; see
+  // adapters/xc-bank.ts and docs/PROJECT_PLAN.md's decision log.
+  xcBankLogin: async ({ page }, params) => {
+    const username = requireString(params, "username");
+    const password = requireString(params, "password");
+    const result = await xcBank.login(page, { username, password });
+    return result.alreadyAuthenticated
+      ? `Already authenticated as ${username} (session reused, password step skipped)`
+      : `Logged in as ${username} (fresh two-step login)`;
+  },
+
+  xcBankExtractDashboard: async ({ page }) => {
+    const summary = await xcBank.extractDashboard(page);
+    // Full structured detail goes to stdout (captured in the job's own
+    // stdout field); the returned string is what the Jobs UI shows,
+    // reusing the existing data-rendering path instead of new UI code.
+    console.log("XC Bank dashboard:", JSON.stringify(summary, null, 2));
+    return `Balance: $${summary.balance.toFixed(2)} | ${summary.transactionCount} transaction(s)`;
   },
 };

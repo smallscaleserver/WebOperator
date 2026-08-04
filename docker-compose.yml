@@ -16,6 +16,14 @@ services:
     volumes:
       - ./data/minio:/data
 
+  # Isolated mock third-party test target -- WebOperator's worker treats
+  # this exactly like a real external site (browser/HTTP only, no shared
+  # code/DB/queue/artifact store). See docs/PROJECT_PLAN.md decision log.
+  xc-bank:
+    build: ./services/xc-bank
+    ports:
+      - "127.0.0.1:4100:3000"
+
   browser-worker-chrome:
     build: ./services/browser-worker
     environment:

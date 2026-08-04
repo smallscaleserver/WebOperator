@@ -1173,9 +1173,9 @@ and sessions.
 
 ### 2026-08-04 (session 10) — Claude
 
-- Status: In progress
-- Context: **Claiming: XC Bank — an isolated mock third-party bank site
-  for testing browser automation, plus its WebOperator adapter.** Ends
+- Status: Done
+- Context: XC Bank — an isolated mock third-party bank site for testing
+  browser automation, plus its WebOperator adapter. Ends
   the session-9 pause; explicit, detailed, multi-part instruction. Checked
   `git log` first — still at `cdcdc0c`, nothing new claimed. **Still not
   Gmail/Phase 3** — explicitly excluded again this round; a follow-up
@@ -1203,7 +1203,66 @@ and sessions.
   combined scope is too large for one — will decide during planning and
   say so before implementing either way. If you're Codex (or another
   session) reading this before a "Done" entry below: this is claimed —
-  check back here or pick a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+  check back here or pick a different open item instead. Decided during
+  planning: did it as one round, not split — comparable in size to the
+  Gmail scaffold and original MinIO rounds, which both shipped fine as
+  one round earlier this session.
+- Files: `services/xc-bank/` (new — `package.json`, `tsconfig.json`,
+  `Dockerfile`, `src/sessions.ts` in-memory session store, `src/
+  transactions.ts` seeded-PRNG deterministic transaction generator,
+  `src/server.ts` all routes), `docker-compose.yml` (+`xc-bank` service,
+  `127.0.0.1:4100:3000`, no volumes/depends_on, default bridge network),
+  `services/worker/src/adapters/xc-bank.ts` (new — `login()`/
+  `extractDashboard()`, DOM-only, same shape as `adapters/
+  the-internet.ts`), `services/worker/src/actions/registry.ts`
+  (+`xcBankLogin`/`xcBankExtractDashboard`), `services/worker/src/
+  run-workflow.ts` (`captureResult` wiring for both new types;
+  `xcBankExtractDashboard` added to the auto-retry set as read-only,
+  `xcBankLogin` left out as state-changing, same pattern as `extract`
+  vs. `login`), `services/worker/workflows/xc-bank-login-extract.json`
+  (new), `docs/PROJECT_PLAN.md` (5 new decision-log rows + a new "Test
+  Fixtures" section), `AGENTS.md` (new XC Bank section + repo-layout
+  entries), `README.md` (new step-by-step XC Bank testing section,
+  steps 14-16, inserted before Troubleshooting). No Control Panel code
+  changes — the existing dynamic Workflows UI already covers it.
+- Verified: `npx tsc --noEmit` clean in both `services/xc-bank` and
+  `services/worker`. Smoke-tested the Express service locally first
+  (fast iteration before involving Docker) — full login flow, wrong-
+  username/wrong-password error paths, unauthenticated-dashboard
+  redirect, already-authenticated `/login` redirect, same-window data
+  stability (three rapid requests, identical balance), window-rollover
+  change (11s wait, balance changed), and `/dev/regenerate` forcing an
+  immediate change — all confirmed directly via `curl` with a cookie
+  jar, not assumed. Then for real in Docker: built and started
+  `xc-bank`, confirmed host reachability (`curl 127.0.0.1:4100/` → 200)
+  and worker-container reachability (`node -e "fetch('http://xc-bank:
+  3000/')"` from inside the `worker` container → 200, proving the same
+  service-DNS mechanism already used for `minio` extends to a brand-new
+  service without extra wiring). **Isolation check, not just written and
+  trusted**: grepped `services/worker/src` and `services/control-panel/
+  src` for any `xc-bank` import path — only match was the adapter's own
+  HTTP base-URL string/comments, confirmed no code imports
+  `services/xc-bank` source. Ran the real workflow via `docker compose
+  run --rm worker npm run workflow` twice in the same browser session
+  without restarting the container: first run reported "Logged in as
+  demo_user (fresh two-step login)", second run reported "Already
+  authenticated as demo_user (session reused, password step skipped)" —
+  both branches of the login logic genuinely exercised. Extracted
+  balance/transaction data differed between the two runs (proving live
+  DOM extraction, not a cached value), full structured detail visible in
+  the captured stdout. Confirmed the local screenshot file exists and
+  visually inspected it (Read tool, rendered the actual PNG) — a real
+  dashboard with a real transaction table, matching the extracted
+  summary. Started both Control Panel processes, confirmed `GET
+  /api/workflows` listed `xc-bank-login-extract` with zero Control Panel
+  code changes, ran it through the real queue — job completed, step
+  detail showed the balance/transaction-count summary, both local and
+  MinIO screenshot links returned 200. `docker compose down`; both host
+  processes confirmed actually dead afterward (port-4000 check for the
+  API, command-line search for the worker).
+- Next: the design-only email-notification scaffolding could become real
+  in a future round (a mock outbox inside XC Bank + WebOperator's
+  separate Gmail ingestion correlating by reference/amount/timestamp) —
+  explicitly not this round. Otherwise: a live Gmail OAuth test with the
+  user's own credentials, the real downloads fix, video/trace, or
+  whichever else the user picks.

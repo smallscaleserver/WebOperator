@@ -229,6 +229,36 @@ prints only message count + IDs, not content. **No live test against a
 real Google Cloud project/account has been run** — that needs real
 credentials and requires asking first.
 
+**XC Bank** (`services/xc-bank`) is an isolated mock third-party bank
+site for practicing browser automation against — same relationship as
+`the-internet.herokuapp.com`, except self-hosted so it doesn't depend on
+an external site staying stable. **Strict isolation rule**: no shared
+code, database, or module imports with WebOperator; no shared Redis/
+BullMQ/MinIO/session files; the only channel between the two is browser/
+HTTP, exactly like a real external site — the worker's adapter
+(`services/worker/src/adapters/xc-bank.ts`) extracts only from the
+rendered DOM, never an internal API. Don't add a shortcut past this rule
+even for convenience; it's the whole point of the fixture.
+
+```bash
+docker compose up -d xc-bank browser-worker-chrome minio redis
+docker compose run --rm -e WORKFLOW_NAME=xc-bank-login-extract worker npm run workflow
+```
+
+Two-page login (`/login` username-only → `/password` password-only →
+session cookie → `/dashboard`), test account `demo_user`/`demo_pass`
+(mock only, documented on the page itself — not a real secret). The
+dashboard's transaction data is deterministic per session + a 10-second
+time window (stable if you refresh quickly, changes automatically once
+the window rolls over, or immediately via the dev-only
+`POST /dev/regenerate`) — proves extraction reads the live page, not a
+hard-coded value. Runs through the same workflow engine as everything
+else (`xc-bank-login-extract` shows up in the Control Panel's Workflows
+section automatically, no special-casing needed). Has design-only fields
+reserved for a *future* email-notification feature (see decision log) —
+nothing email-related is implemented, and XC Bank never talks to Gmail/
+Google APIs directly, by design.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -242,9 +272,11 @@ services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path
-services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot)
+services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot/xcBankLogin/xcBankExtractDashboard)
 services/worker/workflows/    Named JSON workflow definitions run by run-workflow.ts via the generic registry
+services/worker/src/gmail/    Phase 3 Gmail OAuth/API scaffold, dev/local, host-run (not in Docker) -- see decision log
 services/browser-worker/firefox-launcher/  Node script (launch-firefox.js) that runs Playwright's own Firefox build as a launchServer
+services/xc-bank/             Isolated mock third-party bank site (Node/Express, in-memory only) for browser-automation testing -- no shared code/DB/queue with WebOperator
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)
