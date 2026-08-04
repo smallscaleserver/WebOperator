@@ -80,6 +80,20 @@
 </section>
 
 <section>
+  <h2>Gmail (Phase 3 — scaffold)</h2>
+  <p class="hint">
+    Gmail API + OAuth scaffold, dev/local only — not wired into the queue
+    or this UI yet. From <code>services/worker</code>:
+    <code>npm run gmail:authorize</code> prints a consent URL to open in
+    your own browser (never automated), then saves the resulting token to
+    a gitignored, <strong>unencrypted, dev-only</strong> file
+    (<code>data/gmail-tokens/gmail-token.json</code> — a real encrypted
+    vault is a separate, later step). <code>npm run gmail:list</code>
+    proves read access by listing a few message IDs once a token exists.
+  </p>
+</section>
+
+<section>
   <h2>Jobs</h2>
   <p class="hint">Click a row to expand step-by-step detail and screenshots.</p>
   <table>

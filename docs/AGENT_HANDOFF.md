@@ -1038,10 +1038,10 @@ and sessions.
 
 ### 2026-08-04 (session 8) — Claude
 
-- Status: In progress
-- Context: **Claiming: Phase 3 Gmail — OAuth/Gmail API scaffold, round
-  one.** Explicit direct instruction with a full user-specified scope.
-  Checked `git log` first — still at `ae5d9ac`, nothing new claimed.
+- Status: Done
+- Context: Phase 3 Gmail — OAuth/Gmail API scaffold, round one. Explicit
+  direct instruction with a full user-specified scope. Checked `git log`
+  first — still at `ae5d9ac`, nothing new claimed.
   Scope as given: dev/local Gmail API + OAuth scaffold only; **no browser
   automation of the Gmail login page at all**; no plaintext
   credentials/tokens in source or `.env`; a separate Gmail
@@ -1065,6 +1065,60 @@ and sessions.
   it's the first real slice of what was already planned. If you're Codex
   (or another session) reading this before a "Done" entry below: this is
   claimed — check back here or pick a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Files: `services/worker/src/gmail/client.ts` (new — env-based OAuth2
+  client construction with clear missing-var errors, `buildAuthUrl()`
+  with `gmail.readonly` scope + `access_type: offline` + `prompt:
+  consent`, dev-only plaintext token save/load at
+  `data/gmail-tokens/gmail-token.json`, `getAuthorizedClient()` with a
+  clear no-token error), `authorize.ts` (new — CLI: prints the consent
+  URL, runs a one-shot local HTTP listener parsed from
+  `GOOGLE_REDIRECT_URI` to capture the callback, exchanges the code,
+  saves the token), `list-messages.ts` (new — minimal
+  `users.messages.list` read proof, count + IDs only, never content),
+  `services/worker/package.json` (+`googleapis`, +`google-auth-library`
+  as an explicit direct dependency since types are imported from it
+  directly, +`gmail:authorize`/`gmail:list` scripts), `.env.example`
+  (+`GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI`, left
+  blank — no safe fake default exists for per-developer OAuth creds,
+  unlike MinIO's dev defaults), `services/control-panel/public/index.html`
+  (static informational Gmail section only — env vars, the two CLI
+  commands, dev-only token caveat; no new JS/API route), `AGENTS.md` (new
+  Gmail section), `docs/PROJECT_PLAN.md` (Phase 3 checklist partially
+  ticked + 8 new decision-log rows).
+- Verified: picked `googleapis@174.0.0` specifically (not an older
+  version) after `npm audit` flagged a moderate transitive `uuid`
+  vulnerability on the version first tried — `0 vulnerabilities` after
+  the bump. `npx tsc --noEmit` clean. **Readable failure paths, no real
+  credentials needed**: `gmail:authorize` with env vars unset fails with
+  the specific "Missing required env var GOOGLE_CLIENT_ID..." message;
+  `gmail:list` with fake-but-well-formed env vars and no token file fails
+  with "No Gmail token found at ... run npm run gmail:authorize first." —
+  neither hangs or dumps a raw stack trace. **Auth URL shape, still no
+  real credentials**: built with fake client ID/secret, confirmed every
+  expected query param (`client_id`, `redirect_uri`,
+  `scope=...gmail.readonly`, `access_type=offline`, `prompt=consent`,
+  `response_type=code`). **Callback listener exercised for real**:
+  started `authorize.ts` with fake credentials, curled the callback URL
+  with a fake `code` — confirmed the listener parsed it, responded to
+  the "browser" (200, "Authorized. You can close this tab."), then
+  attempted the real token exchange with Google, which correctly
+  rejected the fake credentials (`invalid_client`) — caught cleanly by
+  the script's own error handling (exit 1, readable message, not a stack
+  trace), listener port confirmed closed afterward. This exercised our
+  own request-handling code against a real (expected) rejection from
+  Google's token endpoint — **not** a live account/data test, since no
+  real Google Cloud OAuth client exists in this environment and one
+  wasn't set up, per the explicit instruction to ask before any live
+  test. **Gitignore check**: created a dummy file at
+  `data/gmail-tokens/gmail-token.json`, confirmed via `git status`
+  (nothing shown) and `git check-ignore -v` (matched the blanket `data/`
+  rule) that it's genuinely untracked, not just assumed to be — deleted
+  after. Control Panel still starts cleanly with the new static section;
+  confirmed via `curl /index.html` that it's actually served; `/api/status`
+  still responds normally (`/api/jobs` predictably hangs without Redis
+  running this round — pre-existing, documented behavior, not a
+  regression from this change).
+- Next: a live OAuth test against a real Google Cloud project (needs the
+  user's own credentials and explicit go-ahead), Gmail search/message-
+  content/attachment reading, the real encrypted token vault, the real
+  downloads fix, video/trace, or whichever else the user picks.

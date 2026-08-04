@@ -9,9 +9,13 @@
     "restore": "tsx src/restore-session.ts",
     "adapter": "tsx src/run-adapter.ts",
     "workflow": "tsx src/run-workflow.ts",
-    "firefox-demo": "tsx src/run-firefox-demo.ts"
+    "firefox-demo": "tsx src/run-firefox-demo.ts",
+    "gmail:authorize": "tsx src/gmail/authorize.ts",
+    "gmail:list": "tsx src/gmail/list-messages.ts"
   },
   "dependencies": {
+    "google-auth-library": "^10.5.0",
+    "googleapis": "^174.0.0",
     "minio": "^8.0.1",
     "playwright-core": "^1.48.0"
   },

@@ -197,6 +197,38 @@ Firefox is only visibly "doing something" while a job is actively running):
 docker compose run --rm worker-firefox npm run firefox-demo
 ```
 
+**Phase 3 (Gmail) has started**: a dev/local OAuth + Gmail API scaffold in
+`services/worker/src/gmail/`. Gmail API is the primary path for Gmail —
+browser automation of the Gmail login page is explicitly not done, ever;
+if a future feature genuinely needs the browser fallback, the same
+CAPTCHA/2FA/passkey rule applies (stop, hand off via noVNC, don't bypass).
+Set `GOOGLE_CLIENT_ID`/`GOOGLE_CLIENT_SECRET`/`GOOGLE_REDIRECT_URI` in
+`.env` (from a Google Cloud Console OAuth client — see `.env.example`;
+scripts fail with a clear error if any are missing, never silently
+proceed with empty values). These two scripts run on the **host**, not in
+the worker Docker container (unlike everything else in this file) — they
+never touch Playwright/CDP, and the OAuth redirect needs a `localhost`
+port your own host browser can reach directly:
+
+```bash
+cd services/worker
+npm run gmail:authorize   # prints a consent URL -- open it in your OWN browser, sign in there
+npm run gmail:list        # once authorized, lists a few message IDs as a minimal read proof
+```
+
+`gmail:authorize` never automates Google's login/consent page itself — it
+prints a URL and waits for the redirect callback on a one-shot local HTTP
+listener (bound to the exact host/port/path parsed from
+`GOOGLE_REDIRECT_URI`), then exchanges the code for tokens. Token storage
+is a **plaintext, unencrypted, dev-only placeholder**
+(`data/gmail-tokens/gmail-token.json`, inside the repo's already-gitignored
+`data/` — confirmed via `git check-ignore`) — not safe for a real account,
+a real encrypted vault is a separate, later step (see decision log).
+Scope is `gmail.readonly` only (least privilege); `list-messages.ts`
+prints only message count + IDs, not content. **No live test against a
+real Google Cloud project/account has been run** — that needs real
+credentials and requires asking first.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
