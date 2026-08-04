@@ -959,3 +959,40 @@ and sessions.
   video/trace (same treatment, needs a concrete workflow use case first),
   migrating the 4 fixed actions onto the workflow engine, or Phase 3
   (Gmail) — whichever the user picks.
+
+### 2026-08-04 (session 7) — Claude
+
+- Status: In progress
+- Context: **Claiming: migrate the 4 fixed worker actions onto the
+  workflow engine.** Explicit direct instruction. Checked `git log` first
+  — still at `0b4cfba`, nothing new claimed. Scope as given: replace
+  demo/save/restore/adapter with workflow JSON *to the extent the
+  existing generic action registry supports it*; Control Panel buttons
+  can stay but should enqueue a workflow instead of the fixed script;
+  fixed scripts may stay as dev/debug CLI, no need to delete immediately;
+  docs should say the workflow engine is the primary path; verify the
+  existing UI buttons and job step/artifact display still work the same
+  way from a user's perspective. Read all 4 fixed scripts and the
+  registry (`navigate`/`dismissPopup`/`login`/`extract`/`saveSession`/
+  `screenshot`) before planning: `demo` (index.ts — navigate + screenshot)
+  and `adapter` (run-adapter.ts — login + extract + saveSession +
+  screenshot against the-internet.herokuapp.com) map cleanly onto
+  existing generic actions; `adapter` in fact already has an equivalent,
+  already-proven workflow (`the-internet-login.json`) sitting unused by
+  the Control Panel's fixed-action buttons. `save`/`restore`
+  (save-session.ts/restore-session.ts) do **not** map cleanly: `save` sets
+  a synthetic cookie+localStorage marker via bespoke inline JS with no
+  generic-action equivalent, and `restore` creates a fresh *isolated*
+  browser context pre-loaded with `storageState` and reads cookies/
+  localStorage back directly — the workflow engine's current model
+  assumes one shared context/page for an entire run, so this doesn't fit
+  without adding new action types, which the explicit "to the extent
+  generic actions support it" instruction rules out for this round. Per
+  the user's own hedge, plan is to migrate demo+adapter for real (2 of 4)
+  and explicitly not force save/restore, documenting why rather than
+  bolting on new action types to hit a number. If you're Codex (or
+  another session) reading this before a "Done" entry below: this is
+  claimed — check back here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
