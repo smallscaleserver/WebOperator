@@ -2,11 +2,13 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { connectToChromium } from "./cdp.js";
-import { step, stepWithRetry, type RetryOptions } from "./steps.js";
+import { step, stepWithRetry, stepBestEffort, type RetryOptions } from "./steps.js";
+import { uploadArtifact } from "./artifacts.js";
 import { ACTION_HANDLERS, type ActionParams } from "./actions/registry.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const WORKFLOW_NAME = process.env.WORKFLOW_NAME;
+const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOWS_DIR = path.resolve(__dirname, "../workflows");
@@ -111,6 +113,12 @@ async function main(): Promise<void> {
           : undefined;
 
     await stepWithRetry(stepName, () => handler({ page, context }, params), resolveRetry(workflowStep), opts);
+
+    if (workflowStep.type === "screenshot") {
+      const filename = String(params.filename ?? "");
+      const localPath = path.join(OUTPUT_DIR, filename);
+      await stepBestEffort(`${index + 1}-archive-screenshot`, () => uploadArtifact(localPath, `screenshots/${filename}`));
+    }
   }
 
   console.log(`Workflow "${workflow.name}" completed (${workflow.steps.length} steps).`);

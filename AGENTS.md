@@ -19,11 +19,22 @@ started**: worker actions now run through a Redis/BullMQ queue instead of
 directly. Easiest way to use the stack now is the Control Panel:
 
 ```bash
-docker compose up -d redis browser-worker-chrome browser-worker-firefox
+docker compose up -d redis minio browser-worker-chrome browser-worker-firefox
 cd services/control-panel && npm install
 npm start          # terminal 1: API/UI (producer) -> http://localhost:4000
 npm run worker     # terminal 2: queue consumer -- jobs don't run without this
 ```
+
+Every screenshot a job takes is also mirrored to MinIO (S3-compatible
+object storage, `weboperator-artifacts` bucket, `screenshots/*`) — console
+at `http://localhost:9001` (creds: `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD`
+in `.env`, defaults `weboperator`/`changeme123`). This is best-effort and
+additive: local files under `data/worker-output/` and the Control Panel's
+`/screenshots/*` route are unchanged and remain the source of truth: a
+MinIO outage shows up as a failed `archive-screenshot` step in the job
+detail, not a failed job. If `worker`/`worker-firefox` run outside Docker
+Compose (rare), set `MINIO_ENDPOINT`/`MINIO_PORT` to reach MinIO directly —
+inside Compose this defaults correctly via service DNS.
 
 **The API and the queue consumer are two separate processes now** — `npm
 start` only serves the UI and enqueues jobs; nothing actually *executes* a

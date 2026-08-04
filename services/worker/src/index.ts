@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { connectToChromium } from "./cdp.js";
-import { step } from "./steps.js";
+import { step, stepBestEffort } from "./steps.js";
+import { uploadArtifact } from "./artifacts.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
@@ -22,6 +23,7 @@ async function main(): Promise<void> {
   const screenshotPath = `${OUTPUT_DIR}/example.png`;
   await step("screenshot", () => page.screenshot({ path: screenshotPath }), { screenshot: "example.png" });
   console.log(`Saved screenshot to ${screenshotPath}`);
+  await stepBestEffort("archive-screenshot", () => uploadArtifact(screenshotPath, "screenshots/example.png"));
 
   // Deliberately not calling browser.close(): this worker did not launch the
   // Chromium process (entrypoint.sh did, and it must keep running for noVNC

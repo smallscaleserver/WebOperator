@@ -726,16 +726,51 @@ and sessions.
 
 ### 2026-08-04 (session 3) — Claude
 
-- Status: In progress
-- Context: **Claiming: MinIO/S3 artifact storage, starting with
-  screenshots.** Explicit direct instruction this time (user answered
-  their own question with exactly who/what: "ให้ Claude claim ใน
-  AGENT_HANDOFF.md แล้วเริ่มจาก screenshots artifacts"), no ambiguity to
-  resolve — still checked `git log` first anyway (repo still at
-  `659772f`, nothing claimed) per the now-standard habit before starting
-  anything nontrivial. If you're Codex (or another session) reading this
-  before a "Done" entry below: this is claimed — check back here or pick
-  a different open item instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Status: Done
+- Context: MinIO/S3 artifact storage, starting with screenshots. Explicit
+  direct instruction (user answered their own question with exactly
+  who/what: "ให้ Claude claim ใน AGENT_HANDOFF.md แล้วเริ่มจาก screenshots
+  artifacts"), no ambiguity to resolve — still checked `git log` first
+  anyway per the now-standard habit before starting anything nontrivial.
+  Added *alongside* the existing local `data/worker-output/*` files, not
+  replacing them — same additive pattern as every other feature this
+  project. Archival is best-effort/non-fatal by design: a new
+  `stepBestEffort()` primitive reports ok/error like any step (visible in
+  the Jobs UI) but never fails the job.
+- Files: `docker-compose.yml` (new `minio` service, `MINIO_ENDPOINT=minio`
+  on `worker`/`worker-firefox`), `.env.example` (MinIO root creds),
+  `services/worker/package.json` (`minio` npm dep),
+  `services/worker/src/artifacts.ts` (new — `uploadArtifact`, bucket
+  auto-create), `services/worker/src/steps.ts` (new `stepBestEffort`),
+  `services/worker/src/index.ts` / `run-adapter.ts` /
+  `run-firefox-demo.ts` / `run-workflow.ts` (each now calls
+  `stepBestEffort("archive-screenshot", ...)` right after its existing
+  screenshot step — `run-workflow.ts`'s covers *any* workflow using the
+  generic `screenshot` action, not just one hardcoded script),
+  `docs/PROJECT_PLAN.md` (5 new decision-log rows + Phase 2 checklist
+  tick, partial), `AGENTS.md` (dev-run instructions + MinIO console URL).
+- Verified: `npx tsc --noEmit` clean. Rebuilt the `worker` image (new npm
+  dep needs a rebuild, not just a bind-mount refresh — caught when the
+  first run failed with `ERR_MODULE_NOT_FOUND: minio` against the stale
+  image). `docker compose run --rm worker npm run start` — both
+  `screenshot` and `archive-screenshot` steps reported `status: "ok"`.
+  **Genuine round-trip proof, not just "upload didn't throw"**: a
+  throwaway host-side script fetched the uploaded object back from
+  `127.0.0.1:9000` and compared SHA-256 hashes against the local file —
+  byte-identical (15319 bytes both sides), script deleted after.
+  **Non-fatal proof**: `docker compose stop minio`, re-ran the same job —
+  `archive-screenshot` reported `status: "error"`
+  (`getaddrinfo ENOTFOUND minio`) while the job still exited 0 and the
+  screenshot itself still saved locally; restarted MinIO after. Ran the
+  real `the-internet-login` workflow through the actual Control Panel
+  queue (both `npm start` and `npm run worker` processes up) —
+  `archive-screenshot` showed up correctly as the 10th step in
+  `/api/jobs` alongside the existing 9; confirmed the existing
+  `/screenshots/*` route still serves the file unchanged (regression
+  check, HTTP 200). `docker compose down`; both host processes confirmed
+  actually dead afterward (port-4000 check for the API, command-line
+  search for the worker — both gotchas checked again).
+- Next: extending archival to session files (`data/sessions/*`), wiring
+  the Control Panel to read artifacts back from MinIO instead of only
+  local disk, migrating the 4 fixed actions onto the workflow engine, or
+  Phase 3 (Gmail) — whichever the user picks.

@@ -1,6 +1,7 @@
 import { mkdir } from "node:fs/promises";
 import { connectToFirefox } from "./firefoxConnect.js";
-import { step } from "./steps.js";
+import { step, stepBestEffort } from "./steps.js";
+import { uploadArtifact } from "./artifacts.js";
 
 const FIREFOX_WS_ENDPOINT = process.env.FIREFOX_WS_ENDPOINT ?? "ws://localhost:9223/firefox";
 const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
@@ -23,6 +24,7 @@ async function main(): Promise<void> {
   const screenshotPath = `${OUTPUT_DIR}/firefox-example.png`;
   await step("screenshot", () => page.screenshot({ path: screenshotPath }), { screenshot: "firefox-example.png" });
   console.log(`Saved screenshot to ${screenshotPath}`);
+  await stepBestEffort("archive-screenshot", () => uploadArtifact(screenshotPath, "screenshots/firefox-example.png"));
 
   // Not calling browser.close(): this worker didn't launch the Firefox
   // process -- launch-firefox.js in the browser-worker-firefox container

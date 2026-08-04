@@ -1,7 +1,8 @@
 import { mkdir } from "node:fs/promises";
 import { dirname } from "node:path";
 import { connectToChromium } from "./cdp.js";
-import { step } from "./steps.js";
+import { step, stepBestEffort } from "./steps.js";
+import { uploadArtifact } from "./artifacts.js";
 import {
   dismissAdIfPresent,
   extractSecureAreaMessage,
@@ -49,6 +50,9 @@ async function main(): Promise<void> {
     { screenshot: "the-internet-secure.png" },
   );
   console.log(`Saved screenshot to ${screenshotPath}`);
+  await stepBestEffort("archive-screenshot", () =>
+    uploadArtifact(screenshotPath, "screenshots/the-internet-secure.png"),
+  );
 
   // Deliberately not calling browser.close() — see index.ts.
   process.exit(0);

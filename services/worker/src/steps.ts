@@ -84,3 +84,15 @@ export async function stepWithRetry<T>(
 ): Promise<T> {
   return stepInternal(name, fn, retry, opts);
 }
+
+// Reports exactly like step() (ok/error, visible in the Jobs UI) but never
+// rethrows -- for auxiliary work (e.g. mirroring an artifact to S3-
+// compatible storage) that should be observable when it fails without
+// turning an otherwise-successful job into a failure.
+export async function stepBestEffort<T>(name: string, fn: () => Promise<T>): Promise<T | undefined> {
+  try {
+    return await step(name, fn);
+  } catch {
+    return undefined;
+  }
+}
