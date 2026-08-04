@@ -1170,3 +1170,40 @@ and sessions.
 - Next: whatever the user finds while testing via the new guide. No new
   feature work (including Gmail/Phase 3) until they've had a chance to
   test and give direction.
+
+### 2026-08-04 (session 10) — Claude
+
+- Status: In progress
+- Context: **Claiming: XC Bank — an isolated mock third-party bank site
+  for testing browser automation, plus its WebOperator adapter.** Ends
+  the session-9 pause; explicit, detailed, multi-part instruction. Checked
+  `git log` first — still at `cdcdc0c`, nothing new claimed. **Still not
+  Gmail/Phase 3** — explicitly excluded again this round; a follow-up
+  message added *design-only* scaffolding requirements for a future
+  email-notification feature (transaction model fields that *could*
+  support generating a notification later, a documented boundary that XC
+  Bank never talks to Gmail/Google APIs, a "Future Gmail/email
+  notification design" docs section) — no email sending, no OAuth, no
+  Gmail API calls, no SMTP, this round.
+  Core scope: new `services/xc-bank` (Node/Express) mock bank site,
+  strictly isolated from WebOperator — no shared code/DB/module imports,
+  no shared Redis/BullMQ/MinIO/session files, communication only via
+  browser/HTTP like a real third-party site, adapter must extract from
+  the DOM only (never an internal API). Two-page login (`/login`
+  username → `/password` password → session cookie → `/dashboard`),
+  dashboard shows transactions (timestamp/direction/counterparty/amount/
+  running balance/reference) that change over time (deterministic
+  per-session/window seed, not fully random, so extraction is verifiable
+  but still provably not hard-coded). New Docker Compose service
+  (`127.0.0.1:4100:3000` published, worker reaches it via
+  `http://xc-bank:3000`). New `services/worker/src/adapters/xc-bank.ts` +
+  a workflow JSON, Control Panel button, MinIO archival reuse, docs
+  across `README.md`/`AGENTS.md`/`docs/PROJECT_PLAN.md`. User explicitly
+  allowed splitting into two rounds (site first, adapter second) if the
+  combined scope is too large for one — will decide during planning and
+  say so before implementing either way. If you're Codex (or another
+  session) reading this before a "Done" entry below: this is claimed —
+  check back here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
