@@ -27,29 +27,176 @@ cd WebOperator
 git clone git@github.com:smallscaleserver/WebOperator.git
 ```
 
-### Phase 1 quickstart
+### คู่มือทดสอบระบบแบบ Step-by-step (Testing Guide)
 
-เปิด browser (Chrome หรือ Firefox) แบบเห็นหน้าจอใน Docker แล้วควบคุมผ่านเว็บด้วย noVNC:
+ครอบคลุม flow หลักที่ implement และ verify แล้วจนถึงตอนนี้ (Phase 1-2
+เต็ม — ยังไม่รวม Gmail/Phase 3 ซึ่งเป็น dev scaffold แยกต่างหาก ดู
+[AGENTS.md](./AGENTS.md))
 
-```bash
-cp .env.example .env
-docker compose up browser-worker-chrome   # หรือ browser-worker-firefox
-```
+#### สิ่งที่ต้องมีก่อน (Prerequisites)
 
-เปิด `http://localhost:6080/vnc.html` (Chrome) หรือ `http://localhost:6081/vnc.html` (Firefox) แล้วใส่รหัสผ่านจาก `.env`
+- **Docker Desktop** ติดตั้งแล้วและ **เปิดอยู่** (Docker daemon ต้อง
+  running ก่อนรันคำสั่งใด ๆ ด้านล่าง)
+- **Node.js + npm** (สำหรับรัน Control Panel บน host — Control Panel
+  ไม่ได้รันใน container)
+- Clone repo แล้ว copy env ครั้งแรกครั้งเดียว: `cp .env.example .env`
 
-สั่งงานผ่าน Playwright แทนการคลิกเองผ่าน noVNC (ต้องเปิด `browser-worker-chrome` ไว้ก่อน):
-
-```bash
-docker compose run --rm worker
-```
-
-บันทึกและนำ session (cookie/localStorage) กลับมาใช้ใหม่ผ่าน Playwright `storageState`:
+#### 1. ติดตั้ง dependencies ของ Control Panel
 
 ```bash
-docker compose run --rm worker npm run save
-docker compose run --rm worker npm run restore
+cd services/control-panel
+npm install
 ```
+
+#### 2. เริ่ม Redis, MinIO และ browser worker(s)
+
+```bash
+docker compose up -d redis minio browser-worker-chrome browser-worker-firefox
+```
+
+(ตัด `browser-worker-firefox` ออกได้ถ้ายังไม่ทดสอบ Firefox demo ในข้อ 12)
+
+MinIO console (ดู object ที่ archive ไว้โดยตรง แยกจาก UI ของ Control
+Panel): <http://localhost:9001> — login ด้วย `MINIO_ROOT_USER`/
+`MINIO_ROOT_PASSWORD` ใน `.env` (default `weboperator`/`changeme123`)
+
+#### 3. เริ่ม Control Panel API (terminal ที่ 1)
+
+```bash
+cd services/control-panel
+npm start
+```
+
+จะเห็น `WebOperator Control Panel: http://localhost:4000` — terminal นี้
+เสิร์ฟ UI/API และ enqueue งานเท่านั้น **ยังไม่รันงานจริง** จนกว่าจะเริ่ม
+queue worker ในข้อถัดไป
+
+#### 4. เริ่ม queue worker (terminal ที่ 2 แยกจากข้อ 3)
+
+```bash
+cd services/control-panel
+npm run worker
+```
+
+จะเห็น `Queue worker ready — waiting for jobs.` — งานที่ enqueue จากข้อ 3
+จะค้างอยู่ใน queue จนกว่า terminal นี้จะรันอยู่ (ไม่หาย แค่รอ)
+
+#### 5. เปิด Control Panel
+
+เปิด <http://localhost:4000> — ควรเห็นสถานะ Chrome/Firefox เป็น
+"stopped" (จุดสีเทา)
+
+#### 6. Start Chrome และ/หรือ Firefox
+
+กดปุ่ม **Start** ข้าง Chrome (และ/หรือ Firefox ถ้าเริ่ม container ไว้ใน
+ข้อ 2) — จุดสถานะเปลี่ยนเป็นสีเขียว "running" ภายในไม่กี่วินาที
+
+#### 7. Take control ผ่าน noVNC
+
+กดปุ่ม **Take control** — เห็นหน้าจอ desktop จริงของ Chrome/Firefox ฝัง
+(iframe) อยู่ในหน้าเดียวกัน คลิก/พิมพ์ได้เหมือน remote desktop จริง (หรือ
+เปิดแยกเต็มจอที่ <http://localhost:6080/vnc.html> สำหรับ Chrome,
+<http://localhost:6081/vnc.html> สำหรับ Firefox แล้วใส่รหัสผ่านจาก
+`VNC_PASSWORD` ใน `.env`)
+
+#### 8. รัน demo workflow
+
+กดปุ่ม **Run demo (navigate + screenshot)** ใต้หัวข้อ "Playwright
+worker" (หรือปุ่ม `Run "demo"` ใต้หัวข้อ "Workflows" ด้านล่าง — เป็น
+workflow เดียวกัน คนละทางเข้าเฉย ๆ) จะ enqueue งานที่ navigate ไป
+example.com แล้วถ่าย screenshot
+
+#### 9. Save / Restore session
+
+กด **Save session** — ตั้ง cookie/localStorage marker ปลอมบน
+example.com แล้วบันทึกเป็น Playwright `storageState` จากนั้นกด
+**Restore session** — เปิด browser context ใหม่แยกต่างหาก โหลด session
+ที่เพิ่ง save กลับมา แล้วอ่านค่า marker ยืนยันว่า round-trip สำเร็จ (ดูค่า
+ที่ restore ได้ในรายละเอียด step ของ job)
+
+#### 10. รัน example adapter / the-internet workflow
+
+กดปุ่ม **Run example adapter** (หรือ `Run "the-internet-login"` ใต้
+Workflows) — login เข้าเว็บทดสอบ the-internet.herokuapp.com จริง (dismiss
+popup โฆษณา, กรอก login, ตรวจข้อความยืนยัน, save session, ถ่าย
+screenshot) เป็น flow ที่ครบวงจรที่สุดในตอนนี้
+
+#### 11. ดู job steps, screenshots และลิงก์ MinIO
+
+ในตาราง Jobs ด้านล่าง คลิกแถวของ job (ID ล่าสุด) เพื่อขยายดูรายละเอียด
+ทีละ step — แต่ละ step มี ✅/❌ พร้อมเวลาที่ใช้ ถ้า step เป็น screenshot
+จะมีลิงก์สองอัน:
+
+- **screenshot** — ไฟล์จาก local disk (`data/worker-output/`)
+- **MinIO** — ไฟล์เดียวกันที่ archive ไปเก็บใน MinIO ด้วย (ปรากฏเฉพาะตอน
+  archive สำเร็จ — ดู Troubleshooting ด้านล่างถ้าไม่ขึ้น)
+
+คลิกดูได้ทั้งสองลิงก์ ควรเป็นภาพเดียวกัน
+
+#### 12. ทดสอบ Firefox demo
+
+ต้อง Start Firefox ก่อน (ข้อ 6) แล้วกดปุ่ม **Run Firefox demo** — ใช้
+กลไกคนละแบบจาก Chrome (Playwright `launchServer()`/`connect()` ไม่ใช่
+CDP) หน้าที่เปิดจะหายไปจาก noVNC หลัง job จบ — เป็นพฤติกรรมที่ตั้งใจ
+ไม่ใช่ bug (ดู decision log ใน `docs/PROJECT_PLAN.md`)
+
+#### 13. หยุดและล้างระบบ (Stop / Cleanup)
+
+หยุด Control Panel ทั้งสอง terminal (Ctrl+C ทั้งคู่) แล้ว:
+
+```bash
+docker compose down
+```
+
+บน Windows ให้ตรวจสอบว่า process ทั้งสองปิดจริง — ดูหัวข้อ
+Troubleshooting ด้านล่างถ้า Ctrl+C ไม่พอ
+
+---
+
+#### Troubleshooting
+
+**Docker daemon ไม่ทำงาน**
+คำสั่ง `docker compose up` จะ error ทันที (เช่น "Cannot connect to the
+Docker daemon"). เปิด Docker Desktop รอจน tray icon ขึ้นสถานะ running
+แล้วลองใหม่
+
+**Port 4000 ค้างจาก node process เก่าบน Windows**
+ถ้า `npm start` ใน `services/control-panel` error ว่า port 4000 ถูกใช้
+อยู่ทั้งที่ปิด terminal เดิมไปแล้ว (มักเกิดหลัง stop process ผ่าน task
+manager/harness แทนการ Ctrl+C ปกติ):
+
+```powershell
+Get-NetTCPConnection -LocalPort 4000 -State Listen | Select-Object -ExpandProperty OwningProcess
+Stop-Process -Id <pid> -Force
+```
+
+**Queue worker process ค้างแต่หา port ไม่เจอ**
+`npm run worker` ไม่ได้ฟัง port ใด ๆ เลย เช็คแบบ port-based ด้านบนจะไม่
+เจอ ต้องหาจาก command line แทน:
+
+```powershell
+Get-CimInstance Win32_Process -Filter "Name='node.exe'" | Where-Object { $_.CommandLine -like '*worker.ts*' }
+Stop-Process -Id <pid> -Force
+```
+
+**เพิ่ม/แก้ npm dependency ใน `services/worker` แล้วรันผ่าน Docker ไม่เห็นผล**
+`docker compose run --rm worker ...` ใช้ image ที่ build ไว้ล่วงหน้า
+ไม่ได้ install dependency ใหม่ให้อัตโนมัติ — ต้อง rebuild image ก่อน:
+
+```bash
+docker compose build worker
+# หรือถ้าทดสอบ Firefox worker ด้วย
+docker compose build worker-firefox
+```
+
+**MinIO ล่มระหว่างรันงาน**
+Archive step (เช่น `archive-screenshot`, `archive-session`) จะขึ้น
+error (เช่น `MinIO unavailable: ECONNREFUSED`) แต่ **job หลักต้องไม่ล่ม**
+— screenshot/session ยังถูกบันทึกไว้ที่ local disk ตามปกติ นี่คือ
+พฤติกรรมที่ตั้งใจออกแบบไว้ (best-effort archival) ไม่ใช่ bug ถ้า MinIO
+ล่มแล้ว job ทั้งก้อน fail ด้วย ให้รายงานเป็นปัญหา ไม่ใช่พฤติกรรมปกติ
+
+---
 
 ดูแผนงานละเอียดและ checklist ที่ [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md), บริบทสำหรับ AI agent (Claude Code / Codex CLI) ที่ [`AGENTS.md`](./AGENTS.md)
 

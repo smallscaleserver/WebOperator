@@ -1122,3 +1122,51 @@ and sessions.
   user's own credentials and explicit go-ahead), Gmail search/message-
   content/attachment reading, the real encrypted token vault, the real
   downloads fix, video/trace, or whichever else the user picks.
+
+### 2026-08-04 (session 9) — Claude
+
+- Status: Done
+- Context: **Feature work paused for user testing.** Explicit direct
+  instruction: no new feature work this round (specifically: do not
+  start Gmail/Phase 3), instead (1) add a step-by-step testing guide to
+  `README.md` covering every main flow already implemented and verified
+  through Phase 2, (2) short troubleshooting section for known gotchas,
+  (3) this handoff entry recording the pause, (4) a small
+  `docs/PROJECT_PLAN.md` note if warranted (no checklist changes — nothing
+  new shipped feature-wise), (5) verify every README command actually
+  works, without needing a real account for anything. **If you're Codex
+  (or another session) picking this up: don't start new feature work,
+  including Gmail/Phase 3, until the user has finished testing via the
+  new README guide and gives further direction.** This is a real pause,
+  not a claim on a specific feature — check with the user (or a later
+  handoff entry) before resuming normal feature work.
+- Files: `README.md` (replaced the stale "Phase 1 quickstart" — which
+  predated the Control Panel, MinIO, and the workflow engine entirely —
+  with a full 13-step guide: prerequisites, install, start Redis/MinIO/
+  browsers, start both Control Panel processes, open the UI, start
+  Chrome/Firefox, take control via noVNC, run the demo workflow,
+  save/restore session, run the-internet adapter/workflow, inspect job
+  steps/screenshots/MinIO links, Firefox demo, cleanup — plus a
+  Troubleshooting section: Docker daemon not running, port 4000 orphaned
+  on Windows, the queue worker's orphan-process gotcha (no port to check),
+  a stale worker Docker image after an npm dependency change, and MinIO
+  down during a job), `docs/PROJECT_PLAN.md` (one decision-log row noting
+  this pause round — no checklist changes).
+- Verified: ran the **entire guide for real**, not just read the source
+  to check command syntax — brought up the full stack (Redis, MinIO, both
+  browser containers, both Control Panel processes), started Chrome,
+  confirmed `/api/status` showed both browsers running, ran the `demo`
+  workflow, `runSave`/`runRestore`, the `the-internet-login` workflow, and
+  `runFirefoxDemo` — all four completed successfully. Confirmed both the
+  local `/screenshots/*` and MinIO `/api/artifacts/screenshots/*` links
+  for a real screenshot both return 200. Confirmed both Windows
+  troubleshooting commands (`Get-NetTCPConnection -LocalPort 4000`,
+  `Get-CimInstance Win32_Process | Where CommandLine -like '*worker.ts*'`)
+  actually find the right PIDs. Confirmed `worker`/`worker-firefox` are
+  valid `docker compose` service names for the rebuild troubleshooting
+  entry. `docker compose down`; both host processes confirmed actually
+  dead afterward. Every command in the new README section has now been
+  run for real this session, not just written from memory.
+- Next: whatever the user finds while testing via the new guide. No new
+  feature work (including Gmail/Phase 3) until they've had a chance to
+  test and give direction.
