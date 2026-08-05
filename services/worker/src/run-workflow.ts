@@ -5,6 +5,8 @@ import { connectToChromium } from "./cdp.js";
 import { step, stepWithRetry, stepBestEffort, type RetryOptions } from "./steps.js";
 import { uploadArtifact } from "./artifacts.js";
 import { ACTION_HANDLERS, type ActionParams } from "./actions/registry.js";
+import { getPolicy, randomDelay } from "./policy.js";
+import { detectChallenge } from "./challenge.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const WORKFLOW_NAME = process.env.WORKFLOW_NAME;
@@ -26,8 +28,21 @@ interface WorkflowStepDef {
 
 interface WorkflowDef {
   name: string;
+  // Selects a per-site "polite automation" policy (locale/timezone/pacing)
+  // from policy.ts -- optional, falls back to a generic default. See
+  // policy.ts and docs/PROJECT_PLAN.md decision log.
+  siteId?: string;
   steps: WorkflowStepDef[];
 }
+
+// Step types that click/navigate/fill -- get a small randomized pacing
+// delay before running, and a post-run challenge-page check after. Purely
+// read-only steps (extract, screenshot, saveSession, xcBankExtractDashboard)
+// don't cause a page transition, so neither applies to them.
+const INTERACTIVE_STEP_TYPES = new Set(["navigate", "dismissPopup", "login", "xcBankLogin", "xcBankLogoutClean"]);
+// Only these can land on a genuinely new page worth challenge-checking
+// (dismissPopup/xcBankLogoutClean stay on the same page).
+const CHALLENGE_CHECK_STEP_TYPES = new Set(["navigate", "login", "xcBankLogin"]);
 
 // Only read-only/idempotent actions are retried by default -- login and
 // saveSession are state-changing, so they only retry if a workflow
@@ -93,6 +108,9 @@ function validateWorkflow(workflow: WorkflowDef): void {
   if (!Array.isArray(workflow.steps) || workflow.steps.length === 0) {
     throw new Error("Workflow must have a non-empty steps array");
   }
+  if (workflow.siteId !== undefined && typeof workflow.siteId !== "string") {
+    throw new Error('"siteId" must be a string if present');
+  }
   workflow.steps.forEach((workflowStep, index) => {
     const label = `Step ${index + 1}`;
     if (typeof workflowStep.type !== "string" || !(workflowStep.type in ACTION_HANDLERS)) {
@@ -128,6 +146,26 @@ async function main(): Promise<void> {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = context.pages()[0] ?? (await context.newPage());
 
+  const policy = getPolicy(workflow.siteId);
+  // Raw CDP, not Playwright's newContext({locale, timezoneId}) -- this
+  // context/page already exists (reused from the shared browser above),
+  // and Playwright's high-level locale/timezone options only take effect
+  // at context-creation time. Emulation.set*Override applies to an
+  // existing target instead. See docs/PROJECT_PLAN.md decision log.
+  await step("apply-policy", async () => {
+    const cdp = await context.newCDPSession(page);
+    await cdp.send("Emulation.setTimezoneOverride", { timezoneId: policy.timezoneId });
+    await cdp.send("Emulation.setLocaleOverride", { locale: policy.locale });
+    // setLocaleOverride only affects Intl/date-formatting -- confirmed
+    // empirically it does NOT change navigator.language/navigator.languages.
+    // Those reflect Accept-Language, set via setUserAgentOverride's
+    // acceptLanguage field -- the real userAgent string is read back and
+    // passed through unchanged, so this never misrepresents the browser
+    // itself, only its language preference.
+    const realUserAgent = await page.evaluate(() => navigator.userAgent);
+    await cdp.send("Emulation.setUserAgentOverride", { userAgent: realUserAgent, acceptLanguage: policy.locale });
+  });
+
   for (const [index, workflowStep] of workflow.steps.entries()) {
     const handler = ACTION_HANDLERS[workflowStep.type];
     if (!handler) {
@@ -145,7 +183,25 @@ async function main(): Promise<void> {
           ? { captureResult: true }
           : undefined;
 
-    await stepWithRetry(stepName, () => handler({ page, context }, params), resolveRetry(workflowStep), opts);
+    if (INTERACTIVE_STEP_TYPES.has(workflowStep.type)) {
+      await page.waitForTimeout(randomDelay(policy.actionDelayMs));
+    }
+
+    await stepWithRetry(
+      stepName,
+      () => handler({ page, context, policy }, params),
+      resolveRetry(workflowStep),
+      opts,
+    );
+
+    if (CHALLENGE_CHECK_STEP_TYPES.has(workflowStep.type)) {
+      await step(`${index + 1}-challenge-check`, async () => {
+        const matched = await detectChallenge(page);
+        if (matched) {
+          throw new Error(`Challenge detected on page (matched /${matched}/i) — stopping, not attempting to bypass`);
+        }
+      });
+    }
 
     if (workflowStep.type === "screenshot") {
       const filename = String(params.filename ?? "");

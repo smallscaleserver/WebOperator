@@ -1,5 +1,6 @@
 {
   "name": "xc-bank-logout-clean",
+  "siteId": "xc-bank",
   "steps": [
     { "type": "xcBankLogoutClean", "params": {} }
   ]

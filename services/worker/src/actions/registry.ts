@@ -2,10 +2,17 @@ import { mkdir } from "node:fs/promises";
 import { dirname, join } from "node:path";
 import type { Page, BrowserContext } from "playwright-core";
 import * as xcBank from "../adapters/xc-bank.js";
+import { getPolicy, humanFill, type SitePolicy } from "../policy.js";
+
+const DEFAULT_POLICY = getPolicy();
 
 export interface ActionContext {
   page: Page;
   context: BrowserContext;
+  // Optional -- run-workflow.ts always provides the resolved per-site
+  // policy; falls back to the generic default for any handler invoked
+  // outside that path (nothing currently does).
+  policy?: SitePolicy;
 }
 
 export type ActionParams = Record<string, unknown>;
@@ -50,7 +57,7 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return { dismissed: appeared };
   },
 
-  login: async ({ page }, params) => {
+  login: async ({ page, policy }, params) => {
     const usernameSelector = requireString(params, "usernameSelector");
     const passwordSelector = requireString(params, "passwordSelector");
     const submitSelector = requireString(params, "submitSelector");
@@ -58,9 +65,10 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
     const password = requireString(params, "password");
     const flashSelector = typeof params.flashSelector === "string" ? params.flashSelector : undefined;
     const successClass = typeof params.successClass === "string" ? params.successClass : undefined;
+    const activePolicy = policy ?? DEFAULT_POLICY;
 
-    await page.fill(usernameSelector, username);
-    await page.fill(passwordSelector, password);
+    await humanFill(page.locator(usernameSelector), username, activePolicy);
+    await humanFill(page.locator(passwordSelector), password, activePolicy);
     await page.click(submitSelector);
 
     if (!flashSelector) return undefined;
@@ -99,10 +107,10 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   // these three actions only ever touch it through the DOM via `page`,
   // exactly like any other adapter in this registry; see
   // adapters/xc-bank.ts and docs/PROJECT_PLAN.md's decision log.
-  xcBankLogin: async ({ page }, params) => {
+  xcBankLogin: async ({ page, policy }, params) => {
     const username = requireString(params, "username");
     const password = requireString(params, "password");
-    const result = await xcBank.login(page, { username, password });
+    const result = await xcBank.login(page, { username, password }, policy ?? DEFAULT_POLICY);
     switch (result.path) {
       case "already-authenticated":
         return `Already authenticated as ${username} (session reused, password step skipped)`;

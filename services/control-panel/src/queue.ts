@@ -15,6 +15,16 @@ const connection = { url: REDIS_URL };
 // within the requested 10-30s range.
 const MONITOR_SCHEDULER_ID = "monitor:xc-bank";
 const MONITOR_INTERVAL_MS = Number(process.env.XC_BANK_MONITOR_INTERVAL_MS ?? 20_000);
+// Max random extra delay before a *scheduled* tick actually runs -- avoids
+// a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
+// jobs (and the immediate first tick after Start) are untagged and skip
+// this entirely, since a user explicitly asking for a check expects it
+// right away. See docs/PROJECT_PLAN.md decision log ("polite automation").
+const MONITOR_JITTER_MS = Number(process.env.XC_BANK_MONITOR_JITTER_MS ?? 5_000);
+
+function sleep(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
 
 // Only the automation actions are queueable — browser start/stop are
 // container-lifecycle calls, not automation jobs, and stay on the existing
@@ -39,6 +49,9 @@ export function startWorker(): Worker {
     QUEUE_NAME,
     async (job): Promise<ActionResult> => {
       if (job.name === MONITOR_JOB_NAME) {
+        if (job.data?.scheduled === true) {
+          await sleep(Math.random() * MONITOR_JITTER_MS);
+        }
         const state = await checkOnce();
         return {
           ok: state.lastError === null,
@@ -100,7 +113,14 @@ export async function isMonitorScheduled(): Promise<boolean> {
 }
 
 export async function startMonitorSchedule(): Promise<void> {
-  await queue.upsertJobScheduler(MONITOR_SCHEDULER_ID, { every: MONITOR_INTERVAL_MS }, { name: MONITOR_JOB_NAME });
+  // data.scheduled tags jobs produced by the scheduler itself (not the
+  // immediate first-tick enqueue below, and not a manual "Check once")
+  // so the processor above knows which jobs to jitter.
+  await queue.upsertJobScheduler(
+    MONITOR_SCHEDULER_ID,
+    { every: MONITOR_INTERVAL_MS },
+    { name: MONITOR_JOB_NAME, data: { scheduled: true } },
+  );
   // Also fire one check immediately rather than assuming/relying on the
   // scheduler's own first-tick timing, so the UI shows real data right
   // away instead of waiting up to a full interval.

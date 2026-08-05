@@ -1,4 +1,5 @@
 import type { Page } from "playwright-core";
+import { humanFill, type SitePolicy } from "../policy.js";
 
 // Mock third-party site run by services/xc-bank -- reached only over
 // HTTP like any other external site (network-only channel, no shared
@@ -18,6 +19,7 @@ export interface LoginResult {
 export async function login(
   page: Page,
   credentials: { username: string; password: string },
+  policy: SitePolicy,
 ): Promise<LoginResult> {
   await page.goto(`${BASE_URL}/login`, { waitUntil: "domcontentloaded" });
 
@@ -27,18 +29,18 @@ export async function login(
 
   if (/\/password$/.test(page.url())) {
     // Username already remembered by the site -- don't re-fill it.
-    await page.fill("#password", credentials.password);
+    await humanFill(page.locator("#password"), credentials.password, policy);
     await page.click("button[type=submit]");
     await page.waitForURL(/\/dashboard$/);
     return { path: "remembered-username" };
   }
 
   // Still on /login: a genuinely fresh session, fill both steps.
-  await page.fill("#username", credentials.username);
+  await humanFill(page.locator("#username"), credentials.username, policy);
   await page.click("button[type=submit]");
 
   await page.waitForURL(/\/password$/);
-  await page.fill("#password", credentials.password);
+  await humanFill(page.locator("#password"), credentials.password, policy);
   await page.click("button[type=submit]");
 
   await page.waitForURL(/\/dashboard$/);

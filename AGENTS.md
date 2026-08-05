@@ -346,6 +346,58 @@ log). `monitors-registry.ts`'s `MonitorSummary`/`MonitorDefinition`
 carry a `livePath` alongside `detailPath` for this — a future second
 monitor gets both links automatically, same as today.
 
+**"Polite automation" pass** (`services/worker/src/policy.ts` +
+`challenge.ts`) — false-positive-reduction measures, **not** a bypass or
+fingerprint-evasion layer. Explicitly does *not* touch
+`navigator.webdriver`, CDP artifacts, or anything that misrepresents
+what the client actually is; those were discussed and deliberately left
+out of scope. Four parts:
+- **Per-site policy** (`policy.ts`'s `SITE_POLICIES`, keyed by a
+  workflow's optional `siteId` field — `xc-bank`'s workflows set
+  `"siteId": "xc-bank"`, everything else falls back to a generic
+  default): locale/timezone + a pacing range. Adding a second site's own
+  policy later is one more `SITE_POLICIES` entry, same extensibility
+  shape as `monitors-registry.ts`.
+- **Locale/timezone via raw CDP**, applied once per workflow run (a new
+  `apply-policy` step in `run-workflow.ts`, right after `connect`) —
+  **not** Playwright's `newContext({locale, timezoneId})`, because
+  `run-workflow.ts` reuses the browser's *existing* default context/page
+  rather than creating a fresh one, and those options only take effect
+  at context-creation time. Uses `context.newCDPSession(page)` +
+  `Emulation.setTimezoneOverride`/`setLocaleOverride`. **Found
+  empirically, not assumed**: `setLocaleOverride` changes `Intl`/date
+  formatting but does *not* change `navigator.language` — that comes
+  from `Emulation.setUserAgentOverride`'s `acceptLanguage` field, which
+  is also called with the *real* `navigator.userAgent` read back
+  unchanged (never a spoofed/different browser identity, only the
+  language preference).
+- **Pacing delay**: before any step of type
+  `navigate`/`dismissPopup`/`login`/`xcBankLogin`/`xcBankLogoutClean`
+  (i.e. anything that clicks/navigates), a randomized
+  `page.waitForTimeout()` from the policy's `actionDelayMs` range.
+  Typing itself uses `policy.ts`'s `humanFill()`
+  (`locator.pressSequentially(text, {delay})`) instead of Playwright's
+  instant `fill()`, in the two places credentials are typed:
+  `actions/registry.ts`'s `login` handler and
+  `adapters/xc-bank.ts`'s `login()`.
+- **Challenge detector** (`challenge.ts`'s `detectChallenge()`) — checks
+  rendered page text for CAPTCHA/verification/2FA wording after any
+  `navigate`/`login`/`xcBankLogin` step. On a match, the step throws a
+  clear "detected, not attempting to bypass" error — it never tries to
+  solve or click through anything. Flows through existing
+  machinery unchanged: a real challenge on an XC Bank monitor check
+  shows up as a normal `lastError` string with zero monitor-side code
+  changes, since the monitor's checks already run through this same
+  `run-workflow.ts` engine.
+
+The monitor's own **scheduling interval** also got a matching change,
+in `services/control-panel/src/queue.ts` (not `run-workflow.ts`, since
+that's the BullMQ scheduling layer): `MONITOR_JITTER_MS` (default 5s)
+adds a random extra delay before a *scheduled* tick's `checkOnce()`
+runs — a manual "Check once" (and the immediate first tick after
+"Start") stay instant, distinguished via a `data: { scheduled: true }`
+tag on the scheduler's own job template.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -362,6 +414,8 @@ services/control-panel/public/xc-bank-monitor-live.html+.js  XC Bank live/curren
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path
+services/worker/src/policy.ts  Per-site "polite automation" policy (locale/timezone/pacing) + humanFill() -- add a new site's own entry here
+services/worker/src/challenge.ts  Basic CAPTCHA/verification/2FA page-text detector -- detects and stops, never bypasses
 services/worker/src/actions/  Generic action registry (navigate/dismissPopup/login/extract/saveSession/screenshot/xcBankLogin/xcBankExtractDashboard/xcBankLogoutClean)
 services/worker/workflows/    Named JSON workflow definitions run by run-workflow.ts via the generic registry
 services/worker/src/gmail/    Phase 3 Gmail OAuth/API scaffold, dev/local, host-run (not in Docker) -- see decision log

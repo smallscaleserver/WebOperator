@@ -1916,3 +1916,78 @@ Appending correctly from here on. -->
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-06 (session 2, later) — Claude
+
+- Status: Done
+- Context: Shipped the "polite automation" pass per the claim above.
+  Went through plan mode, approved before implementing.
+- Files: `services/worker/src/policy.ts` (new — `SitePolicy`,
+  `SITE_POLICIES` keyed by `siteId`, `getPolicy()`, `randomDelay()`,
+  `humanFill()`), `services/worker/src/challenge.ts` (new —
+  `detectChallenge()`, keyword list, never attempts to bypass),
+  `services/worker/src/run-workflow.ts` (`WorkflowDef.siteId` +
+  validation, new `apply-policy` step using
+  `context.newCDPSession(page)` + `Emulation.setTimezoneOverride`/
+  `setLocaleOverride`/`setUserAgentOverride`, pre-step pacing delay for
+  interactive step types, post-step challenge check for
+  navigate/login/xcBankLogin), `services/worker/src/actions/registry.ts`
+  (`ActionContext` gained optional `policy`; `login` handler now uses
+  `humanFill` instead of `page.fill`; `xcBankLogin` passes the resolved
+  policy through), `services/worker/src/adapters/xc-bank.ts` (`login()`
+  gained a required `policy` param, uses `humanFill` for both fields),
+  `services/worker/workflows/xc-bank-login-extract.json` +
+  `xc-bank-logout-clean.json` + `xc-bank-monitor-check.json` (each
+  gained `"siteId": "xc-bank"`), `services/control-panel/src/queue.ts`
+  (`MONITOR_JITTER_MS`, `data: {scheduled: true}` tag on the scheduler's
+  job template, conditional jitter sleep before `checkOnce()`),
+  `AGENTS.md` (new "polite automation" section + repo-layout entries),
+  `docs/PROJECT_PLAN.md` (6 new decision-log rows + Immediate-next-step
+  paragraph).
+- Verified: `npx tsc --noEmit` clean in both `services/worker` and
+  `services/control-panel`. Restarted both host Control Panel processes
+  to pick up the `queue.ts` change (worker's own changes are picked up
+  live via the existing bind mount, no image rebuild needed). **Real
+  end-to-end runs through the live queue**: `xc-bank-login-extract`
+  completed with the new `apply-policy`/`1-challenge-check` steps
+  visible alongside the existing ones, all `ok`. **Locale/timezone,
+  proven not assumed**: a throwaway script applied the `xc-bank` policy
+  via CDP and read back `Intl.DateTimeFormat().resolvedOptions().timeZone`/
+  `navigator.language` — confirmed `Asia/Bangkok`/`th-TH`. **Caught and
+  fixed a real gap during this check**: `Emulation.setLocaleOverride`
+  changes `Intl` formatting but does *not* change `navigator.language`
+  (first version still reported `en-US`) — fixed by also calling
+  `Emulation.setUserAgentOverride` with the *real* `navigator.userAgent`
+  (read back and passed through unchanged) plus `acceptLanguage` from
+  the policy; re-verified, `navigator.language` correctly reported
+  `th-TH` afterward, real Chrome UA string unchanged (not a browser-
+  identity spoof, only the language preference). **Challenge detector,
+  both branches**: `page.setContent()` with CAPTCHA-style text →
+  matched `"captcha"`; normal dashboard-style text → `null`; a real
+  `xc-bank-login-extract` run afterward confirmed no false positive
+  against actual XC Bank page content. **Validation, not just the happy
+  path**: a throwaway workflow file with `"siteId": 123` (wrong type)
+  enqueued fine (Control Panel's pre-enqueue check doesn't duplicate the
+  worker-side type check, same posture as the existing action-type
+  check) but failed cleanly at the worker's own `validate` step with
+  zero browser interaction, exactly as designed — deleted after.
+  **Monitor jitter**: stopped and restarted the schedule so the new
+  tagged job template took effect, then measured real consecutive
+  scheduled-tick gaps of 15.5s and 18.75s around the nominal 20s
+  interval (not identical to each other or to 20.000s, consistent with
+  jitter) versus a manual "Check once" completing in ~3.2s with no added
+  delay — matches the intended "scheduled ticks jittered, manual stays
+  instant" split. **Regression**: `the-internet-login` (no `siteId`,
+  default policy) ran its full 7-step sequence successfully with the new
+  `apply-policy`/challenge-check steps interleaved correctly; `demo` and
+  `xc-bank-logout-clean` also ran clean. All debug scripts (a
+  `debug-policy-verify.ts` worker script, a throwaway bad-`siteId`
+  workflow JSON) deleted before committing.
+  Left the Docker stack and both host processes running (no explicit
+  instruction to tear down this round, and the user has consistently
+  wanted the stack left up for their own use throughout this session).
+- Next: same open items as before, plus — if ever revisited — the
+  explicitly-deferred items from this round's own scoping discussion
+  (`navigator.webdriver`/CDP-artifact patching, mouse-movement
+  humanization, proxy/residential-IP work), only if the user explicitly
+  asks for them later.
