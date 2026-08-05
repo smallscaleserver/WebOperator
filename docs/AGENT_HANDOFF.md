@@ -1991,3 +1991,31 @@ Appending correctly from here on. -->
   (`navigator.webdriver`/CDP-artifact patching, mouse-movement
   humanization, proxy/residential-IP work), only if the user explicitly
   asks for them later.
+
+### 2026-08-06 (session 3) — Claude
+
+- Status: In progress
+- Context: **Claiming: Monitor Control UX polish**, follow-up to the
+  "polite automation" pass now that there's a real jittered background
+  loop — explicit direct instruction with a 6-item scope: (1) Control
+  Center shows the monitor is running with an approximate/jittered
+  interval, not a fixed one; (2) "Pause all monitors"/"Stop all
+  monitors" bulk buttons; (3) a "scheduled vs. manual" badge in the job
+  list or monitor panel; (4) a next-scheduled-check estimate where
+  feasible; (5) a warning if a monitor's been running a long time with
+  accumulated screenshots; (6) a dev-only cleanup button for monitor
+  screenshots/state. Plus: finish this round with a clean Docker
+  rebuild + redeploy (not just hot-reload verification) and update the
+  relevant `.md` docs. Checked `git log` first — still at `eba0914`,
+  nothing new claimed.
+  Will research `getJobSchedulers()`'s `next`/`every` fields (already
+  used once this session for `isMonitorScheduled()`) and the existing
+  `monitors-registry.ts` extensibility shape before designing pause/
+  resume + bulk actions, then go through plan mode given the surface
+  area (new monitor state field, new queue job type for cleanup, new
+  routes, UI changes across three pages). If you're Codex (or another
+  session) reading this before a "Done" entry below: this is claimed —
+  check back here or pick a different open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
