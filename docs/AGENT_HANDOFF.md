@@ -221,10 +221,27 @@ and sessions.
   free. Did **not** run step 4 (rebuild) or step 5 (verify) this round —
   intentionally left the stack fully torn down, per the explicit
   instruction not to rebuild yet.
-- Next: **the stack is currently fully down and images are gone** — next
-  session/turn should rebuild via `CleanAll.md` step 4 before expecting
-  `http://localhost:4000` to work, unless the user says otherwise. Same
-  other open items as before.
+- Next: same other open items as before.
+
+### 2026-08-06 (later still) — Claude
+
+- Status: Done
+- Context: Redeployed after the previous entry's full `--rmi all` wipe —
+  explicit instruction ("commit push and redeploy"). Nothing was
+  pending to commit/push (already at `607221a`, matching `origin/main`).
+- Files: none — redeploy only.
+- Verified: `docker compose build xc-bank browser-worker-chrome
+  browser-worker-firefox worker worker-firefox` — all 5 rebuilt clean.
+  `docker compose up -d redis minio xc-bank browser-worker-chrome` —
+  this time genuinely **re-pulled `redis:7-alpine`/`minio/minio:latest`
+  from the network** (visible in the compose output, layer-by-layer),
+  confirming `CleanAll.md`'s new warning about the `--rmi all` path
+  needing network access is accurate, not just theorized. All 4 services
+  came up. Restarted both host processes — clean startup logs, `/api/status`
+  showed Chrome running. Enqueued `xc-bank-login-extract` for real
+  through the live queue — completed with all 6 expected steps `ok`.
+  Stack is fully up again, matching pre-wipe behavior.
+- Next: same open items as before.
 
 ### 2026-07-23 05:05 ICT — Codex
 
