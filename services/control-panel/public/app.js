@@ -200,9 +200,13 @@ async function pollJobs() {
             const displayName = job.name.startsWith("workflow:")
               ? `workflow: ${job.name.slice("workflow:".length)}`
               : job.name;
+            const scheduleBadge =
+              job.name === "xc-bank-monitor-check"
+                ? ` <span class="badge ${job.scheduled ? "scheduled" : "manual"}">${job.scheduled ? "scheduled" : "manual"}</span>`
+                : "";
             return `<tr class="job-row" data-job-id="${job.id}">
               <td>${job.id}</td>
-              <td>${escapeHtml(displayName)}</td>
+              <td>${escapeHtml(displayName)}${scheduleBadge}</td>
               <td><span class="badge ${job.state}">${job.state}</span></td>
               <td class="job-result" title="${result}">${result}</td>
             </tr>
@@ -239,6 +243,18 @@ async function callMonitorAction(id, action) {
   await loadMonitors();
 }
 
+function formatIntervalText(m) {
+  if (!m.intervalMs) return "";
+  const seconds = Math.round(m.intervalMs / 1000);
+  const jitterSeconds = Math.round((m.jitterMs || 0) / 1000);
+  return jitterSeconds > 0 ? `~${seconds}s (±${jitterSeconds}s jitter)` : `~${seconds}s`;
+}
+
+function formatNextCheck(m) {
+  if (!m.running || m.paused || !m.nextCheckEstimate) return "";
+  return `Next check: ~${new Date(m.nextCheckEstimate).toLocaleTimeString()}`;
+}
+
 function renderMonitors(monitors) {
   const el = document.getElementById("monitors-list");
   if (!monitors || monitors.length === 0) {
@@ -247,24 +263,34 @@ function renderMonitors(monitors) {
   }
   el.innerHTML = monitors
     .map((m) => {
-      const dotClass = m.lastError ? "error" : m.running ? "running" : "stopped";
-      const statusLabel = m.lastError ? "error" : m.running ? "running" : "stopped";
+      const dotClass = m.lastError ? "error" : m.paused ? "paused" : m.running ? "running" : "stopped";
+      const statusLabel = m.lastError ? "error" : m.paused ? "paused" : m.running ? "running" : "stopped";
       const summary = m.summary ? escapeHtml(m.summary) : "(no data yet)";
       const lastChecked = m.lastCheckedAt ? escapeHtml(m.lastCheckedAt) : "never";
       const errorLine = m.lastError ? `<div class="error">${escapeHtml(m.lastError)}</div>` : "";
+      const warningLine = m.longRunningWarning
+        ? `<div class="monitor-warning">⚠ ${escapeHtml(m.longRunningWarning)}</div>`
+        : "";
+      const intervalText = formatIntervalText(m);
+      const nextCheckText = formatNextCheck(m);
+      const pauseResumeBtn = m.paused
+        ? `<button data-monitor="${escapeHtml(m.id)}" data-monitor-action="resume">Resume</button>`
+        : `<button data-monitor="${escapeHtml(m.id)}" data-monitor-action="pause" ${m.running ? "" : "disabled"}>Pause</button>`;
       return `<div class="monitor-card">
         <div class="row">
           <span class="dot ${dotClass}"></span>
           <strong>${escapeHtml(m.name)}</strong>
-          <span class="hint">${statusLabel}</span>
-          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="start" ${m.running ? "disabled" : ""}>Start</button>
+          <span class="hint">${statusLabel}${intervalText ? ` — ${escapeHtml(intervalText)}` : ""}</span>
+          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="start" ${m.running && !m.paused ? "disabled" : ""}>Start</button>
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="stop" ${m.running ? "" : "disabled"}>Stop</button>
+          ${pauseResumeBtn}
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="check-once">Check once</button>
           <a href="${m.detailPath}">Detail</a>
           <a href="${m.livePath}">Live</a>
         </div>
-        <div class="hint">${summary} — last checked: ${lastChecked}</div>
+        <div class="hint">${summary} — last checked: ${lastChecked}${nextCheckText ? ` — ${escapeHtml(nextCheckText)}` : ""}</div>
         ${errorLine}
+        ${warningLine}
       </div>`;
     })
     .join("");
@@ -273,6 +299,23 @@ function renderMonitors(monitors) {
     btn.addEventListener("click", () => callMonitorAction(btn.dataset.monitor, btn.dataset.monitorAction));
   });
 }
+
+document.getElementById("pause-all-monitors").addEventListener("click", async () => {
+  try {
+    await fetch("/api/monitors/pause-all", { method: "POST" });
+  } catch (err) {
+    console.error("pause-all failed", err);
+  }
+  await loadMonitors();
+});
+document.getElementById("stop-all-monitors").addEventListener("click", async () => {
+  try {
+    await fetch("/api/monitors/stop-all", { method: "POST" });
+  } catch (err) {
+    console.error("stop-all failed", err);
+  }
+  await loadMonitors();
+});
 
 async function loadMonitors() {
   const el = document.getElementById("monitors-list");

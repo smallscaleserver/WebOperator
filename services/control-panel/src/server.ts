@@ -10,13 +10,16 @@ import {
   listRecentJobs,
   closeQueue,
   enqueueMonitorCheckOnce,
-  isMonitorScheduled,
+  enqueueMonitorCleanup,
+  getMonitorScheduleInfo,
+  pauseMonitor,
+  resumeMonitor,
   startMonitorSchedule,
   stopMonitorSchedule,
 } from "./queue.js";
 import { getArtifactStream } from "./artifacts.js";
 import { loadState as loadMonitorState } from "./monitor.js";
-import { listMonitorSummaries } from "./monitors-registry.js";
+import { listMonitorSummaries, pauseAllMonitors, stopAllMonitors } from "./monitors-registry.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -203,6 +206,27 @@ app.get("/api/monitors", async (_req, res) => {
   }
 });
 
+// Bulk actions across every registered monitor -- see
+// monitors-registry.ts's pauseAllMonitors/stopAllMonitors. Only XC Bank
+// exists today; a future second monitor is included automatically.
+app.post("/api/monitors/pause-all", async (_req, res) => {
+  try {
+    await pauseAllMonitors();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/stop-all", async (_req, res) => {
+  try {
+    await stopAllMonitors();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
 // XC Bank monitor: a continuous check loop, isolated to its own JSON
 // state file and BullMQ Job Scheduler -- read-only status combines the
 // persisted state (fs-based, no Redis needed) with the scheduler's own
@@ -212,8 +236,15 @@ app.get("/api/monitors", async (_req, res) => {
 // documented for /api/enqueue*/api/jobs elsewhere in this file).
 app.get("/api/monitors/xc-bank", async (_req, res) => {
   try {
-    const [state, running] = await Promise.all([loadMonitorState(), isMonitorScheduled()]);
-    res.json({ ok: true, running, ...state });
+    const [state, schedule] = await Promise.all([loadMonitorState(), getMonitorScheduleInfo()]);
+    res.json({
+      ok: true,
+      running: schedule.running,
+      intervalMs: schedule.every,
+      jitterMs: schedule.jitterMs,
+      nextCheckEstimate: schedule.next !== null ? new Date(schedule.next).toISOString() : null,
+      ...state,
+    });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
@@ -240,6 +271,39 @@ app.post("/api/monitors/xc-bank/stop", async (_req, res) => {
 app.post("/api/monitors/xc-bank/check-once", async (_req, res) => {
   try {
     const jobId = await enqueueMonitorCheckOnce();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// Lighter than stop: leaves the scheduler running (so next/iterationCount
+// stay meaningful) but skips the actual check on each scheduled tick.
+// Manual "Check once" ignores this and always runs.
+app.post("/api/monitors/xc-bank/pause", async (_req, res) => {
+  try {
+    const jobId = await pauseMonitor();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/xc-bank/resume", async (_req, res) => {
+  try {
+    const jobId = await resumeMonitor();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// Dev-only: wipes this monitor's tracked screenshots/history/notifications
+// (not XC Bank's own site data). Routed through the queue (like
+// check-once) so it can't race an in-flight check's file writes.
+app.post("/api/monitors/xc-bank/cleanup", async (_req, res) => {
+  try {
+    const jobId = await enqueueMonitorCleanup();
     res.json({ ok: true, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

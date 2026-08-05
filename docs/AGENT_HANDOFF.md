@@ -2019,3 +2019,78 @@ Appending correctly from here on. -->
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-06 (session 3, later) — Claude
+
+- Status: Done
+- Context: Shipped Monitor Control UX polish per the claim above. Went
+  through plan mode, approved before implementing.
+- Files: `services/control-panel/src/monitor.ts` (`paused` field on
+  `MonitorState`, `setPaused()`, `resetState()`), `src/queue.ts`
+  (pause-aware scheduled-tick branch, `MONITOR_CLEANUP_JOB_NAME` +
+  `MONITOR_SET_PAUSED_JOB_NAME` job types, `getMonitorScheduleInfo()`
+  replacing `isMonitorScheduled()`, `pauseMonitor`/`resumeMonitor`/
+  `enqueueMonitorCleanup`, `JobSummary.scheduled`), `src/monitors-
+  registry.ts` (`MonitorSummary` gained `paused`/`intervalMs`/
+  `jitterMs`/`nextCheckEstimate`/`longRunningWarning`; `MonitorDefinition`
+  gained `pause`/`stop`; `pauseAllMonitors()`/`stopAllMonitors()`),
+  `src/server.ts` (`/api/monitors/pause-all`, `/stop-all`, per-monitor
+  `/pause`, `/resume`, `/cleanup`; `GET /api/monitors/xc-bank` extended),
+  `public/index.html` + `app.js` (Pause-all/Stop-all buttons, paused dot
+  state, interval/jitter text, next-check estimate, warning banner,
+  per-monitor Pause/Resume button, scheduled/manual job badge),
+  `public/xc-bank-monitor.html` + `.js` (same status additions + a
+  dev-only Cleanup button with a confirm dialog), `public/xc-bank-
+  monitor-live.html` + `.js` (same status additions, no Cleanup button —
+  kept out of this page's live-operation scope), `AGENTS.md` (new
+  Monitor Control UX subsection), `docs/PROJECT_PLAN.md` (5 new
+  decision-log rows + Immediate-next-step paragraph).
+- Verified: `npx tsc --noEmit` clean. Restarted both host Control Panel
+  processes to pick up the change (worker-side code untouched this
+  round). **Found and fixed a real concurrency bug during verification,
+  not assumed correct**: the first implementation called `setPaused()`
+  directly from the pause/resume API routes; a real test (fire a manual
+  check-once, then pause immediately after) showed `paused` silently
+  reverting to `false` — `checkOnce()` holds its own in-memory state
+  across a multi-second real-browser check and overwrites the file
+  wholesale at the end, clobbering a concurrent direct write. Fixed by
+  adding `xc-bank-monitor-set-paused` as a proper queued job type,
+  serialized by the same concurrency-1 queue as `checkOnce()` — re-ran
+  the exact failing scenario afterward and confirmed the pause job now
+  correctly queues behind the in-flight check and applies cleanly,
+  visible in both the API state and `/api/jobs`' completion order.
+  **Every flow proven for real, not just code-reviewed**: paused a
+  running monitor, waited past two full scheduled intervals, confirmed
+  `lastCheckedAt` genuinely froze while both ticks logged "Monitor
+  paused — scheduled check skipped"; confirmed a manual check-once still
+  runs while paused; resumed and confirmed `lastCheckedAt` genuinely
+  advanced again (~59s later) with no other calls interleaved; Pause-all/
+  Stop-all exercised via their real endpoints; Cleanup exercised for
+  real — a known screenshot's local file and MinIO copy both 404'd
+  afterward, and `screenshots`/`notifications`/`seenRefs` all confirmed
+  at 0. `longRunningWarning` observed for real (not synthetically
+  seeded) once the monitor's screenshot count genuinely hit
+  200/200 with an hour-plus-old oldest entry. Visually confirmed all
+  three pages (`/`, `/monitors/xc-bank`, `/monitors/xc-bank/live`) via
+  the established CDP-screenshot technique — interval/jitter text,
+  next-check estimate, Pause buttons, and (on `/`) the full Jobs-table
+  history of this session's own test jobs rendering with correct
+  scheduled/manual badges and "Monitor paused"/"Monitor resumed"/
+  "Monitor paused — scheduled check skipped" results all visible.
+  Regression: a `demo` workflow job correctly showed `scheduled: false`
+  (badge suppressed for non-monitor jobs); `/screenshots/*` and
+  `/api/artifacts/screenshots/*` both still 200 on a fresh post-cleanup
+  screenshot. **Clean Docker rebuild + redeploy**, the explicit final
+  ask: stopped everything, `docker compose down --rmi local` (confirmed
+  exactly the 5 repo-built images removed), rebuilt all 5, brought the
+  stack back up, restarted both host processes, then re-ran the pause/
+  resume race scenario and a full `xc-bank-login-extract` workflow
+  against the freshly-built images — both correct (note: this round's
+  actual code changes all live in `services/control-panel`, a host
+  process never containerized, so the rebuild's real verification value
+  here was confirming the worker/xc-bank images — which the monitor's
+  checks depend on — still work correctly, not re-testing the pause fix
+  itself, which doesn't live in a Docker image). Left the Docker stack
+  and both host processes running afterward (consistent with how the
+  user has wanted this session's stack kept up throughout).
+- Next: same open items as before.

@@ -6,13 +6,39 @@ function escapeHtml(str) {
   return div.innerHTML;
 }
 
-function setStatusUi(running, error) {
+function formatIntervalText(data) {
+  if (!data.intervalMs) return "";
+  const seconds = Math.round(data.intervalMs / 1000);
+  const jitterSeconds = Math.round((data.jitterMs || 0) / 1000);
+  return jitterSeconds > 0 ? `~${seconds}s (±${jitterSeconds}s jitter)` : `~${seconds}s`;
+}
+
+function setStatusUi(data) {
+  const running = !!data.running;
+  const paused = !!data.paused;
+  const error = data.lastError || data.error || null;
+
   const dot = document.getElementById("status-dot");
   const label = document.getElementById("status-label");
-  dot.className = `dot ${running ? "running" : "stopped"}`;
-  label.textContent = running ? "running" : "stopped";
-  document.getElementById("start-btn").disabled = running;
+  const dotClass = error && !running ? "stopped" : paused ? "paused" : running ? "running" : "stopped";
+  const labelText = paused ? "paused" : running ? "running" : "stopped";
+  dot.className = `dot ${dotClass}`;
+  label.textContent = labelText;
+  document.getElementById("interval-text").textContent = running ? formatIntervalText(data) : "";
+
+  document.getElementById("start-btn").disabled = running && !paused;
   document.getElementById("stop-btn").disabled = !running;
+  document.getElementById("pause-btn").style.display = paused ? "none" : "inline-block";
+  document.getElementById("resume-btn").style.display = paused ? "inline-block" : "none";
+  document.getElementById("pause-btn").disabled = !running;
+
+  const nextCheckEl = document.getElementById("next-check");
+  if (running && !paused && data.nextCheckEstimate) {
+    nextCheckEl.textContent = `Next check: ~${new Date(data.nextCheckEstimate).toLocaleTimeString()}`;
+    nextCheckEl.style.display = "block";
+  } else {
+    nextCheckEl.style.display = "none";
+  }
 
   const errorEl = document.getElementById("last-error");
   if (error) {
@@ -20,6 +46,14 @@ function setStatusUi(running, error) {
     errorEl.style.display = "block";
   } else {
     errorEl.style.display = "none";
+  }
+
+  const warningEl = document.getElementById("long-running-warning");
+  if (data.longRunningWarning) {
+    warningEl.textContent = `⚠ ${data.longRunningWarning}`;
+    warningEl.style.display = "block";
+  } else {
+    warningEl.style.display = "none";
   }
 }
 
@@ -130,10 +164,10 @@ async function fetchStatus() {
     const res = await fetch("/api/monitors/xc-bank");
     const data = await res.json();
     if (!data.ok) {
-      setStatusUi(false, data.error || "Unknown error");
+      setStatusUi({ running: false, error: data.error || "Unknown error" });
       return;
     }
-    setStatusUi(data.running, data.lastError);
+    setStatusUi(data);
     document.getElementById("last-checked").textContent = `Last checked: ${data.lastCheckedAt || "never"}`;
     document.getElementById("balance").textContent =
       data.latestBalance !== null && data.latestBalance !== undefined ? `$${Number(data.latestBalance).toFixed(2)}` : "—";
@@ -141,7 +175,7 @@ async function fetchStatus() {
     renderTransactions(data.latestTransactions);
     lastScreenshots = data.screenshots || [];
   } catch (err) {
-    setStatusUi(false, `Could not reach the Control Panel API: ${err}`);
+    setStatusUi({ running: false, error: `Could not reach the Control Panel API: ${err}` });
   }
   await pollChromeStatus(lastScreenshots);
 }
@@ -151,16 +185,18 @@ async function callAndRefresh(url) {
     const res = await fetch(url, { method: "POST" });
     const data = await res.json();
     if (!data.ok) {
-      setStatusUi(false, data.error || "Request failed");
+      setStatusUi({ running: false, error: data.error || "Request failed" });
     }
   } catch (err) {
-    setStatusUi(false, `Request failed: ${err}`);
+    setStatusUi({ running: false, error: `Request failed: ${err}` });
   }
   await fetchStatus();
 }
 
 document.getElementById("start-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/start"));
 document.getElementById("stop-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/stop"));
+document.getElementById("pause-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/pause"));
+document.getElementById("resume-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/resume"));
 document.getElementById("check-once-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/check-once"));
 document.getElementById("start-chrome-btn").addEventListener("click", async () => {
   document.getElementById("start-chrome-btn").disabled = true;

@@ -42,6 +42,11 @@ export interface MonitorState {
   seenRefs: string[];
   notifications: NotificationEntry[];
   screenshots: ScreenshotEntry[];
+  // Skips the actual check on a *scheduled* tick (manual "Check once"
+  // ignores this) while leaving the BullMQ scheduler itself running --
+  // lighter than stop, which removes the scheduler entirely. See
+  // queue.ts and docs/PROJECT_PLAN.md decision log.
+  paused: boolean;
 }
 
 function emptyState(): MonitorState {
@@ -53,6 +58,7 @@ function emptyState(): MonitorState {
     seenRefs: [],
     notifications: [],
     screenshots: [],
+    paused: false,
   };
 }
 
@@ -158,6 +164,26 @@ export async function checkOnce(): Promise<MonitorState> {
 
   await saveState(state);
   return state;
+}
+
+export async function setPaused(paused: boolean): Promise<MonitorState> {
+  const state = await loadState();
+  state.paused = paused;
+  await saveState(state);
+  return state;
+}
+
+// Dev-only "cleanup" action -- wipes every tracked screenshot (local +
+// MinIO, best-effort, same deleteScreenshot() used by normal 200-item
+// retention pruning) and resets state back to empty. Does not touch XC
+// Bank's own site data (a different, isolated system) -- only this
+// monitor's own tracking. Routed through the queue by the caller (not
+// called directly here) so it can't race an in-flight checkOnce()'s
+// file writes.
+export async function resetState(): Promise<void> {
+  const state = await loadState();
+  await Promise.all(state.screenshots.map((s) => deleteScreenshot(s.filename)));
+  await saveState(emptyState());
 }
 
 // Exposed for the retention verification test -- lets a test seed state

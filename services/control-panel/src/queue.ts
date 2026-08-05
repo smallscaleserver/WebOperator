@@ -1,7 +1,7 @@
 import { Queue, Worker } from "bullmq";
 import { runAction, runWorkflow, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
-import { checkOnce, MONITOR_JOB_NAME } from "./monitor.js";
+import { checkOnce, loadState, resetState, setPaused, MONITOR_JOB_NAME } from "./monitor.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const QUEUE_NAME = "worker-actions";
@@ -14,6 +14,18 @@ const connection = { url: REDIS_URL };
 // interrupt) a manual job on the same shared browser. Dev default 20s,
 // within the requested 10-30s range.
 const MONITOR_SCHEDULER_ID = "monitor:xc-bank";
+// Dev-only "wipe this monitor's tracked history/screenshots" job --
+// routed through the same concurrency-1 queue as checkOnce so it can
+// never race an in-flight check's file writes.
+const MONITOR_CLEANUP_JOB_NAME = "xc-bank-monitor-cleanup";
+// Pause/resume also route through this queue, not a direct setPaused()
+// call -- found empirically, not assumed: checkOnce() holds its own
+// in-memory state object across a multi-second real-browser check, and
+// a direct out-of-band file write landing inside that window gets
+// silently overwritten by checkOnce()'s own eventual save (it writes
+// back whatever paused value it read at *its* load time). Queueing
+// serializes this the same way it already does for cleanup.
+const MONITOR_SET_PAUSED_JOB_NAME = "xc-bank-monitor-set-paused";
 const MONITOR_INTERVAL_MS = Number(process.env.XC_BANK_MONITOR_INTERVAL_MS ?? 20_000);
 // Max random extra delay before a *scheduled* tick actually runs -- avoids
 // a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
@@ -48,9 +60,27 @@ export function startWorker(): Worker {
   worker = new Worker(
     QUEUE_NAME,
     async (job): Promise<ActionResult> => {
+      if (job.name === MONITOR_CLEANUP_JOB_NAME) {
+        await resetState();
+        return { ok: true, stdout: "XC Bank monitor state and screenshots cleared", stderr: "", steps: [] };
+      }
+      if (job.name === MONITOR_SET_PAUSED_JOB_NAME) {
+        const paused = job.data?.paused === true;
+        await setPaused(paused);
+        return { ok: true, stdout: paused ? "Monitor paused" : "Monitor resumed", stderr: "", steps: [] };
+      }
       if (job.name === MONITOR_JOB_NAME) {
-        if (job.data?.scheduled === true) {
+        const isScheduledTick = job.data?.scheduled === true;
+        if (isScheduledTick) {
           await sleep(Math.random() * MONITOR_JITTER_MS);
+          // Manual "Check once" always runs regardless of paused --
+          // pause only skips the automatic scheduled loop, matching the
+          // "manual is always instant/authoritative" precedent from the
+          // jitter work above.
+          const { paused } = await loadState();
+          if (paused) {
+            return { ok: true, stdout: "Monitor paused — scheduled check skipped", stderr: "", steps: [] };
+          }
         }
         const state = await checkOnce();
         return {
@@ -99,17 +129,48 @@ export async function enqueueMonitorCheckOnce(): Promise<string> {
   return job.id ?? "";
 }
 
-// Authoritative "is the monitor running" signal -- checked against
-// BullMQ's own scheduler list rather than a flag this module maintains
-// itself, so it can't drift out of sync if the Control Panel process
-// restarted after a crash.
-export async function isMonitorScheduled(): Promise<boolean> {
+export async function enqueueMonitorCleanup(): Promise<string> {
+  const job = await queue.add(MONITOR_CLEANUP_JOB_NAME, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+async function enqueueSetPaused(paused: boolean): Promise<string> {
+  const job = await queue.add(MONITOR_SET_PAUSED_JOB_NAME, { paused }, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function pauseMonitor(): Promise<string> {
+  return enqueueSetPaused(true);
+}
+export async function resumeMonitor(): Promise<string> {
+  return enqueueSetPaused(false);
+}
+
+export interface MonitorScheduleInfo {
+  running: boolean;
+  next: number | null;
+  every: number;
+  jitterMs: number;
+}
+
+// Authoritative "is the monitor running" signal (plus next/every) --
+// checked against BullMQ's own scheduler list rather than a flag this
+// module maintains itself, so it can't drift out of sync if the
+// Control Panel process restarted after a crash.
+export async function getMonitorScheduleInfo(): Promise<MonitorScheduleInfo> {
   const schedulers = await queue.getJobSchedulers();
   // The scheduler's own identifier comes back as .key (confirmed by
   // inspecting a live queue directly, not assumed from the type alone --
   // .id is a separate, unrelated field that's null unless a distinct
-  // per-iteration jobId template is configured).
-  return schedulers.some((s) => s.key === MONITOR_SCHEDULER_ID);
+  // per-iteration jobId template is configured). .next/.every likewise
+  // confirmed directly against a live queue before relying on them here.
+  const scheduler = schedulers.find((s) => s.key === MONITOR_SCHEDULER_ID);
+  return {
+    running: scheduler !== undefined,
+    next: scheduler?.next ?? null,
+    every: scheduler?.every ?? MONITOR_INTERVAL_MS,
+    jitterMs: MONITOR_JITTER_MS,
+  };
 }
 
 export async function startMonitorSchedule(): Promise<void> {
@@ -121,6 +182,11 @@ export async function startMonitorSchedule(): Promise<void> {
     { every: MONITOR_INTERVAL_MS },
     { name: MONITOR_JOB_NAME, data: { scheduled: true } },
   );
+  // "Start" always means "actively running" -- clears a leftover paused
+  // flag too (queued, same race-avoidance reasoning as pause/resume
+  // above), so resuming a paused-but-still-scheduled monitor via the
+  // existing Start button works intuitively without a separate step.
+  await enqueueSetPaused(false);
   // Also fire one check immediately rather than assuming/relying on the
   // scheduler's own first-tick timing, so the UI shows real data right
   // away instead of waiting up to a full interval.
@@ -145,6 +211,11 @@ export interface JobSummary {
   durationMs: number | null;
   result: ActionResult | null;
   failedReason: string | null;
+  // True only for a monitor-check job the scheduler itself produced;
+  // false for a manual "Check once" and for every non-monitor job (the
+  // "scheduled vs. manual" distinction has no meaning outside the
+  // monitor's own job type).
+  scheduled: boolean;
 }
 
 export async function listRecentJobs(): Promise<JobSummary[]> {
@@ -163,6 +234,7 @@ export async function listRecentJobs(): Promise<JobSummary[]> {
         durationMs: processedOn !== null && finishedOn !== null ? finishedOn - processedOn : null,
         result: (job.returnvalue as ActionResult | undefined) ?? null,
         failedReason: job.failedReason ?? null,
+        scheduled: job.name === MONITOR_JOB_NAME && job.data?.scheduled === true,
       };
     }),
   );

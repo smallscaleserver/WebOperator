@@ -398,6 +398,45 @@ runs — a manual "Check once" (and the immediate first tick after
 "Start") stay instant, distinguished via a `data: { scheduled: true }`
 tag on the scheduler's own job template.
 
+**Monitor Control UX** — now that there's a real background loop with
+jittered timing, both the Control Center and the monitor's own pages
+show it, not just a running/stopped dot:
+- **Pause vs. Stop**: Stop (`stopMonitorSchedule`) removes the BullMQ
+  scheduler entirely. Pause is lighter — a `paused` flag on
+  `MonitorState` — the scheduler keeps ticking (so `next`/
+  `iterationCount` stay meaningful and "Resume" is instant, no
+  recreation needed) but a *scheduled* tick checks the flag and skips
+  `checkOnce()` if paused; a manual "Check once" always ignores `paused`
+  and runs regardless — same "manual is always authoritative" precedent
+  as the jitter work.
+- **Pause/resume/cleanup are queued jobs, not direct file writes** —
+  found empirically, not assumed: an early version called `setPaused()`
+  directly from the API route, and a real test (pause immediately after
+  triggering a check) showed the pause getting silently clobbered back
+  to `false`. Root cause: `checkOnce()` holds its own in-memory
+  `MonitorState` object across a multi-second real-browser check and
+  writes it back wholesale at the end — a concurrent, out-of-band
+  `setPaused()` landing inside that window gets overwritten by
+  `checkOnce()`'s own stale copy on save. Fixed by routing pause/resume
+  (and cleanup, which had the same class of risk from the start) through
+  the same concurrency-1 queue as `checkOnce()` itself
+  (`xc-bank-monitor-set-paused`/`xc-bank-monitor-cleanup` job types) —
+  serialized by construction, not by care.
+- **Next-check estimate**: `getJobSchedulers()`'s own `next`/`every`
+  fields (confirmed directly against a live queue, not assumed) feed
+  `GET /api/monitors/xc-bank` and `GET /api/monitors` directly — no new
+  tracking needed.
+- **Long-running warning**: derived purely from existing state — the
+  oldest tracked screenshot's `capturedAt` (screenshots are newest-first,
+  confirmed via `unshift()`) and the screenshot count nearing the
+  200-item retention cap. No new state field.
+- **Bulk actions**: `monitors-registry.ts`'s `MonitorDefinition` gained
+  `pause`/`stop` function fields alongside `getSummary` —
+  `pauseAllMonitors()`/`stopAllMonitors()` iterate the registry the same
+  way `listMonitorSummaries()` already does. A future second monitor
+  wires its own `pause`/`stop` in the same entry it already needs for
+  `getSummary`.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 

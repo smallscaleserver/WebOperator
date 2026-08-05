@@ -35,6 +35,10 @@
   .monitor-card:last-child { margin-bottom: 0; }
   .monitor-card .row { margin-bottom: 0.3rem; }
   .dot.error { background: #cf222e; }
+  .dot.paused { background: #d29922; }
+  .monitor-warning { color: #9a6700; font-size: 0.85rem; background: #fff8c5; border-radius: 4px; padding: 0.3rem 0.5rem; margin-top: 0.3rem; }
+  .badge.scheduled { background: #8250df; }
+  .badge.manual { background: #57606a; }
 </style>
 </head>
 <body>
@@ -90,6 +94,10 @@
 <section>
   <h2>Monitors</h2>
   <p class="hint">Continuous bots that periodically check a site's dashboard through the real browser (DOM extraction only, never an internal API) and track new activity. Rendered from <code>GET /api/monitors</code> — a future second monitor shows up here automatically.</p>
+  <div class="row">
+    <button id="pause-all-monitors">Pause all monitors</button>
+    <button id="stop-all-monitors">Stop all monitors</button>
+  </div>
   <div id="monitors-list">(loading…)</div>
 </section>
 
