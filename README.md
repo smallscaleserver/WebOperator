@@ -29,6 +29,10 @@ git clone git@github.com:smallscaleserver/WebOperator.git
 
 ### คู่มือทดสอบระบบแบบ Step-by-step (Testing Guide)
 
+ถ้าต้องการคู่มือแบบสั้นที่ทำตามเพื่อเปิด local UI ที่
+`http://localhost:4000` ทันที ดู [`StepByStep.md`](./StepByStep.md)
+ก่อน ส่วน section นี้เป็นรายละเอียด testing guide แบบเต็มกว่า
+
 ครอบคลุม flow หลักที่ implement และ verify แล้วจนถึงตอนนี้ (Phase 1-2
 เต็ม — ยังไม่รวม Gmail/Phase 3 ซึ่งเป็น dev scaffold แยกต่างหาก ดู
 [AGENTS.md](./AGENTS.md))

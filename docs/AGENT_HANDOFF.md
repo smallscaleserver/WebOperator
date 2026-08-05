@@ -30,6 +30,23 @@ and sessions.
 
 ## Handoff Log
 
+### 2026-08-05 — Codex
+
+- Status: Done
+- Context: Added `StepByStep.md`, a short local-run guide focused on getting
+  `http://localhost:4000` usable for manual testing. It covers Docker service
+  startup, the two required host processes (`npm start` and `npm run worker`),
+  XC Bank workflow/monitor/live view checks, shutdown, and Windows
+  troubleshooting for wrong npm cwd, port 4000, worker orphan processes, Docker
+  restart, and noVNC password lookup. Linked it from `README.md`.
+- Files: `StepByStep.md`, `README.md`, `docs/AGENT_HANDOFF.md`
+- Verified: Documentation-only change; checked the current repo status and
+  existing README commands/context before writing. No runtime stack test run in
+  this Codex turn because the requested output is a run guide and the stack was
+  already validated in the previous Claude handoff.
+- Next: Use `StepByStep.md` to run local testing. If the guide reveals a stale
+  command during manual use, update that file and the README link together.
+
 ### 2026-07-23 05:05 ICT — Codex
 
 - Status: Done
