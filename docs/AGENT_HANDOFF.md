@@ -2204,3 +2204,21 @@ Appending correctly from here on. -->
   committing.
 - Next: same open items as before (Gmail/Phase 3 remains paused —
   resume only on explicit future direction).
+
+### 2026-08-06 (session 5) — Claude
+
+- Status: In progress
+- Context: **Claiming: cross-platform clean/build scripts** —
+  `clean.sh`/`clean.ps1`/`clean.bat` and `build.sh`/`build.ps1`/
+  `build.bat` at repo root, scripting `CleanAll.md`'s already-documented
+  and already-dry-run `docker compose down --rmi local -v
+  --remove-orphans` (clean) and `docker compose build <5 repo images>`
+  (build) steps for each of the three shells this project's users work
+  in (Linux bash, Windows PowerShell, Windows cmd). Explicit direct
+  instruction. Checked `git log` first — still at `cfc8844`, nothing new
+  claimed. Small/mechanical enough (wrapping already-proven commands,
+  no new design decisions) that this is being implemented directly
+  without a full plan-mode pass.
+- Files: none yet.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
