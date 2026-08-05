@@ -2247,3 +2247,25 @@ Appending correctly from here on. -->
   output — completed successfully, `GET /api/health` reported
   `ready: true`. Left the stack up and both host processes running.
 - Next: same open items as before.
+
+### 2026-08-06 (session 6) — Claude
+
+- Status: In progress
+- Context: **Claiming: `up.sh`/`up.ps1`/`up.bat`** — a third script
+  alongside `clean.*`/`build.*`, doing exactly `docker compose up -d
+  redis minio xc-bank browser-worker-chrome`. Explicit direct
+  instruction (user noticed `build.*` leaves the stack not actually
+  running and had to ask for a manual redeploy each time). Deliberately
+  kept single-responsibility/separate from `build.*` (matches
+  `CleanAll.md`'s existing tiered structure) and deliberately does
+  **not** start the two host Control Panel processes
+  (`npm start`/`npm run worker`) — those are meant to run in their own
+  visible terminals per `StepByStep.md`, and silently backgrounding
+  them would contradict the explicit no-silent-auto-start posture from
+  the Health/diagnostics round. Checked `git log` first — still at
+  `4490310`, nothing new claimed. Small/mechanical, same as the
+  clean/build round — implementing directly without a full plan-mode
+  pass.
+- Files: none yet.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
