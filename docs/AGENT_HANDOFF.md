@@ -2222,3 +2222,28 @@ Appending correctly from here on. -->
 - Files: none yet.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-06 (session 5, later) — Claude
+
+- Status: Done
+- Context: Shipped the 6 scripts per the claim above.
+- Files: new `clean.sh`/`clean.ps1`/`clean.bat` (each:
+  `docker compose down --rmi local -v --remove-orphans`, then lists
+  remaining images), new `build.sh`/`build.ps1`/`build.bat` (each:
+  `docker compose build` for the 5 repo-owned images), `CleanAll.md`
+  (new table pointing at the scripts as shortcuts for steps 1/4 — steps
+  2/3, the heavier/riskier ones, deliberately stay manual-only, no
+  script), `docs/PROJECT_PLAN.md` (1 new decision-log row).
+- Verified: **every one of the 6 scripts actually run for real, not
+  just written** — `bash -n` syntax-checked both `.sh` files first,
+  then executed each exactly once against the live stack: `clean.bat`
+  (via `cmd /c`) → `build.ps1` → `clean.sh` → `build.bat` (via
+  `cmd /c`) → `clean.ps1` → `build.sh`, confirming after every clean
+  that exactly the 5 repo images were gone (`redis`/`minio` untouched)
+  and after every build that all 5 were back. Redeployed afterward
+  (`docker compose up -d` the 4 core services, restarted both host
+  Control Panel processes) and ran a real `xc-bank-login-extract`
+  workflow through the live queue against the scripts' own final build
+  output — completed successfully, `GET /api/health` reported
+  `ready: true`. Left the stack up and both host processes running.
+- Next: same open items as before.
