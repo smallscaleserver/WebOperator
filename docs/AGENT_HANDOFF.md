@@ -1875,3 +1875,44 @@ and sessions.
   something real, a live Gmail OAuth test with the user's own
   credentials, the real downloads fix, video/trace, or whichever else
   the user picks.
+
+<!-- Note: several 2026-08-05/06 entries above this point were
+inserted mid-file by earlier Edit calls that matched a non-unique
+"whichever else the user picks"-style anchor instead of true EOF --
+dated headers are still accurate, just not in strict file order.
+Appending correctly from here on. -->
+
+### 2026-08-06 (session 2) — Claude
+
+- Status: In progress
+- Context: **Claiming: "polite automation" pass** — jittered monitor
+  interval, per-action/typing delay, a basic challenge (CAPTCHA/2FA/
+  verification-page) detector, and a per-site policy config (locale
+  `th-TH`, timezone `Asia/Bangkok` as the example given) consulted by
+  the workflow engine before interactive steps and by the monitor
+  scheduler. Explicit direct instruction with a 5-item ordered scope,
+  framed by the user themselves as "false-positive reduction, not
+  bypass" (item 5 is documenting exactly that framing — no CAPTCHA
+  solving, no `navigator.webdriver`/CDP-artifact patching, no proxy/IP
+  work; those were separately discussed as "effort กลาง"/"แก้ไม่ได้ง่าย"
+  items and explicitly not part of this round's ask). Checked `git log`
+  first — still at `d8280dd`, nothing new claimed.
+  Researched the existing architecture before designing: `run-
+  workflow.ts` reuses the *existing* default browser context/page
+  (`browser.contexts()[0] ?? newContext()`) rather than creating a fresh
+  one per run, which rules out Playwright's `newContext({locale,
+  timezoneId})` for locale/timezone — those only apply at context
+  creation. The real mechanism is a raw CDP session
+  (`context.newCDPSession(page)` + `Emulation.setTimezoneOverride`/
+  `Emulation.setLocaleOverride`), same "drop to raw CDP for something
+  Playwright's high-level API doesn't expose on an existing
+  context/page" pattern already discussed elsewhere in this repo (the
+  deferred downloads fix). The XC Bank monitor's checks already run
+  through `run-workflow.ts` (via `xc-bank-monitor-check.json`), so
+  action delay/typing delay/challenge detection/locale-timezone all
+  apply to the monitor automatically once built into the workflow engine
+  — only the *scheduling interval* jitter (item 1) needs its own change,
+  in `queue.ts`.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
