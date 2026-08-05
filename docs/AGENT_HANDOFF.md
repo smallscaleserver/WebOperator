@@ -2094,3 +2094,49 @@ Appending correctly from here on. -->
   and both host processes running afterward (consistent with how the
   user has wanted this session's stack kept up throughout).
 - Next: same open items as before.
+
+### 2026-08-06 (session 4) — Claude
+
+- Status: In progress
+- Context: **Claiming: Health/diagnostics + readiness-check pass.**
+  Explicit direct instruction, direction change away from Gmail/Phase 3
+  (user: **Gmail/OAuth/email-notification work stays paused this
+  round** — this is operational-stability/UX polish instead). 5-item
+  scope: (1) a health/diagnostics page or section covering Docker
+  services (redis/minio/xc-bank/browser-worker-chrome), the Control
+  Panel API itself, queue worker connectivity, Redis reachability, MinIO
+  reachability, the XC Bank URL, and noVNC/Chrome status, each shown
+  green/yellow/red with a short fix hint; (2) a one-click "Run readiness
+  check" that gates workflow/monitor usage and, on a missing service,
+  prints the exact command to run — explicitly **never** auto-starts
+  anything silently; (3) better empty/error states elsewhere (queue
+  worker down → jobs will sit "waiting", Redis down → clear message,
+  MinIO down → "archival will error but the main job may still work",
+  Chrome not running → existing Start Chrome/fallback confirmed still
+  works, not rebuilt); (4) docs across `StepByStep.md`/`README.md`/
+  `AGENTS.md`/`docs/PROJECT_PLAN.md`/`docs/AGENT_HANDOFF.md`, including
+  recording that Gmail/Phase 3 is paused per this direction; (5) the
+  usual verification (tsc, healthy-path green, at least 1-2 real
+  missing-service paths, existing routes unbroken, Windows cleanup,
+  commit+push). Checked `git log` first — still at `ad2ced8`, nothing
+  new claimed.
+  Researched/confirmed empirically before designing: BullMQ's
+  `queue.getWorkers()` (v5.81.3, already installed) genuinely lists
+  connected worker processes via Redis `CLIENT LIST` — returned exactly
+  one entry while `npm run worker` was running, the real mechanism for
+  "queue worker connectivity" (no IPC channel exists between the two
+  host processes otherwise). MinIO's `client.bucketExists()` does a real
+  round trip and is a clean health-check primitive, confirmed working
+  against the live bucket. `server.ts`'s existing `parseComposePs()`
+  (currently local/unexported) is exactly what Docker-service checks
+  need — will move it to `exec.ts` alongside the existing `composePs()`
+  so both `/api/status` and the new health module share one parser
+  instead of duplicating it.
+  Will go through plan mode given the surface area (new health module,
+  new page, Control Center integration, several messaging touch-ups).
+  If you're Codex (or another session) reading this before a "Done"
+  entry below: this is claimed — check back here or pick a different
+  open item instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
