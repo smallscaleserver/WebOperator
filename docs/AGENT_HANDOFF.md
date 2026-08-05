@@ -47,6 +47,58 @@ and sessions.
 - Next: Use `StepByStep.md` to run local testing. If the guide reveals a stale
   command during manual use, update that file and the README link together.
 
+### 2026-08-05 (later) — Claude
+
+- Status: Done
+- Context: **@Codex** — fixed two real inaccuracies in `StepByStep.md` found
+  by actually running it against the live stack (this guide's own commit
+  message noted it was written from docs/README without a runtime test —
+  worth re-running any guide like this against the real stack before
+  trusting it, same as every other change in this repo). Not a Docker-vs-
+  no-Docker issue — the user flagged it suspecting that, but the guide's
+  Docker commands/service names all check out correctly. The two real
+  bugs: (1) step 7 claimed job steps would be named "login, extract,
+  screenshot, archive-screenshot" — actually enqueued
+  `xc-bank-login-extract` for real through the live queue and read back
+  `GET /api/jobs`: the real step names are `validate`, `connect`,
+  `1-xcBankLogin`, `2-xcBankExtractDashboard`, `3-screenshot`,
+  `3-archive-screenshot` (the XC-Bank-specific action type names, numbered
+  by step index, plus the `validate`/`connect` steps every workflow run
+  always has) — a reader searching the Jobs panel for a step literally
+  named "login" wouldn't find one. (2) step 11 stated the MinIO console
+  credentials are "from `.env`" as if guaranteed present — this machine's
+  own `.env` (predates MinIO being added) only has `VNC_PASSWORD`, no
+  `MINIO_ROOT_USER`/`MINIO_ROOT_PASSWORD` lines at all. The listed
+  `weboperator`/`changeme123` values still work (verified with a real
+  `minio` client `listBuckets()` auth call, not assumed) because
+  `docker-compose.yml` falls back to those exact defaults when the env
+  vars are unset — but the guide's wording implied they'd always be
+  readable from the file itself, which is false for any `.env` created
+  before MinIO existed. Fixed both to describe what's actually true.
+  Also re-verified step 10 (logout-clean → fresh login) for real — the
+  `1-xcBankLogin` step's `data` came back "Logged in as demo_user (fresh
+  two-step login)" exactly as the guide describes, so that step was
+  already correct, left unchanged.
+- Files: `StepByStep.md`.
+- Verified: real stack was already up (Docker services had actually gone
+  missing after a Docker Desktop restart earlier this session — brought
+  back with `docker compose up -d xc-bank browser-worker-chrome minio
+  redis`, confirmed both long-running host processes reconnected on their
+  own with zero restart needed). Enqueued `xc-bank-logout-clean` then
+  `xc-bank-login-extract` for real through `/api/enqueue-workflow/:name`,
+  read the real step names/detail back from `/api/jobs` (not guessed).
+  Tested MinIO auth for real with the `minio` npm client against
+  `127.0.0.1:9000` using the exact credentials the guide lists —
+  succeeded, returned the real bucket name. Left the stack running per
+  the user's explicit earlier instruction not to tear anything down this
+  session.
+- Next: whoever picks this repo up next — same as before, plus: if
+  `StepByStep.md` needs another pass, actually run each step against a
+  live stack rather than writing from docs alone (this round's whole
+  point). Otherwise: email-notification scaffolding, live Gmail OAuth
+  test, real downloads fix, video/trace, or whichever else the user
+  picks.
+
 ### 2026-07-23 05:05 ICT — Codex
 
 - Status: Done

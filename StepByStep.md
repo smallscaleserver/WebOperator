@@ -136,8 +136,12 @@ http://localhost:6080/vnc.html
 2. กด `Run "xc-bank-login-extract"`
 3. ดูตาราง **Jobs**
 4. คลิกแถว job เพื่อ expand
-5. ควรเห็น steps เช่น login, extract, screenshot, archive-screenshot
-6. กดลิงก์ screenshot หรือ MinIO artifact เพื่อตรวจภาพ
+5. ควรเห็น steps ตามชื่อจริง (ยืนยันด้วยการรันจริงผ่าน queue แล้ว ไม่ใช่
+   ชื่อ action ทั่วไปแบบ "login"/"extract"): `validate`, `connect`,
+   `1-xcBankLogin`, `2-xcBankExtractDashboard`, `3-screenshot`,
+   `3-archive-screenshot`
+6. กดลิงก์ screenshot หรือ MinIO artifact ของ step `3-screenshot` เพื่อ
+   ตรวจภาพ
 
 XC Bank mock site เปิดตรงได้ที่:
 
@@ -208,12 +212,18 @@ http://localhost:4000/monitors/xc-bank/live
 http://localhost:9001
 ```
 
-ใช้ user/password จาก `.env`:
+ใช้ user/password จาก `.env` ถ้ามีบรรทัด `MINIO_ROOT_USER`/
+`MINIO_ROOT_PASSWORD` อยู่จริง — แต่ `.env` ที่สร้างไว้ตั้งแต่ก่อนมี MinIO
+(เช่นมีแค่ `VNC_PASSWORD` บรรทัดเดียว) จะไม่มีสองบรรทัดนี้เลย ในกรณีนั้น
+`docker-compose.yml` จะ fallback ไปใช้ค่า default แทน (ยืนยันด้วยการ login
+เข้า MinIO จริงแล้ว ไม่ใช่แค่อ่านจากไฟล์):
 
 ```env
 MINIO_ROOT_USER=weboperator
 MINIO_ROOT_PASSWORD=changeme123
 ```
+
+ถ้าคุณเคยตั้งค่าเองใน `.env` ให้ใช้ค่าที่ตั้งไว้แทนค่า default ด้านบน
 
 ดู bucket artifact ได้ เช่น screenshots/session archives ที่เป็น dev-only
 
