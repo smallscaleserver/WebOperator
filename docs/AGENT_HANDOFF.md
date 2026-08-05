@@ -2269,3 +2269,27 @@ Appending correctly from here on. -->
 - Files: none yet.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-06 (session 6, later) — Claude
+
+- Status: Done
+- Context: Shipped `up.sh`/`up.ps1`/`up.bat` per the claim above.
+- Files: new `up.sh`/`up.ps1`/`up.bat` (each:
+  `docker compose up -d redis minio xc-bank browser-worker-chrome`,
+  then prints status + the next manual steps), `CleanAll.md` (scripts
+  table extended with the new "เริ่ม services" column),
+  `docs/PROJECT_PLAN.md` (2 new decision-log rows: the `up.*` design,
+  and — found and fixed proactively this round after last round's
+  incident — confirmed `up.sh`'s executable bit was set correctly in
+  git *before* committing, not after).
+- Verified: `bash -n up.sh` syntax-checked first, then all 3 actually
+  run against the live stack, each exactly once: `up.bat` (via
+  `cmd /c`) → `docker compose down` → `up.ps1` → `docker compose down`
+  → `up.sh` (left running this time) — every run brought up exactly the
+  4 core services, confirmed via `docker compose ps` showing all
+  `Up` after each. Restarted both host Control Panel processes and
+  confirmed `GET /api/health` → `ready: true`. `git ls-files -s up.sh`
+  confirmed `100755` (executable) in the git index before committing —
+  applied the fix from the previous round's incident proactively this
+  time instead of discovering the same bug again.
+- Next: same open items as before.

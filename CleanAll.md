@@ -6,19 +6,22 @@
 ต้องทำเป็นประจำ — งานปกติแค่ `docker compose down` ตอนเลิกใช้ก็พอ (ดู
 [`StepByStep.md`](./StepByStep.md) ข้อ 12)
 
-**สคริปต์ลัด**: ข้อ 1 (ลบ image ที่ repo build เอง) กับข้อ 4 (build ใหม่)
-ด้านล่างมีสคริปต์สำเร็จรูปให้ที่ root ของ repo แล้ว — รันตัวที่ตรงกับ shell
-ของคุณ:
+**สคริปต์ลัด**: ข้อ 1 (ลบ image ที่ repo build เอง), ข้อ 4 (build ใหม่),
+และเริ่ม service หลัก (`docker compose up -d` 4 ตัว) ด้านล่างมีสคริปต์
+สำเร็จรูปให้ที่ root ของ repo แล้ว — รันตัวที่ตรงกับ shell ของคุณ:
 
-| Shell | ลบ (ข้อ 1) | Build ใหม่ (ข้อ 4) |
-| --- | --- | --- |
-| Linux/macOS bash | `./clean.sh` | `./build.sh` |
-| Windows PowerShell | `.\clean.ps1` | `.\build.ps1` |
-| Windows cmd | `clean.bat` | `build.bat` |
+| Shell | ลบ (ข้อ 1) | Build ใหม่ (ข้อ 4) | เริ่ม services |
+| --- | --- | --- | --- |
+| Linux/macOS bash | `./clean.sh` | `./build.sh` | `./up.sh` |
+| Windows PowerShell | `.\clean.ps1` | `.\build.ps1` | `.\up.ps1` |
+| Windows cmd | `clean.bat` | `build.bat` | `up.bat` |
 
-ทั้งสองสคริปต์ทำแค่คำสั่งเดียวกับที่เขียนไว้ในข้อ 1/4 ด้านล่างเป๊ะ ๆ ไม่ได้
-ทำอะไรเพิ่ม (ไม่ลบ `redis`/`minio`, ไม่แตะ `data/*`) — ข้อ 2/3 (ลบหนักขึ้น/
-ล้าง dev data) ยังต้องรันคำสั่งเองตามที่เขียนไว้ ยังไม่มีสคริปต์ให้
+สามสคริปต์นี้ทำแค่คำสั่งเดียวกับที่เขียนไว้ในข้อ 1/4/5 ด้านล่างเป๊ะ ๆ
+ไม่ได้ทำอะไรเพิ่ม (ไม่ลบ `redis`/`minio`, ไม่แตะ `data/*`) — และ `up.*`
+**ไม่** เริ่ม `npm start`/`npm run worker` ให้ ต้องรันเองใน terminal แยก
+ตาม [`StepByStep.md`](./StepByStep.md) เสมอ (ตั้งใจไม่ auto-start
+ให้เงียบ ๆ) — ข้อ 2/3 (ลบหนักขึ้น/ล้าง dev data) ยังต้องรันคำสั่งเองตามที่
+เขียนไว้ ยังไม่มีสคริปต์ให้
 
 **คำเตือน**: ทุกคำสั่งในไฟล์นี้ทำลายของเดิม (image, container, และถ้าเลือก
 ทำข้อ 3 จะรวม local dev data ด้วย) กู้คืนไม่ได้ อย่ารันถ้ามี container อื่น
