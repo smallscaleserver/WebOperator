@@ -245,3 +245,32 @@ export async function closeQueue(): Promise<void> {
   await worker?.close();
   await queue.close();
 }
+
+// Health/diagnostics checks -- both used only by health.ts, kept here
+// since they need the private `queue` instance directly.
+
+// There's no IPC channel between this API process and the separate
+// `npm run worker` process -- getWorkers() (confirmed live against a
+// real running/stopped worker before relying on it) is BullMQ's own
+// mechanism for listing connected worker clients via Redis CLIENT LIST,
+// the only real signal available.
+export async function checkQueueWorkerHealth(): Promise<boolean> {
+  const workers = await queue.getWorkers();
+  return workers.length > 0;
+}
+
+// ioredis queues commands during a connection outage rather than
+// failing fast (documented gotcha elsewhere in this repo) -- a
+// diagnostics check must not hang waiting for that, so this races the
+// real ping against a short timeout instead of awaiting it directly.
+export async function checkRedisHealth(timeoutMs = 1500): Promise<boolean> {
+  const client = await queue.client;
+  // BullMQ's IRedisClient abstraction doesn't declare ping() (not a
+  // command BullMQ itself needs internally) -- info() is declared and
+  // is an equally real round-trip for this purpose.
+  const result = await Promise.race([
+    client.info().then(() => true),
+    new Promise<boolean>((resolve) => setTimeout(() => resolve(false), timeoutMs)),
+  ]);
+  return result;
+}

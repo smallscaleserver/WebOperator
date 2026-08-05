@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>Diagnostics — WebOperator Control Panel</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 800px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  h1 a { font-size: 0.55em; font-weight: normal; margin-left: 1rem; }
+  section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  .hint { color: #666; font-size: 0.85rem; }
+  .banner { padding: 0.6rem 0.9rem; border-radius: 6px; font-weight: bold; margin-bottom: 1rem; }
+  .banner.ready { background: #dafbe1; color: #116329; }
+  .banner.not-ready { background: #ffebe9; color: #82071e; }
+  table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
+  th, td { text-align: left; padding: 0.4rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; }
+  .dot.ok { background: #2ea043; }
+  .dot.warn { background: #d29922; }
+  .dot.error { background: #cf222e; }
+  code { background: #f6f8fa; padding: 0.1rem 0.4rem; border-radius: 4px; }
+  button { cursor: pointer; padding: 0.4rem 0.8rem; }
+</style>
+</head>
+<body>
+<h1>Diagnostics <a href="/">&larr; Control Panel</a></h1>
+<p class="hint">
+  Read-only health checks for every service WebOperator depends on. Never
+  starts or stops anything itself — if a check fails, it shows the exact
+  command to run yourself.
+</p>
+
+<div id="ready-banner" class="banner">checking…</div>
+
+<section>
+  <div style="margin-bottom: 0.75rem;">
+    <button id="refresh-btn">Run readiness check</button>
+    <span class="hint" id="last-checked"></span>
+  </div>
+  <table>
+    <thead><tr><th></th><th>Check</th><th>Status</th><th>Fix</th></tr></thead>
+    <tbody id="checks-body"><tr><td colspan="4">Loading…</td></tr></tbody>
+  </table>
+</section>
+
+<script src="/health.js"></script>
+</body>
+</html>

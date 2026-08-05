@@ -437,6 +437,46 @@ show it, not just a running/stopped dot:
   wires its own `pause`/`stop` in the same entry it already needs for
   `getSummary`.
 
+**Health/diagnostics** (`services/control-panel/src/health.ts`,
+`GET /api/health`, `/health` page) — a read-only view of every service
+this stack depends on, requested specifically because the operational
+pain point at this stage of the project is "what's running, what's
+dead, why did clicking a button do nothing," not a missing feature.
+**Never starts or stops anything itself** — a failing check only shows
+the exact `docker compose ...`/`npm run ...` command to run yourself, as
+plain text with no "run it for me" button, per the user's own explicit
+instruction: no silent auto-start. This page only diagnoses.
+- **Docker services** (`redis`/`minio`/`xc-bank`/`browser-worker-chrome`):
+  `composePs()`/`parseComposePs()` (moved from a `server.ts`-local
+  function into `exec.ts` so `/api/status` and the health module share
+  one parser instead of two copies drifting apart).
+- **Queue worker connectivity**: `queue.getWorkers()` — the *only* real
+  signal available, since the API process and the separate
+  `npm run worker` process share no IPC channel. Confirmed live before
+  relying on it: returns one entry while the worker process is running,
+  empty when it's not.
+- **Redis (app-level)**: a **bounded-timeout** check
+  (`Promise.race` against ~1.5s), not a bare `.ping()`/`.info()` await —
+  ioredis queues commands during a real outage instead of failing fast
+  (a gotcha already documented elsewhere in this file), which a
+  diagnostics check must not reproduce by hanging itself.
+- **MinIO**: `artifacts.ts`'s `checkMinioHealth()` wraps
+  `bucketExists()` — a real round trip. **Found and fixed the same
+  AggregateError-with-empty-`.message` issue already documented for the
+  artifact route**, this time triggered by the health check itself:
+  confirmed directly against a stopped MinIO container that `.message`
+  is empty but `.code` (`"ECONNREFUSED"`) is present, same fallback
+  applied here.
+- **XC Bank URL / noVNC**: plain `fetch()` with a short
+  `AbortSignal.timeout()` against the real published host ports
+  (`127.0.0.1:4100`/`127.0.0.1:6080`) — noVNC is checked as an HTTP
+  endpoint specifically so a container that's "running" per Docker but
+  whose x11vnc/noVNC process crashed inside still shows red.
+- The Control Center's Jobs section reads the same `/api/health`
+  response already being polled for the System Health banner to show an
+  inline warning when the queue worker is disconnected ("jobs will stay
+  waiting") — no second poll, no new state.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -449,6 +489,8 @@ docker-compose.yml            browser-worker services (chrome + firefox) + worke
 services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
 services/control-panel/src/monitor.ts  XC Bank Monitor: state/dedup/retention (dev-only JSON state)
 services/control-panel/src/monitors-registry.ts  Data-driven monitor listing for "/" + GET /api/monitors -- add future monitors here (detailPath + livePath per monitor)
+services/control-panel/src/health.ts  Read-only diagnostics for every dependency (Docker services, queue worker, Redis, MinIO, XC Bank, noVNC) -- GET /api/health, never starts/stops anything
+services/control-panel/public/health.html+.js  /health diagnostics page -- polls GET /api/health, renders green/yellow/red rows with fix commands as plain text
 services/control-panel/public/xc-bank-monitor-live.html+.js  XC Bank live/current-operation view -- noVNC iframe (or latest-screenshot fallback) + polling data panel, distinct from the history/detail page
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect

@@ -2,7 +2,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-import { runAction, composePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
+import { runAction, composePs, parseComposePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -20,6 +20,7 @@ import {
 import { getArtifactStream } from "./artifacts.js";
 import { loadState as loadMonitorState } from "./monitor.js";
 import { listMonitorSummaries, pauseAllMonitors, stopAllMonitors } from "./monitors-registry.js";
+import { runHealthChecks } from "./health.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const PUBLIC_DIR = path.resolve(__dirname, "../public");
@@ -32,32 +33,6 @@ app.use(express.static(PUBLIC_DIR));
 // Read-only: the same directory worker containers already write screenshots
 // to via the existing bind mount (data/worker-output:/app/output).
 app.use("/screenshots", express.static(WORKER_OUTPUT_DIR));
-
-interface ComposePsEntry {
-  Service?: string;
-  State?: string;
-}
-
-function parseComposePs(stdout: string): ComposePsEntry[] {
-  const trimmed = stdout.trim();
-  if (!trimmed) return [];
-  try {
-    const parsed = JSON.parse(trimmed);
-    return Array.isArray(parsed) ? parsed : [parsed];
-  } catch {
-    // Some compose versions emit newline-delimited JSON instead of an array.
-    return trimmed
-      .split("\n")
-      .map((line) => {
-        try {
-          return JSON.parse(line) as ComposePsEntry;
-        } catch {
-          return null;
-        }
-      })
-      .filter((entry): entry is ComposePsEntry => entry !== null);
-  }
-}
 
 app.get("/api/status", async (_req, res) => {
   const status = { chrome: "unknown", firefox: "unknown" };
@@ -75,6 +50,19 @@ app.get("/api/status", async (_req, res) => {
     console.error("status check failed:", err);
   }
   res.json(status);
+});
+
+// Read-only diagnostics -- never starts/stops anything itself, only
+// reports and (for a failing check) suggests the command to run. See
+// health.ts and docs/PROJECT_PLAN.md decision log.
+app.get("/api/health", async (_req, res) => {
+  try {
+    const checks = await runHealthChecks();
+    const ready = checks.every((c) => c.status === "ok");
+    res.json({ ok: true, ready, checks });
+  } catch (err) {
+    res.status(500).json({ ok: false, ready: false, error: (err as Error).message });
+  }
 });
 
 app.post("/api/action/:name", express.json(), async (req, res) => {
@@ -323,6 +311,11 @@ app.get("/monitors/xc-bank", (_req, res) => {
 // data. No new API routes needed for this page.
 app.get("/monitors/xc-bank/live", (_req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "xc-bank-monitor-live.html"));
+});
+
+// Full diagnostics view -- see health.ts / GET /api/health above.
+app.get("/health", (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "health.html"));
 });
 
 const server = app.listen(PORT, "127.0.0.1", () => {

@@ -181,3 +181,32 @@ export async function composePs(): Promise<string> {
   const { stdout } = await execFileAsync("docker", ["compose", "ps", "--format", "json"], EXEC_OPTS);
   return stdout;
 }
+
+export interface ComposePsEntry {
+  Service?: string;
+  State?: string;
+}
+
+// Shared by /api/status (chrome/firefox) and the health module (every
+// other Docker service) so there's one parser for docker compose ps's
+// output shape, not two copies drifting apart.
+export function parseComposePs(stdout: string): ComposePsEntry[] {
+  const trimmed = stdout.trim();
+  if (!trimmed) return [];
+  try {
+    const parsed = JSON.parse(trimmed);
+    return Array.isArray(parsed) ? parsed : [parsed];
+  } catch {
+    // Some compose versions emit newline-delimited JSON instead of an array.
+    return trimmed
+      .split("\n")
+      .map((line) => {
+        try {
+          return JSON.parse(line) as ComposePsEntry;
+        } catch {
+          return null;
+        }
+      })
+      .filter((entry): entry is ComposePsEntry => entry !== null);
+  }
+}

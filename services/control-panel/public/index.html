@@ -39,6 +39,10 @@
   .monitor-warning { color: #9a6700; font-size: 0.85rem; background: #fff8c5; border-radius: 4px; padding: 0.3rem 0.5rem; margin-top: 0.3rem; }
   .badge.scheduled { background: #8250df; }
   .badge.manual { background: #57606a; }
+  .health-banner { padding: 0.5rem 0.8rem; border-radius: 6px; font-weight: bold; margin-bottom: 0.5rem; display: inline-block; }
+  .health-banner.ready { background: #dafbe1; color: #116329; }
+  .health-banner.not-ready { background: #ffebe9; color: #82071e; }
+  .jobs-warning { color: #9a6700; font-size: 0.85rem; background: #fff8c5; border-radius: 4px; padding: 0.3rem 0.5rem; margin-bottom: 0.5rem; }
 </style>
 </head>
 <body>
@@ -48,6 +52,16 @@
   workflows, and continuous site monitors all in one place. Local only
   (127.0.0.1) — no auth. Do not expose this to a network.
 </p>
+
+<section>
+  <h2>System Health</h2>
+  <p class="hint">Read-only checks for every service this stack depends on — never starts/stops anything itself.</p>
+  <div class="row">
+    <span id="health-banner" class="health-banner">checking…</span>
+    <button id="run-readiness-check">Run readiness check</button>
+    <a href="/health">Diagnostics &rarr;</a>
+  </div>
+</section>
 
 <section>
   <h2>Browsers</h2>
@@ -118,6 +132,7 @@
 <section>
   <h2>Jobs</h2>
   <p class="hint">Click a row to expand step-by-step detail and screenshots.</p>
+  <div id="jobs-worker-warning" class="jobs-warning" style="display:none;"></div>
   <table>
     <thead><tr><th>ID</th><th>Action</th><th>Status</th><th>Result</th></tr></thead>
     <tbody id="jobs-body"><tr><td colspan="4">(no jobs yet)</td></tr></tbody>

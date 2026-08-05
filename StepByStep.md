@@ -113,6 +113,16 @@ http://localhost:4000/
 - ดู jobs/steps/screenshots
 - เข้า monitor pages
 
+**ตรวจ readiness ก่อนทดสอบ**: ก่อนกด workflow หรือ monitor ใด ๆ ให้ดู
+หัวข้อ **System Health** บนสุดของหน้า — ควรเห็นแถบเขียว "✅ All systems
+ready" กด **Run readiness check** เพื่อเช็คซ้ำได้ทันที หรือกด
+**Diagnostics →** เพื่อดูรายละเอียดทีละ service ที่
+<http://localhost:4000/health> (Docker services 4 ตัว, Control Panel
+API, queue worker, Redis, MinIO, XC Bank URL, noVNC/Chrome) ถ้าแถบขึ้น
+สีแดง "N issue(s)" หน้า Diagnostics จะบอกคำสั่งที่ควรรันแก้ตรง ๆ เช่น
+`docker compose up -d redis` — **หน้านี้ไม่ auto-start อะไรให้เองทั้งสิ้น
+ต้องรันคำสั่งเองเสมอ**
+
 ## 6. ทดสอบ Take Control
 
 ที่ `http://localhost:4000/`:

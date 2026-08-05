@@ -90,7 +90,11 @@ npm run worker
 #### 5. เปิด Control Panel
 
 เปิด <http://localhost:4000> — ควรเห็นสถานะ Chrome/Firefox เป็น
-"stopped" (จุดสีเทา)
+"stopped" (จุดสีเทา) หัวข้อ **System Health** บนสุดของหน้าเป็น read-only
+diagnostics ครอบคลุม Docker services/Control Panel API/queue worker/
+Redis/MinIO/XC Bank URL/noVNC ทั้งหมด — กด **Diagnostics →** เพื่อดู
+รายละเอียดทีละ service ที่ <http://localhost:4000/health> ถ้ามีอะไรไม่
+พร้อม หน้านี้จะบอกคำสั่งที่ควรรันเอง ไม่ auto-start อะไรให้เองทั้งสิ้น
 
 #### 6. Start Chrome และ/หรือ Firefox
 

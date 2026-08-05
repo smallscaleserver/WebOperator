@@ -2140,3 +2140,67 @@ Appending correctly from here on. -->
 - Files: none yet — planning now.
 - Verified: n/a
 - Next: (this entry will be updated once the work is done and verified).
+
+### 2026-08-06 (session 4, later) — Claude
+
+- Status: Done
+- Context: Shipped Health/diagnostics + one-click readiness check per
+  the claim above. Went through plan mode, approved before
+  implementing. **Gmail/Phase 3 remains paused** — explicit user
+  direction, not touched this round.
+- Files: `services/control-panel/src/exec.ts` (moved
+  `ComposePsEntry`/`parseComposePs` here from `server.ts`, now exported
+  and shared), `src/artifacts.ts` (`checkMinioHealth()`), `src/queue.ts`
+  (`checkQueueWorkerHealth()` via `queue.getWorkers()`,
+  `checkRedisHealth()` via a bounded-timeout `client.info()`), new
+  `src/health.ts` (`runHealthChecks()` — 10 checks: API, 4 Docker
+  services, queue worker, Redis, MinIO, XC Bank URL, noVNC), `src/
+  server.ts` (`GET /api/health`, `GET /health` page route, `/api/status`
+  updated to import the shared parser instead of a local copy), new
+  `public/health.html` + `.js` (dedicated diagnostics page, 5s poll),
+  `public/index.html` + `app.js` (System Health section with a ready/
+  not-ready banner, "Run readiness check" button, "Diagnostics →" link,
+  10s poll; Jobs section gained an inline warning when the queue worker
+  is disconnected, reusing the same `/api/health` fetch), `AGENTS.md`
+  (new Health/diagnostics section + repo-layout entries),
+  `docs/PROJECT_PLAN.md` (7 new decision-log rows + Immediate-next-step
+  paragraph), `StepByStep.md` (readiness-check guidance folded into
+  step 5), `README.md` (one-paragraph pointer folded into its own
+  step 5).
+- Verified: `npx tsc --noEmit` clean (one real type error caught and
+  fixed along the way: BullMQ's `IRedisClient` abstraction doesn't
+  declare `.ping()`, only commands BullMQ itself uses internally —
+  switched to `.info()`, which is declared and an equally real round
+  trip). Restarted both host Control Panel processes to pick up the
+  backend changes. **Healthy path**: all 10 checks `ok`, `ready: true`,
+  confirmed via `curl` and visually via the established CDP-screenshot
+  technique on `/`. **Two real induced failures, not simulated**: (1)
+  `docker compose stop minio` — the MinIO check correctly went `error`
+  with `ready: false`; **found and fixed a real bug during this
+  check**: the raw error message came back as the useless
+  `"AggregateError"` — traced to the exact same root cause already
+  documented and fixed once for the artifact route (a connection-refused
+  failure is a Node `AggregateError` with an empty top-level `.message`
+  but a real `.code`), confirmed directly against the real stopped
+  container before and after the fix; then **proved the "non-fatal"
+  claim for real**, not just asserted it: ran the `demo` workflow with
+  MinIO still down — job completed `ok: true`, only `archive-screenshot`
+  failed, exactly as the health check's own annotation says. Restarted
+  MinIO, confirmed recovery. (2) Stopped the queue worker host process —
+  the queue-worker check correctly went `error`; enqueued a job and
+  confirmed it genuinely sat in `waiting` (not lost, not errored);
+  visually confirmed via CDP screenshot that the Jobs section's inline
+  warning banner renders with the exact fix command, and that the System
+  Health banner and full `/health` page both show the failure clearly
+  (red dot, "Not reachable", the `npm run worker` hint in a `<code>`
+  block). Restarted the worker, confirmed the previously-waiting job
+  completed and the health check went back to `ok`. **Confirmed no
+  silent auto-start anywhere**: across every check above, `docker
+  compose ps` only ever changed when *I* ran an explicit `docker
+  compose start/stop` command myself — never as a side effect of any
+  `/api/health` call. Regression: `/`, `/monitors/xc-bank`,
+  `/monitors/xc-bank/live`, `/health` all still 200 and functional after
+  every state change above. All debug scripts/screenshots deleted before
+  committing.
+- Next: same open items as before (Gmail/Phase 3 remains paused —
+  resume only on explicit future direction).

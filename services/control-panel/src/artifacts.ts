@@ -22,3 +22,12 @@ export async function getArtifactStream(objectName: string): Promise<Readable> {
 export async function removeArtifact(objectName: string): Promise<void> {
   await client.removeObject(BUCKET, objectName);
 }
+
+// Real round-trip health check for the Health/diagnostics page --
+// confirms MinIO is actually answering, not just that the client object
+// was constructed. Reused as-is rather than a lighter ping, since
+// bucketExists() is already the cheapest genuine request the client
+// exposes.
+export async function checkMinioHealth(): Promise<void> {
+  await client.bucketExists(BUCKET);
+}

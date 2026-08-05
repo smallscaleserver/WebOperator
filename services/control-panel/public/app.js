@@ -332,10 +332,54 @@ async function loadMonitors() {
   }
 }
 
+function renderHealthBanner(data) {
+  const banner = document.getElementById("health-banner");
+  if (!data || !data.ok) {
+    banner.className = "health-banner not-ready";
+    banner.textContent = `⚠ Could not run health checks: ${(data && data.error) || "unknown error"}`;
+    return;
+  }
+  if (data.ready) {
+    banner.className = "health-banner ready";
+    banner.textContent = "✅ All systems ready";
+  } else {
+    const failing = data.checks.filter((c) => c.status !== "ok").length;
+    banner.className = "health-banner not-ready";
+    banner.textContent = `⚠ ${failing} issue(s) — see Diagnostics`;
+  }
+}
+
+function renderJobsWorkerWarning(data) {
+  const el = document.getElementById("jobs-worker-warning");
+  const workerCheck = data && data.ok && data.checks.find((c) => c.id === "queue-worker");
+  if (workerCheck && workerCheck.status !== "ok") {
+    el.textContent = `⚠ No queue worker connected — enqueued jobs will stay "waiting" until you run: ${workerCheck.hint}`;
+    el.style.display = "block";
+  } else {
+    el.style.display = "none";
+  }
+}
+
+async function loadHealth() {
+  try {
+    const res = await fetch("/api/health");
+    const data = await res.json();
+    renderHealthBanner(data);
+    renderJobsWorkerWarning(data);
+  } catch (err) {
+    renderHealthBanner({ ok: false, error: String(err) });
+    renderJobsWorkerWarning(null);
+  }
+}
+
+document.getElementById("run-readiness-check").addEventListener("click", loadHealth);
+
 pollStatus();
 pollJobs();
 loadWorkflows();
 loadMonitors();
+loadHealth();
 setInterval(pollStatus, 3000);
 setInterval(pollJobs, 3000);
 setInterval(loadMonitors, 3000);
+setInterval(loadHealth, 10000);
