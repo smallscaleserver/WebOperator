@@ -1579,3 +1579,33 @@ and sessions.
 - Next: turning the design-only email-notification fields into something
   real, a live Gmail OAuth test with the user's own credentials, the
   real downloads fix, video/trace, or whichever else the user picks.
+
+### 2026-08-05 — Claude
+
+- Status: In progress
+- Context: **Claiming: XC Bank Live View page + monitor UX pass.**
+  Explicit direct instruction with a detailed scope. Checked `git log`
+  first — still at `31b0c9b`, nothing new claimed. Scope: a new page
+  (planned route `/monitors/xc-bank/live`) with a two-column layout —
+  left: live browser view, noVNC iframe preferred (reusing the existing
+  `browser-worker-chrome` noVNC endpoint already embedded on `/`), with a
+  "Chrome not running, start it" guidance state and a latest-screenshot
+  fallback; right: an extracted-data panel (status, last checked, latest
+  balance, latest transactions, new notifications, last error,
+  Start/Stop/Check-once) polling `GET /api/monitors/xc-bank` every 2-5s
+  without a page reload. `/monitors/xc-bank` stays the history/detail
+  view (screenshot timeline, transaction history, notifications history)
+  — unchanged in role, just gets a link to the new Live page. `/` Control
+  Center's Monitors section gains explicit Detail + Live links per
+  monitor (currently just one "Open" link) alongside the existing
+  Start/Stop/Check-once. Must not hardcode this to XC Bank in a way
+  that's hard to extend — reuses the existing `monitors-registry.ts`
+  listing layer (adding a `livePath` field) rather than a one-off. Same
+  isolation rule as every XC Bank round (DOM/worker-extraction data
+  only, no internal API/shared DB), no Gmail/Phase 3 this round. If
+  you're Codex (or another session) reading this before a "Done" entry
+  below: this is claimed — check back here or pick a different open item
+  instead.
+- Files: none yet — planning now.
+- Verified: n/a
+- Next: (this entry will be updated once the work is done and verified).
