@@ -149,6 +149,50 @@ and sessions.
   `CleanAll.md` whenever convenient (not urgent — the commands were
   verified against the compose file, just not executed this round).
 
+### 2026-08-06 — Claude
+
+- Status: Done
+- Context: Real end-to-end dry run of `CleanAll.md`'s core documented
+  path, closing the "not yet executed" gap noted in the previous entry.
+  Explicit direct instruction.
+- Files: none — verification only, no code/doc changes this round.
+- Verified, all against the real stack, in order: (1) stopped both host
+  processes (API + queue worker) and `docker compose down` — confirmed
+  port 4000 free afterward. (2) `docker compose down --rmi local -v
+  --remove-orphans` — confirmed via `docker images` before/after that
+  exactly the 5 repo-built images (`weboperator-xc-bank`,
+  `weboperator-browser-worker-chrome`, `weboperator-browser-worker-firefox`,
+  `weboperator-worker`, `weboperator-worker-firefox`) were removed and
+  `redis:7-alpine`/`minio/minio:latest` were untouched — matches the
+  guide's claim exactly, not assumed. (3) `docker compose build xc-bank
+  browser-worker-chrome browser-worker-firefox worker worker-firefox`
+  (backgrounded — browser images take a few minutes) — all 5 built
+  successfully, confirmed via `docker images` showing all 5 present again
+  (sizes shifted slightly from before, e.g. browser-worker-chrome
+  2.11GB→2.61GB — newer upstream base-layer versions pulled during
+  rebuild, not a problem, just noted). (4) `docker compose up -d redis
+  minio xc-bank browser-worker-chrome` — all 4 came up clean from the
+  freshly-built images. (5) Restarted both host processes — reconnected
+  immediately, `/api/status` showed Chrome running. (6) **The real
+  proof**: enqueued `xc-bank-login-extract` for real through the live
+  queue against the fully-rebuilt images — completed with the exact
+  expected step sequence (`validate`/`connect`/`1-xcBankLogin`/
+  `2-xcBankExtractDashboard`/`3-screenshot`/`3-archive-screenshot`, all
+  `ok`) and `1-xcBankLogin`'s data read "Logged in as demo_user (fresh
+  two-step login)" — correct, since a freshly-rebuilt/recreated Chrome
+  container has no XC Bank session cookie. `archive-screenshot` also
+  succeeded, proving the freshly-recreated MinIO connection works too.
+  Did **not** separately dry-run the `--rmi all` (also removes pulled
+  redis/minio images) or the `data/*` wipe variant this round — lower
+  risk (a plain `docker pull` and a directory delete respectively, both
+  mechanically simple) and would have meant re-downloading/re-seeding
+  state unnecessarily; the core documented path (what most users would
+  actually run) is now proven correct end to end. Left the stack running
+  afterward (all 4 Docker services + both host processes), matching how
+  the user wants it kept during this session.
+- Next: same open items as before. `CleanAll.md`'s `--rmi all`/data-wipe
+  variants remain doc-reviewed-but-not-dry-run if that ever matters.
+
 ### 2026-07-23 05:05 ICT — Codex
 
 - Status: Done
