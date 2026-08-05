@@ -99,6 +99,56 @@ and sessions.
   test, real downloads fix, video/trace, or whichever else the user
   picks.
 
+### 2026-08-05 (later still) — Claude
+
+- Status: Done
+- Context: Added `CleanAll.md` — a "wipe Docker images/containers and
+  rebuild from scratch" companion guide to `StepByStep.md`, requested
+  after the user looked at Docker Desktop's image list (7 images:
+  `weboperator-browser-worker-chrome`, `redis`,
+  `weboperator-browser-worker-firefox`, `minio/minio`,
+  `weboperator-worker`, `weboperator-worker-firefox`,
+  `weboperator-xc-bank`) and wanted a documented way to delete and
+  rebuild them, not a one-off manual click-through. Explicit direct
+  instruction, small/contained doc-only scope — no claim-first needed,
+  no runtime stack change (the live stack stayed up exactly as the user
+  asked earlier this session; this round only wrote a new file plus a
+  one-line README cross-link).
+  Structured as tiers rather than one big destructive command: (1) stop
+  everything cleanly first (mirrors `StepByStep.md`'s own shutdown
+  steps), (2) `docker compose down --rmi local -v --remove-orphans` —
+  removes only the 5 `weboperator-*` images this repo actually builds
+  (`xc-bank`/`browser-worker-chrome`/`browser-worker-firefox`/`worker`/
+  `worker-firefox`, confirmed against `docker-compose.yml`'s `build:`
+  vs. `image:` entries), leaves the pulled `redis`/`minio` images alone;
+  (3) `--rmi all` variant for also removing the pulled images, clearly
+  marked as the heavier option; (4) a separate, explicitly-optional,
+  explicitly-destructive step for wiping `data/*` (sessions, profiles,
+  monitor state, MinIO's own data dir) since that's local dev state, not
+  Docker images, and a user might want one without the other; (5)
+  `docker compose build --no-cache` (or `up -d --build` as the
+  faster/less-nuclear alternative) to rebuild; (6) points back to
+  `StepByStep.md` from step 3 onward to verify the rebuilt stack instead
+  of duplicating that guide's content.
+- Files: `CleanAll.md` (new), `README.md` (one-line cross-link next to
+  the existing `StepByStep.md` reference).
+- Verified: cross-checked every command against the real
+  `docker-compose.yml` (which services have `build:` vs. plain `image:`,
+  confirming `--rmi local` genuinely only touches the 5 repo-built
+  images and not `redis`/`minio`) and the real `.gitignore` (confirmed
+  `data/` is fully gitignored, so the optional wipe step is safe from a
+  "losing tracked work" angle). Did **not** run any of the destructive
+  commands against the live stack — it was explicitly left running per
+  the user's own earlier instruction this session, so this was
+  documentation-review verification (reading the compose file/gitignore
+  for accuracy), not an end-to-end dry run. If picked up again: worth a
+  real dry run of `CleanAll.md` top-to-bottom in a throwaway state to
+  confirm the exact command sequence works, not just that it reads
+  correctly against the compose file.
+- Next: same open items as before, plus a real end-to-end dry run of
+  `CleanAll.md` whenever convenient (not urgent — the commands were
+  verified against the compose file, just not executed this round).
+
 ### 2026-07-23 05:05 ICT — Codex
 
 - Status: Done

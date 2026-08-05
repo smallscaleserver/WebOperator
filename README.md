@@ -31,7 +31,9 @@ git clone git@github.com:smallscaleserver/WebOperator.git
 
 ถ้าต้องการคู่มือแบบสั้นที่ทำตามเพื่อเปิด local UI ที่
 `http://localhost:4000` ทันที ดู [`StepByStep.md`](./StepByStep.md)
-ก่อน ส่วน section นี้เป็นรายละเอียด testing guide แบบเต็มกว่า
+ก่อน ส่วน section นี้เป็นรายละเอียด testing guide แบบเต็มกว่า ถ้า Docker
+image/container ค้างหรืออยากล้างทุกอย่างแล้วสร้างใหม่ทั้งหมด ดู
+[`CleanAll.md`](./CleanAll.md)
 
 ครอบคลุม flow หลักที่ implement และ verify แล้วจนถึงตอนนี้ (Phase 1-2
 เต็ม — ยังไม่รวม Gmail/Phase 3 ซึ่งเป็น dev scaffold แยกต่างหาก ดู
