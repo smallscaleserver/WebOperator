@@ -50,6 +50,13 @@ docker compose down --rmi local -v --remove-orphans
 - `--remove-orphans` เก็บกวาด container จาก service เก่าที่ลบออกจาก
   `docker-compose.yml` ไปแล้วแต่ยังไม่ถูกล้าง
 
+เช็คว่าลบตรงตามที่ตั้งใจจริง (ทดสอบจริงแล้ว — เหลือแค่ `redis`/`minio`
+สองบรรทัด, 5 บรรทัด `weboperator-*` หายหมด):
+
+```powershell
+docker images
+```
+
 ## 2. ลบ image ที่ pull มาด้วย (ล้างหนักขึ้น — ทำเฉพาะถ้าจำเป็นจริง ๆ)
 
 ใช้ตอนสงสัยว่า image `redis`/`minio` เองก็มีปัญหา หรืออยากรีเฟรชทุกอย่าง
@@ -66,6 +73,19 @@ docker compose down --rmi all -v --remove-orphans
 ```powershell
 docker image rm redis:7-alpine minio/minio:latest
 ```
+
+เช็คว่าลบหมดจริง (ทดสอบจริงแล้ว — `docker images` ควรว่างเปล่าสนิท ไม่เหลือ
+แม้แต่ `redis`/`minio`):
+
+```powershell
+docker images
+```
+
+**สำคัญ**: ถ้าทำถึงข้อนี้แล้วยังไม่ build ใหม่ (ข้อ 4) ทันที ระบบจะใช้งาน
+ไม่ได้เลย — `docker compose up` ครั้งถัดไปต้อง build image `weboperator-*`
+ใหม่ทั้งหมด **และ** pull `redis`/`minio` ใหม่จากอินเทอร์เน็ตด้วย (ต่างจาก
+ข้อ 1 ที่ยังมี `redis`/`minio` local ให้ใช้ทันที) ใช้เวลานานกว่าและต้องมีต่อ
+อินเทอร์เน็ต วางแผนเวลาให้พอก่อนรันข้อนี้
 
 ## 3. (ทางเลือก, ทำลายข้อมูล dev) ล้าง local dev data ด้วย
 

@@ -193,6 +193,39 @@ and sessions.
 - Next: same open items as before. `CleanAll.md`'s `--rmi all`/data-wipe
   variants remain doc-reviewed-but-not-dry-run if that ever matters.
 
+### 2026-08-06 (later) — Claude
+
+- Status: Done
+- Context: Real dry run of `CleanAll.md`'s step 2 (`--rmi all`, the
+  heavier variant that also removes the pulled `redis`/`minio` images —
+  not yet exercised in the previous entry), triggered by the user
+  looking at Docker Desktop's image list and wanting them actually gone,
+  not just documented as theoretically removable. Explicit instruction:
+  delete for real, but **do not rebuild afterward this time** — leave
+  the stack down — and improve `CleanAll.md` based on what actually
+  happened.
+- Files: `CleanAll.md` (two additions: a `docker images` verification
+  snippet after step 1 confirming exactly `redis`/`minio` remain, and
+  one after step 2 confirming the list goes fully empty; a new "สำคัญ"
+  callout after step 2 warning that skipping the rebuild step leaves the
+  stack fully unusable, and that the *next* build after a full `--rmi
+  all` wipe needs network access to re-pull `redis:7-alpine`/
+  `minio/minio:latest` from scratch too, not just rebuild the 5
+  repo-owned images — slower than the step-1-only path where those two
+  stay cached locally).
+- Verified: stopped both host processes and `docker compose down`
+  (confirmed port 4000 free), then `docker compose down --rmi all -v
+  --remove-orphans` — confirmed via `docker images` (no `--format`, to
+  see Docker's own empty-result rendering) that all 7 images are
+  genuinely gone, `docker ps -a` shows zero containers, and port 4000 is
+  free. Did **not** run step 4 (rebuild) or step 5 (verify) this round —
+  intentionally left the stack fully torn down, per the explicit
+  instruction not to rebuild yet.
+- Next: **the stack is currently fully down and images are gone** — next
+  session/turn should rebuild via `CleanAll.md` step 4 before expecting
+  `http://localhost:4000` to work, unless the user says otherwise. Same
+  other open items as before.
+
 ### 2026-07-23 05:05 ICT — Codex
 
 - Status: Done
