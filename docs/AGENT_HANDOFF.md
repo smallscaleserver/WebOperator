@@ -1582,30 +1582,83 @@ and sessions.
 
 ### 2026-08-05 — Claude
 
-- Status: In progress
-- Context: **Claiming: XC Bank Live View page + monitor UX pass.**
-  Explicit direct instruction with a detailed scope. Checked `git log`
-  first — still at `31b0c9b`, nothing new claimed. Scope: a new page
-  (planned route `/monitors/xc-bank/live`) with a two-column layout —
-  left: live browser view, noVNC iframe preferred (reusing the existing
-  `browser-worker-chrome` noVNC endpoint already embedded on `/`), with a
-  "Chrome not running, start it" guidance state and a latest-screenshot
-  fallback; right: an extracted-data panel (status, last checked, latest
-  balance, latest transactions, new notifications, last error,
-  Start/Stop/Check-once) polling `GET /api/monitors/xc-bank` every 2-5s
-  without a page reload. `/monitors/xc-bank` stays the history/detail
-  view (screenshot timeline, transaction history, notifications history)
-  — unchanged in role, just gets a link to the new Live page. `/` Control
-  Center's Monitors section gains explicit Detail + Live links per
-  monitor (currently just one "Open" link) alongside the existing
-  Start/Stop/Check-once. Must not hardcode this to XC Bank in a way
-  that's hard to extend — reuses the existing `monitors-registry.ts`
-  listing layer (adding a `livePath` field) rather than a one-off. Same
-  isolation rule as every XC Bank round (DOM/worker-extraction data
-  only, no internal API/shared DB), no Gmail/Phase 3 this round. If
-  you're Codex (or another session) reading this before a "Done" entry
-  below: this is claimed — check back here or pick a different open item
-  instead.
-- Files: none yet — planning now.
-- Verified: n/a
-- Next: (this entry will be updated once the work is done and verified).
+- Status: Done
+- Context: XC Bank Live View page + monitor UX pass. Explicit direct
+  instruction with a detailed scope. Checked `git log` first — still at
+  `31b0c9b`, nothing new claimed. Built a new route,
+  `/monitors/xc-bank/live`, two-column layout — left: live browser view
+  via the existing noVNC endpoint (`http://localhost:6080/vnc.html`,
+  same URL `/`'s own "Take control" button already embeds — genuinely
+  the same shared, concurrency-1 browser the monitor's own checks drive,
+  confirmed by reading the queue/exec code rather than assumed), with a
+  Chrome-not-running guidance panel (a "Start Chrome" button reusing the
+  existing `POST /api/action/startChrome`) and a latest-screenshot
+  fallback (`state.screenshots[0]`, confirmed newest-first via
+  `monitor.ts`'s `unshift()`); right: a compact extracted-data panel
+  (status, last checked, latest balance, latest transactions, new
+  notifications, last error, Start/Stop/Check-once) polling
+  `GET /api/monitors/xc-bank` every 3s without a page reload. No new API
+  routes needed — both columns reuse existing endpoints entirely.
+  `/monitors/xc-bank` (history/detail) is otherwise unchanged, just
+  gained a "Live view" link; `monitors-registry.ts` gained a `livePath`
+  field alongside `detailPath` so `/`'s Monitors section renders both
+  Detail and Live links per monitor, and any future monitor gets both
+  automatically with zero UI changes. Iframe `src` is only assigned on
+  the stopped→running transition (not every poll) to avoid flicker,
+  matching the explicit ask.
+- Files: `services/control-panel/src/monitors-registry.ts` (`livePath`
+  field on `MonitorSummary`/`MonitorDefinition`), `src/server.ts` (new
+  `GET /monitors/xc-bank/live` route — every existing route untouched),
+  new `public/xc-bank-monitor-live.html` + `.js` (two-column live view,
+  own small polling script — same pattern as the existing detail page
+  having its own script instead of growing `app.js`),
+  `public/xc-bank-monitor.html` (added a "Live view →" link),
+  `public/app.js` (`renderMonitors()` now renders Detail + Live links
+  instead of one "Open" link), `README.md` (new step 19),
+  `AGENTS.md` (new "two views" section + repo-layout entries),
+  `docs/PROJECT_PLAN.md` (4 new decision-log rows + Test Fixtures entry
+  + Immediate-next-step paragraph updated).
+- Verified: `npx tsc --noEmit` clean (only backend change was the
+  `livePath` field). Full real stack up (all 4 Docker services already
+  running from a prior session, both Control Panel processes started
+  fresh). `GET /api/monitors` confirmed `livePath: "/monitors/xc-bank/live"`
+  present. `/monitors/xc-bank/live` and its script both 200, HTML
+  references the absolute script path. **Visual proof, real browser**:
+  connected the real Chromium to the live page over CDP
+  (`host.docker.internal:4000`) and screenshotted it while Chrome was
+  running — real balance/notifications rendered in the right panel, the
+  left column showed the genuine noVNC connect screen (same behavior as
+  `/`'s own take-control iframe, not a bug). Screenshotted `/` itself —
+  the XC Bank monitor card shows working **Detail** and **Live** links
+  alongside Start/Stop/Check-once, every other section (Browsers,
+  Playwright worker, Workflows) visually unchanged. **Chrome-not-running
+  fallback, tested for real**: stopped the monitor schedule, stopped
+  `browser-worker-chrome`, confirmed `GET /api/status` reported
+  `chrome: "stopped"`; since a screenshot-based visual check isn't
+  possible without Chrome, verified via a Node `vm` harness that loads
+  the real, unmodified `xc-bank-monitor-live.js` against a stubbed DOM
+  and real `fetch` calls to the live (Chrome-down) API — confirmed the
+  offline panel shows (`display: block`), the iframe hides and resets to
+  `about:blank`, and the fallback screenshot renders a real `<img src>`
+  that independently resolves 200 via curl. Restarted Chrome. **No-flicker
+  check**: same harness technique, called the script's own `fetchStatus()`
+  three times in a row against the live API with Chrome genuinely
+  running throughout — iframe `src` was assigned exactly once across all
+  three calls, not reset each poll. **Data-refresh check**: called
+  `check-once` via the API, confirmed `lastCheckedAt` advanced and
+  `latestBalance` changed within a few seconds (matches what the live
+  page's own 3s poll would show). Restored the monitor schedule to
+  running (its state before this session started). Regression-checked
+  `/`, `/monitors/xc-bank`, `/screenshots/*`, and
+  `/api/artifacts/screenshots/:filename` — all still 200/correct. All
+  debug scripts and screenshots (a throwaway `debug-screenshot-live.ts`
+  worker script, two harness `.mjs` files, two debug PNGs) deleted
+  before committing. Restored the monitor schedule to `running` (its
+  state before this session's testing began) before final teardown.
+  `docker compose down`; both host Control Panel processes confirmed
+  actually dead afterward (port-4000 check for the API, command-line
+  search for the worker).
+- Next: turning the design-only email-notification fields into
+  something real, a live Gmail OAuth test with the user's own
+  credentials, the real downloads fix, video/trace, or whichever else
+  the user picks.

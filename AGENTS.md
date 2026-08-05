@@ -324,6 +324,28 @@ screenshot timeline renders real `<img>` thumbnails (via the existing
 local `/screenshots/:filename` route) linking to the full-size image in
 a new tab, not just text links.
 
+**Each monitor has two views**, both purely additive on top of the same
+`GET /api/monitors/xc-bank` state — no new backend endpoints for either:
+`/monitors/xc-bank` (**history/detail**: screenshot timeline, full
+transaction history, notification history) and `/monitors/xc-bank/live`
+(**live/current**: two-column "operation view" — left column embeds the
+existing noVNC endpoint the same way `/`'s own take-control iframe does,
+since it's the exact same shared, concurrency-1 browser the monitor's
+own checks drive; right column is a compact extracted-data panel —
+status/last checked/balance/new notifications/latest transactions —
+polling every 3s). When Chrome isn't running, the live page shows a
+"Start Chrome" prompt (calling the existing `POST /api/action/startChrome`)
+plus a fallback: the most recent screenshot from monitor state
+(`state.screenshots[0]`, confirmed newest-first via `unshift` in
+`monitor.ts`). The live page's iframe `src` is set only on the
+stopped→running transition, not on every poll, so it never
+reloads/flickers while Chrome stays up — verified with a Node harness
+that loads the real unmodified script against a stubbed DOM and counts
+`src` assignments across repeated `fetchStatus()` calls (see decision
+log). `monitors-registry.ts`'s `MonitorSummary`/`MonitorDefinition`
+carry a `livePath` alongside `detailPath` for this — a future second
+monitor gets both links automatically, same as today.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -335,7 +357,8 @@ docs/PROJECT_PLAN.md          Actionable checklist version of the roadmap + deci
 docker-compose.yml            browser-worker services (chrome + firefox) + worker + redis
 services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
 services/control-panel/src/monitor.ts  XC Bank Monitor: state/dedup/retention (dev-only JSON state)
-services/control-panel/src/monitors-registry.ts  Data-driven monitor listing for "/" + GET /api/monitors -- add future monitors here
+services/control-panel/src/monitors-registry.ts  Data-driven monitor listing for "/" + GET /api/monitors -- add future monitors here (detailPath + livePath per monitor)
+services/control-panel/public/xc-bank-monitor-live.html+.js  XC Bank live/current-operation view -- noVNC iframe (or latest-screenshot fallback) + polling data panel, distinct from the history/detail page
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC
 services/worker/              Playwright (playwright-core) worker, connects to Chromium over CDP or Firefox via launchServer/connect
 services/worker/src/adapters/ Site adapters (login/extract/popup-recovery per site) — the older, hardcoded-per-site path

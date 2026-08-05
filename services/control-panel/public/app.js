@@ -260,7 +260,8 @@ function renderMonitors(monitors) {
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="start" ${m.running ? "disabled" : ""}>Start</button>
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="stop" ${m.running ? "" : "disabled"}>Stop</button>
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="check-once">Check once</button>
-          <a href="${m.detailPath}">Open &rarr;</a>
+          <a href="${m.detailPath}">Detail</a>
+          <a href="${m.livePath}">Live</a>
         </div>
         <div class="hint">${summary} — last checked: ${lastChecked}</div>
         ${errorLine}

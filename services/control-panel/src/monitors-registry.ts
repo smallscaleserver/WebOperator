@@ -16,6 +16,7 @@ export interface MonitorSummary {
   id: string;
   name: string;
   detailPath: string;
+  livePath: string;
   running: boolean;
   lastCheckedAt: string | null;
   lastError: string | null;
@@ -26,6 +27,7 @@ interface MonitorDefinition {
   id: string;
   name: string;
   detailPath: string;
+  livePath: string;
   getSummary: () => Promise<MonitorSummary>;
 }
 
@@ -35,6 +37,7 @@ async function getXcBankSummary(): Promise<MonitorSummary> {
     id: "xc-bank",
     name: "XC Bank",
     detailPath: "/monitors/xc-bank",
+    livePath: "/monitors/xc-bank/live",
     running,
     lastCheckedAt: state.lastCheckedAt,
     lastError: state.lastError,
@@ -43,7 +46,13 @@ async function getXcBankSummary(): Promise<MonitorSummary> {
 }
 
 const MONITORS: MonitorDefinition[] = [
-  { id: "xc-bank", name: "XC Bank", detailPath: "/monitors/xc-bank", getSummary: getXcBankSummary },
+  {
+    id: "xc-bank",
+    name: "XC Bank",
+    detailPath: "/monitors/xc-bank",
+    livePath: "/monitors/xc-bank/live",
+    getSummary: getXcBankSummary,
+  },
 ];
 
 // Each monitor's summary is fetched independently -- one monitor's
@@ -57,6 +66,7 @@ export async function listMonitorSummaries(): Promise<MonitorSummary[]> {
           id: m.id,
           name: m.name,
           detailPath: m.detailPath,
+          livePath: m.livePath,
           running: false,
           lastCheckedAt: null,
           lastError: (err as Error).message,

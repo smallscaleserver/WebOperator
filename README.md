@@ -233,10 +233,11 @@ login" อีกครั้ง ยืนยันว่า reset สำเร�
 controls/noVNC/worker actions/workflows เดิมยังอยู่ครบ) แล้วดูหัวข้อ
 **Monitors** — จะเห็น card ของ XC Bank พร้อมสถานะ (running/stopped/
 error), summary ล่าสุด, last checked และปุ่ม Start/Stop/Check once
-ในตัว, กด **Open →** เพื่อเข้าหน้ารายละเอียด
+ในตัว, กด **Detail** เพื่อเข้าหน้ารายละเอียด
 (<http://localhost:4000/monitors/xc-bank>) — จะเห็นสถานะเต็ม, ยอดคงเหลือ,
 notifications, ตารางรายการล่าสุด และ screenshot timeline เป็นรูปจริง
-(คลิกรูปเพื่อเปิดเต็มในแท็บใหม่)
+(คลิกรูปเพื่อเปิดเต็มในแท็บใหม่), หรือกด **Live** เพื่อเข้าหน้า Live View
+(ดูข้อ 19 ด้านล่าง)
 
 หัวข้อ Monitors บนหน้าแรกอ่านข้อมูลจาก `GET /api/monitors` แบบ dynamic
 — ถ้าในอนาคตมี monitor เว็บอื่นเพิ่มเข้ามา จะโผล่ในหน้านี้ให้เองโดยไม่ต้อง
@@ -271,6 +272,31 @@ notifications, ตารางรายการล่าสุด และ scr
 
 หยุด `xc-bank` พร้อมกับ service อื่นตอนข้อ 13 (`docker compose down`)
 ตามปกติ ไม่ต้องทำอะไรเพิ่ม
+
+**19. XC Bank Live View (ดูบอทกำลังทำงานสด ๆ)**
+
+หน้าใหม่แยกจากหน้ารายละเอียด/ประวัติ (ข้อ 18) —
+<http://localhost:4000/monitors/xc-bank/live> — เป็นมุมมอง "กำลังทำงาน
+อยู่ตอนนี้" แบ่งสองคอลัมน์:
+
+- **ซ้าย**: browser จริงที่บอทใช้ตรวจ XC Bank อยู่ (embed noVNC
+  endpoint เดียวกับปุ่ม "Take control" บนหน้าแรก) — ถ้า Chrome ยังไม่ได้
+  start จะไม่มี live view ให้ดู หน้าจะขึ้นข้อความแจ้งพร้อมปุ่ม **Start
+  Chrome** และโชว์ภาพ screenshot ล่าสุดที่บอทเคยถ่ายไว้แทน
+  (auto-refresh เมื่อมีรูปใหม่กว่าเดิมเท่านั้น ไม่กระพริบทุกรอบ poll)
+- **ขวา**: ข้อมูลที่บอท extract ได้ล่าสุด — status, last checked, ยอด
+  คงเหลือ, notifications ใหม่, latest transactions, last error (ถ้ามี),
+  และปุ่ม Start/Stop/Check once ชุดเดียวกับหน้ารายละเอียด
+
+ข้อมูลฝั่งขวา poll จาก `GET /api/monitors/xc-bank` ทุก ~3 วินาทีโดยไม่
+reload หน้า — กด **Check once** แล้วรอสักครู่ควรเห็นยอดคงเหลือ/
+transactions ขยับโดยไม่ต้องรีเฟรชเอง ส่วน iframe ฝั่งซ้ายจะไม่ reload
+ซ้ำ ๆ ตราบใดที่ Chrome ยัง running อยู่เหมือนเดิม (set `src` ครั้งเดียว
+ตอนเปลี่ยนจาก stopped→running เท่านั้น)
+
+หน้ารายละเอียด (ข้อ 18) ยังคงทำหน้าที่เดิม — ประวัติ/screenshot timeline
+200 รูปล่าสุด/transaction history/notification history — ไม่ใช่หน้า
+live ทั้งสองหน้ามีลิงก์เชื่อมกันไปมาที่มุมบนซ้าย
 
 ---
 

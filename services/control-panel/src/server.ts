@@ -252,6 +252,15 @@ app.get("/monitors/xc-bank", (_req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "xc-bank-monitor.html"));
 });
 
+// Live/current-operation view -- distinct from the history/detail page
+// above. Left column embeds the same noVNC endpoint "/"'s take-control
+// buttons already use (the shared, concurrency-1 browser this monitor's
+// own checks drive), right column polls the same /api/monitors/xc-bank
+// data. No new API routes needed for this page.
+app.get("/monitors/xc-bank/live", (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "xc-bank-monitor-live.html"));
+});
+
 const server = app.listen(PORT, "127.0.0.1", () => {
   console.log(`WebOperator Control Panel: http://localhost:${PORT}`);
   console.log("Bound to 127.0.0.1 only — no auth, do not expose this to a network.");
