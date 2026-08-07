@@ -25,6 +25,12 @@ export interface ScbMonitorState {
   // row the way XC Bank's mock does, so dedup keys off the combination
   // of visible fields instead.
   seenTransactionKeys: string[];
+  // True once a "please log in again" Telegram alert has been sent
+  // for the *current* session-expired episode -- reset to false the
+  // moment a check succeeds again, so a human logging back in doesn't
+  // need to do anything special, and the alert fires exactly once per
+  // episode rather than every retry while logged out.
+  sessionExpiredNotified: boolean;
   paused: boolean;
   autoStopAt: string | null;
   autoStopped: boolean;
@@ -39,6 +45,7 @@ function emptyState(): ScbMonitorState {
     ledgerBalance: null,
     latestTransactions: [],
     seenTransactionKeys: [],
+    sessionExpiredNotified: false,
     paused: false,
     autoStopAt: null,
     autoStopped: false,
@@ -103,8 +110,26 @@ export async function checkOnce(): Promise<ScbMonitorState> {
   if (!result.ok) {
     state.lastError = result.error ?? result.stderr ?? "SCB balance check failed";
     state.lastCheckedAt = now;
+    // "SESSION_EXPIRED:" is thrown specifically by check-transactions.ts
+    // when it detects it's back on the login page -- alert once per
+    // episode (not every retry) rather than the generic failure path,
+    // so the human knows *why* it's failing and what to do (log in
+    // again via noVNC) instead of a bare error message.
+    if (state.lastError.includes("SESSION_EXPIRED:") && !state.sessionExpiredNotified) {
+      state.sessionExpiredNotified = true;
+      await sendTelegramMessage(
+        "🔒 SCB Business Anywhere — session หลุด/หมดอายุ กรุณา login ใหม่ผ่าน noVNC (http://localhost:6090/vnc.html) — bot จะเช็คต่อเองอัตโนมัติทันทีที่ login สำเร็จ",
+      );
+    }
     await saveState(state);
     return state;
+  }
+  // A successful check after a session-expired episode means the
+  // human logged back in -- reset the notified flag so the *next*
+  // expiry (whenever it happens) alerts again instead of staying
+  // silently suppressed forever.
+  if (state.sessionExpiredNotified) {
+    state.sessionExpiredNotified = false;
   }
 
   const summary = parseScbBalanceSummary(result.stdout);

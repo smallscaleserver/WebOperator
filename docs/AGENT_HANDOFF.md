@@ -2746,3 +2746,47 @@ Appending correctly from here on. -->
   (amount/description/channel/branch) is unaffected. Login/credential
   automation remains categorically out of scope, unchanged from every
   prior entry.
+
+### 2026-08-08 (same session, continued once more again, again) — Claude
+
+- Status: Done
+- Context: Real session-expiry happened mid-scheduled-loop (not
+  simulated) — the check hung on the default ~30s timeout with an
+  unclear error until the user reported "บอทหลุด" (the bot
+  disconnected). Fixed fast detection + a one-time Telegram alert
+  ("please log in again via noVNC"). While investigating, found a
+  second real, important gotcha: after the user manually logged back
+  in, the company switcher had silently reset to the account's
+  *default* company (2 U Estate), not "เซซุส" which had been actively
+  monitored — the monitor kept running but was now silently reporting
+  the wrong company's data. Re-selected เซซุส manually to recover.
+  Immediately after, the very next check found a genuine, real
+  +831.68 THB incoming transfer ("รับโอนจาก BAY x3539 MAXBIT DIGITA")
+  — captured, deduped, and Telegram-notified correctly, full
+  end-to-end proof with real unprompted money movement, not a
+  manufactured test.
+- Files: `services/worker/src/check-transactions.ts` (checks for the
+  login username field / absence of "Account Summary" with short
+  timeouts *before* anything else, throws a `SESSION_EXPIRED:`-prefixed
+  error immediately instead of hanging); `services/control-panel/src/scb-monitor.ts`
+  (new `sessionExpiredNotified` state field — alerts exactly once per
+  expiry episode, resets on the next successful check).
+- Verified: real session-expiry → fast, clear error (not a 30s hang);
+  Telegram alert sent for it (no error logged); manually confirmed the
+  company had reset via a check-once showing the wrong account's
+  balance; re-selected เซซุส via `select-company` and confirmed correct
+  data returned; the real +831.68 THB transfer was captured with full
+  detail, deduped (`seenTransactionKeys` grew 1→2), and notified
+  without a repeat/duplicate on a follow-up check; `tsc --noEmit` clean
+  in both projects; debug/test files cleaned up before committing.
+- Next: **operationally important, not yet automated** — the monitor
+  has no concept of "which company it's supposed to be watching" and
+  will silently report whatever's currently active after any re-login
+  (session-expiry or otherwise). Whoever is operating this needs to
+  manually re-select the correct company after every re-login before
+  trusting the monitor's data again. A future improvement could have
+  the monitor remember and re-assert its intended company after each
+  check, but that wasn't built this round. The scheduled loop is
+  currently running for real (60-minute auto-stop from the prior
+  entry) — check whether it's still active or already auto-stopped
+  when picking this back up.

@@ -17,7 +17,23 @@ async function main(): Promise<void> {
   const page = context.pages()[0] ?? (await context.newPage());
 
   const result = await step("check-transactions", async () => {
-    await page.getByText("Account Summary", { exact: true }).first().click();
+    // Detect a dropped/expired session fast (short timeout) instead
+    // of blindly waiting the default ~30s for "Account Summary" to
+    // appear (which it never will if logged out) -- found this
+    // happening for real: the session expired mid-monitoring and the
+    // check just hung until timeout with an unclear error. A thrown
+    // "SESSION_EXPIRED:" prefix lets scb-monitor.ts recognize this
+    // specific case and send a clear "please log in again" alert
+    // instead of a generic failure message.
+    const loginUsernameField = page.getByText("ชื่อผู้ใช้งาน", { exact: true }).first();
+    if (await loginUsernameField.isVisible({ timeout: 3000 }).catch(() => false)) {
+      throw new Error("SESSION_EXPIRED: back on the login page -- a human needs to log in again via noVNC");
+    }
+    const accountSummaryLink = page.getByText("Account Summary", { exact: true }).first();
+    if (!(await accountSummaryLink.isVisible({ timeout: 5000 }).catch(() => false))) {
+      throw new Error("SESSION_EXPIRED: expected nav (Account Summary) not found -- likely logged out, a human needs to log in again via noVNC");
+    }
+    await accountSummaryLink.click();
     await page.waitForTimeout(1500);
     // "Account Summary" can land on either the single-account detail
     // (has the Latest Transactions table directly) or the "All
