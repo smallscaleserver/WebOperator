@@ -2293,3 +2293,65 @@ Appending correctly from here on. -->
   applied the fix from the previous round's incident proactively this
   time instead of discovering the same bug again.
 - Next: same open items as before.
+
+### 2026-08-07 (session 7) — Claude
+
+- Status: In progress
+- Context: **Claiming: 3-part monitor stability pass** — (1) monitor
+  auto-stop (`autoStopAt`/`maxRunMinutes`, checked by the scheduled tick,
+  manual "Check once" always still works, UI input to set it on Start);
+  (2) per-workflow-run page reset (`run-workflow.ts` closes all existing
+  pages in the shared context and opens exactly one fresh page at the
+  start of every run, instead of reusing the same page indefinitely);
+  (3) window-size observability, **scope deliberately reduced from the
+  original ask** after empirical testing (see below). Triggered by a
+  real incident this session: after ~38h unattended, Chromium inside
+  `browser-worker-chrome` had silently crashed (Xvfb/noVNC/x11vnc still
+  "up," CDP unreachable) — user separately flagged 3 related concerns:
+  no way to auto-stop the monitor loop (ban risk on a real site), a
+  leftover Chrome tab observed, and the window not appearing full-screen
+  like at first. Explicit direct instruction with detailed requirements
+  for all three, prioritized 1 > 2 > 3. Checked `git log` first — still
+  at `d413a07`, nothing new claimed.
+  **Empirical CDP testing done before finalizing the plan (not assumed)**,
+  changing the original design for item 3:
+  - `Browser.setWindowBounds` works over a page-level CDP session
+    (`context.newCDPSession(page)`), no error.
+  - A genuinely new `context.newPage()` is a new **tab in the existing
+    window**, not a new top-level window — confirmed live: a fresh page
+    opened already reporting `windowState: "maximized"`,
+    `1366x748` (full size) with zero extra code, because it inherits the
+    parent window's state. The original hypothesis ("new tabs open
+    small") was wrong.
+  - The originally-planned fallback
+    (`setWindowBounds({windowState:"normal"})` then explicit
+    `{left,top,width,height}` bounds) was tested directly and **actively
+    broke** an already-maximized window, shrinking it from `1366x748`
+    maximized down to `1366x726` `"normal"` — confirmed harmful, ruled
+    out entirely, will not be implemented.
+    A follow-up idempotent-only test
+    (`setWindowBounds({windowState:"maximized"})`, no "normal" step)
+    was safe (no further damage) but **not effective** either — run
+    against a window already stuck in "normal" from the previous test,
+    it stayed "normal" (didn't recover it). Real in-page
+    `window.innerWidth/innerHeight` measured `1366x661` in that damaged
+    state.
+  - **Revised scope for item 3**, per direct user confirmation after
+    seeing this evidence: no explicit-bounds fallback, no forced resize
+    at all. At most a harmless best-effort idempotent
+    `setWindowBounds({windowState:"maximized"})` call (since it's
+    proven safe, just not reliable) plus **measuring and logging**
+    `window.innerWidth/innerHeight` as step detail if abnormally small
+    — observability only, never correcting size aggressively, never
+    failing the job.
+  All debug scripts (`debug-maximize-check.ts`/`2`/`3`) deleted; the
+  live browser window (inadvertently left in the damaged "normal" state
+  by test 2) was reset by restarting `browser-worker-chrome`, confirmed
+  `GET /api/health` → `ready: true` afterward.
+  If you're Codex (or another session) reading this before a "Done"
+  entry below: this is claimed — check back here or pick a different
+  open item instead.
+- Files: none yet — planning now.
+- Verified: n/a (see empirical CDP findings above, already real
+  verification of the design, ahead of implementation).
+- Next: (this entry will be updated once the work is done and verified).
