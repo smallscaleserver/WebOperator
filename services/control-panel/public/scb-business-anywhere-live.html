@@ -34,6 +34,7 @@
   .analysis-box dt { margin-top: 0.5rem; }
   .analysis-box img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.3rem; }
   .analysis-text { white-space: pre-wrap; background: #f6f8fa; border-radius: 4px; padding: 0.5rem; max-height: 200px; overflow: auto; font-family: monospace; font-size: 0.8rem; }
+  #script-reference { width: 100%; min-height: 420px; font-family: monospace; font-size: 0.8rem; padding: 0.6rem; border: 1px solid #ccc; border-radius: 4px; box-sizing: border-box; resize: vertical; white-space: pre; }
 </style>
 </head>
 <body>
@@ -75,6 +76,21 @@
         (<code>VNC_PASSWORD</code> in <code>.env</code>, dev-only, see
         <code>docs/PROJECT_PLAN.md</code>).
       </p>
+    </section>
+
+    <section>
+      <h2>📜 Script &amp; loop reference (your own notes)</h2>
+      <p class="hint">
+        Editable — saved in this browser only (<code>localStorage</code>),
+        not sent anywhere. Starts filled in with what each script does
+        and where the scheduled loop starts/ends; edit freely, e.g. to
+        add your own operational notes.
+      </p>
+      <textarea id="script-reference" spellcheck="false"></textarea>
+      <div class="row" style="margin-top:0.4rem;">
+        <button id="reference-reset-btn">Reset to default</button>
+        <span class="hint" id="reference-saved-hint"></span>
+      </div>
     </section>
   </div>
 

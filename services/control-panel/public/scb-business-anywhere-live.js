@@ -284,6 +284,136 @@ document.getElementById("switch-company-btn").addEventListener("click", async ()
   btn.textContent = "Switch";
 });
 
+// --- Script & loop reference (editable notes, localStorage-persisted) ---
+
+const SCRIPT_REFERENCE_STORAGE_KEY = "scb-lane-script-reference-v1";
+
+const DEFAULT_SCRIPT_REFERENCE = `SCB BUSINESS ANYWHERE LANE — SCRIPT & LOOP REFERENCE
+(edit this freely — it's saved in this browser only, via localStorage)
+
+All scripts below live in services/worker/src/*.ts — plain TypeScript,
+editable like any other code in the repo. Each one runs via:
+  docker compose run --rm worker-scb-business-anywhere-1 npm run <script>
+— a fresh throwaway container every run, but always connecting (over
+CDP) to the SAME persistent Chromium/page, so login session and the
+open tab carry over between script runs.
+
+1. OPEN LOGIN PAGE
+   File: workflows/scb-business-anywhere-open-login.json (via run-workflow.ts)
+   Trigger: "Open Login Page" button
+   Does: closes old tabs, opens a fresh one, navigates to the real
+         login page. Touches no field.
+   Use: only BEFORE logging in — using it after login discards that
+        session's tab.
+
+2. SWITCH COMPANY
+   File: select-company.ts
+   Trigger: "Switch" button (Switch company box)
+   Does: opens the company-switcher dropdown (reopens it if needed),
+         clicks the named entry (e.g. เซซุส, กฤษฎิ์ ดำประสงค์). Thai
+         text passed base64-encoded (Windows execFile argv encoding
+         workaround).
+   Note: re-login resets the active company back to the account
+         default — re-select after every fresh login.
+
+3. ANALYZE CURRENT PAGE
+   File: analyze-page.ts
+   Trigger: "Analyze current page" button
+   Does: read-only, never navigates. Captures URL, title, first 2000
+         chars of visible text, and a screenshot of whatever's already
+         on screen.
+
+4. CHECK TRANSACTIONS (the balance monitor's core)
+   File: check-transactions.ts
+   Trigger: "Check once" button, or every scheduled loop tick
+   Does:
+     a. Fast session-expired check (~3-5s, not the default ~30s
+        timeout) — fails clearly with "SESSION_EXPIRED:" if logged out
+     b. Clicks "Account Summary" (handles both landing directly on
+        account detail, or on an "All Accounts" overview needing an
+        extra "View Details" click)
+     c. Extracts Available/Ledger balance + Latest Transactions rows
+        via labeled regex on the page's visible text
+     d. Expands each transaction's "▾" detail chevron (idempotent —
+        checks if already expanded first) for Channel/Cheque No./
+        Teller No./Branch Code
+
+THE SCHEDULED LOOP — where it starts and ends
+------------------------------------------------
+Outer loop (the schedule itself):
+  "Start monitor" clicked
+    -> creates a BullMQ scheduler (monitor:scb-business-anywhere-1)
+    -> fires one check immediately (no waiting for the first interval)
+    -> repeats every ~5 min (+0-15s random jitter) from then on
+    ... ticks keep firing every ~5 min ...
+  Loop ends when:
+    - "Stop monitor" is clicked (scheduler removed outright), OR
+    - the auto-stop timer (Run for ___ min) elapses on its own
+      (scheduler removed + a Telegram alert sent automatically)
+
+Inner loop (what happens on each individual tick):
+  1. Sleep the random jitter (0-15s)
+  2. Check auto-stop elapsed? -> if yes: stop scheduler, alert
+     Telegram, done (no balance check this tick)
+  3. Check paused? -> if yes: skip the balance check this tick
+     (scheduler keeps running, next tick checks again)
+  4. Run check-transactions.ts for real (step 4 above)
+  5. Compare against previously-seen transactions (dedup)
+  6. Save to data/lanes/scb-business-anywhere-1/monitor-state.json
+  7. If anything new (or this is the very first-ever check): send a
+     Telegram message (private chat + the group, both if configured)
+  Tick done -> waits for the next scheduled tick (back to outer loop)
+
+NOTES / OPTIONS
+------------------------------------------------
+- "Analyze current page" and "Check once" never modify anything — safe
+  to click anytime, any number of times.
+- "Open Login Page" is the one button that resets the tab — don't use
+  it once you're logged in and being monitored.
+- If the monitor is reporting the wrong company's data after a
+  re-login, use "Switch company" to fix it before trusting the numbers.
+`;
+
+function loadScriptReference() {
+  try {
+    const saved = localStorage.getItem(SCRIPT_REFERENCE_STORAGE_KEY);
+    return saved !== null ? saved : DEFAULT_SCRIPT_REFERENCE;
+  } catch {
+    return DEFAULT_SCRIPT_REFERENCE;
+  }
+}
+
+function showSavedHint() {
+  const hint = document.getElementById("reference-saved-hint");
+  hint.textContent = "Saved";
+  clearTimeout(showSavedHint._t);
+  showSavedHint._t = setTimeout(() => {
+    hint.textContent = "";
+  }, 1500);
+}
+
+const referenceTextarea = document.getElementById("script-reference");
+referenceTextarea.value = loadScriptReference();
+referenceTextarea.addEventListener("input", () => {
+  try {
+    localStorage.setItem(SCRIPT_REFERENCE_STORAGE_KEY, referenceTextarea.value);
+    showSavedHint();
+  } catch {
+    // localStorage unavailable (private browsing, quota, etc.) --
+    // editing still works for the current page load, just won't persist.
+  }
+});
+document.getElementById("reference-reset-btn").addEventListener("click", () => {
+  if (!confirm("Reset these notes back to the default reference text? Your edits will be lost.")) return;
+  referenceTextarea.value = DEFAULT_SCRIPT_REFERENCE;
+  try {
+    localStorage.removeItem(SCRIPT_REFERENCE_STORAGE_KEY);
+  } catch {
+    // ignore
+  }
+  showSavedHint();
+});
+
 fetchStatus();
 fetchMonitorStatus();
 setInterval(fetchStatus, 3000);
