@@ -38,6 +38,23 @@ function setStatusUi(data) {
     nextCheckEl.style.display = "none";
   }
 
+  document.getElementById("autostop-input").disabled = running && !paused;
+  const autoStopEl = document.getElementById("autostop-text");
+  if (running && !paused && data.autoStopAt) {
+    autoStopEl.textContent = `Auto-stop: ~${new Date(data.autoStopAt).toLocaleTimeString()}`;
+    autoStopEl.style.display = "block";
+  } else {
+    autoStopEl.style.display = "none";
+  }
+
+  const autoStoppedEl = document.getElementById("autostopped-banner");
+  if (!running && data.autoStopped) {
+    autoStoppedEl.textContent = `⏱ Auto-stopped after ${data.autoStopMinutes ?? "?"} minute(s)`;
+    autoStoppedEl.style.display = "block";
+  } else {
+    autoStoppedEl.style.display = "none";
+  }
+
   const errorEl = document.getElementById("last-error");
   if (error) {
     errorEl.textContent = `Last error: ${error}`;
@@ -153,7 +170,24 @@ async function callAndRefresh(url) {
   await fetchStatus();
 }
 
-document.getElementById("start-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/start"));
+document.getElementById("start-btn").addEventListener("click", async () => {
+  const raw = document.getElementById("autostop-input").value.trim();
+  const autoStopMinutes = raw ? Number(raw) : undefined;
+  try {
+    const res = await fetch("/api/monitors/xc-bank/start", {
+      method: "POST",
+      headers: autoStopMinutes !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: autoStopMinutes !== undefined ? JSON.stringify({ autoStopMinutes }) : undefined,
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setStatusUi({ running: false, error: data.error || "Request failed" });
+    }
+  } catch (err) {
+    setStatusUi({ running: false, error: `Request failed: ${err}` });
+  }
+  await fetchStatus();
+});
 document.getElementById("stop-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/stop"));
 document.getElementById("pause-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/pause"));
 document.getElementById("resume-btn").addEventListener("click", () => callAndRefresh("/api/monitors/xc-bank/resume"));

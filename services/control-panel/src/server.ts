@@ -16,6 +16,7 @@ import {
   resumeMonitor,
   startMonitorSchedule,
   stopMonitorSchedule,
+  validateAutoStopMinutes,
 } from "./queue.js";
 import { getArtifactStream } from "./artifacts.js";
 import { loadState as loadMonitorState } from "./monitor.js";
@@ -238,9 +239,18 @@ app.get("/api/monitors/xc-bank", async (_req, res) => {
   }
 });
 
-app.post("/api/monitors/xc-bank/start", async (_req, res) => {
+// Optional JSON body { autoStopMinutes?: number } -- a safety limit for
+// unattended runs (1-240 min), validated here as the real authority (the
+// UI also clamps client-side, but this is what actually enforces it).
+// Omitted entirely means unlimited, same as before this existed.
+app.post("/api/monitors/xc-bank/start", express.json(), async (req, res) => {
+  const validation = validateAutoStopMinutes(req.body?.autoStopMinutes);
+  if (!validation.ok) {
+    res.status(400).json({ ok: false, error: validation.error });
+    return;
+  }
   try {
-    await startMonitorSchedule();
+    await startMonitorSchedule(validation.minutes);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

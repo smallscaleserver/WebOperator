@@ -1,7 +1,7 @@
 import { Queue, Worker } from "bullmq";
 import { runAction, runWorkflow, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
-import { checkOnce, loadState, resetState, setPaused, MONITOR_JOB_NAME } from "./monitor.js";
+import { checkOnce, loadState, resetState, setPaused, setAutoStopConfig, MONITOR_JOB_NAME } from "./monitor.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const QUEUE_NAME = "worker-actions";
@@ -26,6 +26,14 @@ const MONITOR_CLEANUP_JOB_NAME = "xc-bank-monitor-cleanup";
 // back whatever paused value it read at *its* load time). Queueing
 // serializes this the same way it already does for cleanup.
 const MONITOR_SET_PAUSED_JOB_NAME = "xc-bank-monitor-set-paused";
+// Same queue-serialization reasoning as pause/resume, kept as its own
+// job type (not folded into MONITOR_SET_PAUSED_JOB_NAME) to avoid
+// touching that already-tested mechanism. Requested after a real ~38h
+// unattended run crashed Chromium -- a genuine ban risk if this loop
+// were ever pointed at an actual site with no bound on how long it runs.
+const MONITOR_SET_AUTOSTOP_JOB_NAME = "xc-bank-monitor-set-autostop";
+const MIN_AUTO_STOP_MINUTES = 1;
+const MAX_AUTO_STOP_MINUTES = 240;
 const MONITOR_INTERVAL_MS = Number(process.env.XC_BANK_MONITOR_INTERVAL_MS ?? 20_000);
 // Max random extra delay before a *scheduled* tick actually runs -- avoids
 // a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
@@ -69,15 +77,45 @@ export function startWorker(): Worker {
         await setPaused(paused);
         return { ok: true, stdout: paused ? "Monitor paused" : "Monitor resumed", stderr: "", steps: [] };
       }
+      if (job.name === MONITOR_SET_AUTOSTOP_JOB_NAME) {
+        const data = (job.data ?? {}) as { autoStopAt?: string | null; autoStopMinutes?: number | null };
+        await setAutoStopConfig({
+          autoStopAt: data.autoStopAt ?? null,
+          autoStopped: false,
+          autoStopMinutes: data.autoStopMinutes ?? null,
+        });
+        return {
+          ok: true,
+          stdout: data.autoStopAt ? `Auto-stop set for ${data.autoStopAt}` : "Auto-stop cleared (unlimited run)",
+          stderr: "",
+          steps: [],
+        };
+      }
       if (job.name === MONITOR_JOB_NAME) {
         const isScheduledTick = job.data?.scheduled === true;
         if (isScheduledTick) {
           await sleep(Math.random() * MONITOR_JITTER_MS);
-          // Manual "Check once" always runs regardless of paused --
-          // pause only skips the automatic scheduled loop, matching the
+          // Manual "Check once" always runs regardless of paused/auto-stop
+          // -- both only gate the automatic scheduled loop, matching the
           // "manual is always instant/authoritative" precedent from the
-          // jitter work above.
-          const { paused } = await loadState();
+          // jitter work above. One loadState() covers both gates.
+          const { autoStopAt, autoStopMinutes, paused } = await loadState();
+          if (autoStopAt && Date.now() >= Date.parse(autoStopAt)) {
+            // Remove the scheduler itself (safe to call from within one
+            // of its own jobs -- this job still completes normally, just
+            // no future ticks get scheduled) and record why, directly
+            // (not re-queued -- already inside the serialized job, same
+            // reasoning checkOnce() itself uses for its own
+            // read-modify-write).
+            await stopMonitorSchedule();
+            await setAutoStopConfig({ autoStopAt: null, autoStopped: true, autoStopMinutes });
+            return {
+              ok: true,
+              stdout: `Monitor auto-stopped after ${autoStopMinutes ?? "?"} minute(s)`,
+              stderr: "",
+              steps: [],
+            };
+          }
           if (paused) {
             return { ok: true, stdout: "Monitor paused — scheduled check skipped", stderr: "", steps: [] };
           }
@@ -146,6 +184,22 @@ export async function resumeMonitor(): Promise<string> {
   return enqueueSetPaused(false);
 }
 
+async function enqueueSetAutoStop(autoStopAt: string | null, autoStopMinutes: number | null): Promise<string> {
+  const job = await queue.add(MONITOR_SET_AUTOSTOP_JOB_NAME, { autoStopAt, autoStopMinutes }, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export function validateAutoStopMinutes(value: unknown): { ok: true; minutes: number | undefined } | { ok: false; error: string } {
+  if (value === undefined || value === null) return { ok: true, minutes: undefined };
+  if (typeof value !== "number" || !Number.isFinite(value) || !Number.isInteger(value)) {
+    return { ok: false, error: "autoStopMinutes must be an integer" };
+  }
+  if (value < MIN_AUTO_STOP_MINUTES || value > MAX_AUTO_STOP_MINUTES) {
+    return { ok: false, error: `autoStopMinutes must be between ${MIN_AUTO_STOP_MINUTES} and ${MAX_AUTO_STOP_MINUTES}` };
+  }
+  return { ok: true, minutes: value };
+}
+
 export interface MonitorScheduleInfo {
   running: boolean;
   next: number | null;
@@ -173,7 +227,11 @@ export async function getMonitorScheduleInfo(): Promise<MonitorScheduleInfo> {
   };
 }
 
-export async function startMonitorSchedule(): Promise<void> {
+// autoStopMinutes: undefined/omitted means unlimited -- every Start
+// explicitly (re)configures autoStopAt one way or the other, so a
+// previous run's limit (or auto-stopped flag) never silently carries
+// over into a fresh unlimited run, and vice versa.
+export async function startMonitorSchedule(autoStopMinutes?: number): Promise<void> {
   // data.scheduled tags jobs produced by the scheduler itself (not the
   // immediate first-tick enqueue below, and not a manual "Check once")
   // so the processor above knows which jobs to jitter.
@@ -187,6 +245,9 @@ export async function startMonitorSchedule(): Promise<void> {
   // above), so resuming a paused-but-still-scheduled monitor via the
   // existing Start button works intuitively without a separate step.
   await enqueueSetPaused(false);
+  const autoStopAt =
+    autoStopMinutes !== undefined ? new Date(Date.now() + autoStopMinutes * 60_000).toISOString() : null;
+  await enqueueSetAutoStop(autoStopAt, autoStopMinutes ?? null);
   // Also fire one check immediately rather than assuming/relying on the
   // scheduler's own first-tick timing, so the UI shows real data right
   // away instead of waiting up to a full interval.

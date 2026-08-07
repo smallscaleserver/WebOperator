@@ -89,9 +89,13 @@ export async function stepWithRetry<T>(
 // rethrows -- for auxiliary work (e.g. mirroring an artifact to S3-
 // compatible storage) that should be observable when it fails without
 // turning an otherwise-successful job into a failure.
-export async function stepBestEffort<T>(name: string, fn: () => Promise<T>): Promise<T | undefined> {
+export async function stepBestEffort<T>(
+  name: string,
+  fn: () => Promise<T>,
+  opts?: { screenshot?: string; captureResult?: boolean },
+): Promise<T | undefined> {
   try {
-    return await step(name, fn);
+    return await step(name, fn, opts);
   } catch {
     return undefined;
   }

@@ -477,6 +477,100 @@ instruction: no silent auto-start. This page only diagnoses.
   inline warning when the queue worker is disconnected ("jobs will stay
   waiting") — no second poll, no new state.
 
+**Monitor stability pass** (auto-stop, page-reset, window-size
+observability) — triggered by a real incident: XC Bank Monitor ran
+unattended for ~38 hours and Chromium inside `browser-worker-chrome`
+silently crashed (Xvfb/x11vnc/noVNC stayed up, so `docker compose ps`
+and even `/api/health`'s noVNC check both still reported healthy — CDP
+reachability is not checked anywhere, a known blind spot, not fixed
+this round). Three related concerns, same priority order they were
+fixed in:
+- **Auto-stop** (highest priority — a real ban risk if ever pointed at
+  a real site and left running): `MonitorState` gained `autoStopAt`
+  (ISO timestamp)/`autoStopped`/`autoStopMinutes`, set via a new
+  `xc-bank-monitor-set-autostop` **queued job type** — deliberately
+  separate from the existing `xc-bank-monitor-set-paused` job rather
+  than folded in, so the already-tested pause mechanism stays
+  untouched. `POST /api/monitors/xc-bank/start` accepts an optional
+  `{autoStopMinutes}` body (1-240, validated server-side —
+  client-side validation is only a hint). A *scheduled* tick checks
+  `autoStopAt` before the existing `paused` check in the same
+  `loadState()` call; if elapsed, it calls `stopMonitorSchedule()` +
+  `setAutoStopConfig(...)` directly (not re-queued — already inside
+  the serialized job, same reasoning `checkOnce()` uses for its own
+  read-modify-write) and returns early. A manual "Check once" ignores
+  both gates entirely, same "manual is always authoritative"
+  precedent as jitter/pause. Starting again always clears
+  `autoStopped`/sets `autoStopAt` fresh (or clears it for an unlimited
+  run) — verified live: `running` in the API response is read
+  straight from BullMQ's own `getJobSchedulers()`, not a stored flag,
+  so `running:false` after auto-stop *is* the proof the scheduler was
+  genuinely removed, not just marked. UI ("Run for ___ min", empty =
+  unlimited; "Auto-stop: ~HH:MM:SS" while running; "⏱ Auto-stopped
+  after N minute(s)" banner once stopped) is on all three surfaces —
+  `/`, `/monitors/xc-bank`, `/monitors/xc-bank/live` — same pattern
+  duplicated three times, no shared component layer exists yet.
+- **Page reset per workflow run**: `run-workflow.ts`'s `main()` now
+  closes every existing page in the shared context (best-effort — a
+  `.close()` failure is ignored) and opens exactly one fresh page via
+  a real `step("prepare-page", ...)` (must succeed — no page, nothing
+  downstream can run). Deliberately uses `context.newPage()`, **not**
+  `browser.newContext()` — confirmed empirically (see below) that only
+  the former inherits the existing window's maximized state; the
+  latter opens a genuinely separate top-level window that doesn't.
+  Runs for *every* workflow (it's the shared engine), which is
+  correct since the continuous monitor loop is what motivated this.
+  **Documented limitation, not solved this round**: there is no
+  reliable signal for "a human is currently using noVNC right now" —
+  a queued job closing/reopening the page mid-manual-session via Take
+  Control is a pre-existing risk (jobs already drove the shared page
+  regardless of concurrent manual use before this change); would need
+  an explicit "human has the browser" lock the queue itself respects,
+  out of scope here.
+- **Window-size observability** (lowest priority, scope reduced after
+  empirical testing overturned the original plan): a
+  `stepBestEffort("check-window-size", ...)` right after
+  `prepare-page` measures real `page.evaluate(() => ({width:
+  window.innerWidth, height: window.innerHeight}))` and flags it (red
+  step, job still succeeds) if below ~1200×600 against the real Xvfb
+  resolution (1366×768). **The original hypothesis — that a new page
+  opens undersized and needs an explicit resize — was tested directly
+  via CDP and found wrong**: a same-context `newPage()` already
+  inherits the parent window's maximized state with zero extra code
+  (confirmed: a fresh page immediately reported `windowState:
+  "maximized"`, `1366x748`). The originally-planned fallback
+  (`Browser.setWindowBounds({windowState: "normal"})` then explicit
+  `{left,top,width,height}` bounds) was tested directly and **actively
+  broke** an already-maximized window (shrunk it to `1366x726`
+  `"normal"`) — **ruled out permanently, do not reintroduce this
+  fallback**. A safer idempotent-only call
+  (`setWindowBounds({windowState: "maximized"})`, no `"normal"` step
+  first) was proven *safe* (no further damage) but *not* effective at
+  recovering a window already stuck in `"normal"` state — so it's kept
+  as a harmless best-effort call, but the real signal this step relies
+  on is the measured `window.innerWidth`/`innerHeight`, never the CDP
+  `windowState` label.
+- **Verified live** (not just `tsc --noEmit`, though that also stayed
+  clean): a real 1-minute auto-stop timing test (scheduler genuinely
+  removed, `autoStopped:true`, manual check-once still worked
+  immediately after, starting again cleared it);
+  `autoStopMinutes: 0`/`9999` both `400`, omitted starts unlimited;
+  `GET /json/list` on the live CDP endpoint showed exactly 1 page
+  target after 4 back-to-back workflow runs (no tab leak);
+  `demo`/`the-internet-login`/`xc-bank-login-extract`/
+  `xc-bank-logout-clean` all still pass with the new
+  `prepare-page`/`check-window-size` steps visible in job detail; all
+  three UI surfaces visually confirmed via a real CDP screenshot.
+  **Also found during this verification pass**: Chromium inside
+  `browser-worker-chrome` crashed silently three more times within
+  about 15 minutes of real (if unusually rapid/concurrent) use on this
+  dev machine — no OOM, no crash-log entry, container itself stayed
+  "Up" throughout each time (same blind spot as the original 38-hour
+  incident, just recurring far faster under load here). Not addressed
+  this round — still the same known gap (no CDP-reachability check
+  anywhere), flagged again for whoever picks up the health-check work
+  next.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 

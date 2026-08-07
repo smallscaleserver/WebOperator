@@ -2348,10 +2348,64 @@ Appending correctly from here on. -->
   live browser window (inadvertently left in the damaged "normal" state
   by test 2) was reset by restarting `browser-worker-chrome`, confirmed
   `GET /api/health` → `ready: true` afterward.
-  If you're Codex (or another session) reading this before a "Done"
-  entry below: this is claimed — check back here or pick a different
-  open item instead.
-- Files: none yet — planning now.
-- Verified: n/a (see empirical CDP findings above, already real
-  verification of the design, ahead of implementation).
-- Next: (this entry will be updated once the work is done and verified).
+- Status: Done
+- Files: `services/control-panel/src/monitor.ts` (auto-stop state
+  fields + `setAutoStopConfig`), `queue.ts` (new
+  `xc-bank-monitor-set-autostop` job type, scheduled-tick
+  `autoStopAt` gate before `paused`, `validateAutoStopMinutes`,
+  `startMonitorSchedule(autoStopMinutes?)`), `server.ts` (`POST
+  .../start` accepts optional `{autoStopMinutes}`, validated
+  server-side), `monitors-registry.ts` (three new fields on
+  `MonitorSummary`); `services/worker/src/steps.ts`
+  (`stepBestEffort` gained the same `opts` param `step()` already
+  had); `services/worker/src/run-workflow.ts` (`prepare-page` —
+  real `step()`, closes all existing pages best-effort then opens
+  exactly one fresh page via `newPage()`, not `newContext()` —
+  and `check-window-size` — `stepBestEffort`, idempotent maximize
+  + measure real `window.innerWidth/innerHeight`, flags but never
+  fails on <1200x600); `services/control-panel/public/app.js` +
+  `index.html`, `xc-bank-monitor.html`+`.js`,
+  `xc-bank-monitor-live.html`+`.js` (all three surfaces: "Run for
+  ___ min" input, empty = unlimited, "Auto-stop: ~HH:MM:SS" while
+  running, "⏱ Auto-stopped after N minute(s)" banner once stopped).
+- Verified, all live against the real stack (not just `tsc
+  --noEmit`, though that stayed clean throughout):
+  - Real 1-minute `autoStopMinutes` timing test: scheduler
+    genuinely removed (confirmed via `running` in the API response,
+    which reads live off BullMQ's own `getJobSchedulers()`, not a
+    stored flag), `autoStopped: true`, manual "Check once" still
+    worked immediately afterward, starting again cleared
+    `autoStopped` and set a fresh `autoStopAt`.
+  - Validation: `autoStopMinutes: 0` and `9999` both `400` with a
+    clear message; omitted starts unlimited (`autoStopAt: null`).
+  - Page reset: `GET /json/list` on the live CDP endpoint showed
+    exactly 1 page target after 4 back-to-back workflow runs — no
+    tab leak.
+  - Regression: `demo` (x3), `the-internet-login`,
+    `xc-bank-login-extract` (x2), `xc-bank-logout-clean` all
+    completed with `prepare-page`/`check-window-size` visible and
+    green in job detail (measured sizes 1358-1366 x 635-657,
+    comfortably above the 1200x600 threshold).
+  - All three UI surfaces (`/`, `/monitors/xc-bank`,
+    `/monitors/xc-bank/live`) visually confirmed correct via real
+    CDP screenshots — input placeholder, disabled-while-running
+    state, and the auto-stopped banner all rendered as designed.
+  - All `debug-*.ts` scripts and screenshots deleted before commit;
+    `git status` confirmed clean (only the user's own untracked
+    `note`/`note2`/`note3` remain).
+  - **New finding during this verification pass, not caused by this
+    round's changes**: Chromium inside `browser-worker-chrome`
+    silently crashed three more times within ~15 minutes of real
+    (rapid/concurrent) use on this dev machine — no OOM, no crash
+    log entry, container itself stayed "Up" throughout, same blind
+    spot as the original 38h incident that triggered this whole
+    round, just recurring much faster under load here. Not fixed
+    this round (same known gap: no CDP-reachability check anywhere)
+    — see `docs/PROJECT_PLAN.md` decision log, flagged again for
+    whoever picks up the health-check work next.
+- Next: no known follow-up required for auto-stop/page-reset/
+  window-size themselves. The recurring Chromium-crash blind spot
+  (CDP unreachable while the container/noVNC still report healthy)
+  remains open and is now the most concrete lead for a future
+  `/api/health` improvement — add a real `GET
+  {CDP_URL}/json/version` check, still the user's call on priority.

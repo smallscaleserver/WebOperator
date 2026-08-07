@@ -47,6 +47,16 @@ export interface MonitorState {
   // lighter than stop, which removes the scheduler entirely. See
   // queue.ts and docs/PROJECT_PLAN.md decision log.
   paused: boolean;
+  // Auto-stop: a safety limit for unattended runs, requested after a
+  // real ~38h unattended run crashed Chromium -- a real ban risk if
+  // this were ever pointed at an actual site. Checked by the scheduled
+  // tick the same way `paused` is; a manual "Check once" always ignores
+  // it. autoStopAt is cleared (null) once it fires or a fresh Start is
+  // issued; autoStopMinutes is remembered afterward purely so the UI
+  // can say "Auto-stopped after N minutes".
+  autoStopAt: string | null;
+  autoStopped: boolean;
+  autoStopMinutes: number | null;
 }
 
 function emptyState(): MonitorState {
@@ -59,6 +69,9 @@ function emptyState(): MonitorState {
     notifications: [],
     screenshots: [],
     paused: false,
+    autoStopAt: null,
+    autoStopped: false,
+    autoStopMinutes: null,
   };
 }
 
@@ -169,6 +182,21 @@ export async function checkOnce(): Promise<MonitorState> {
 export async function setPaused(paused: boolean): Promise<MonitorState> {
   const state = await loadState();
   state.paused = paused;
+  await saveState(state);
+  return state;
+}
+
+export interface AutoStopConfig {
+  autoStopAt: string | null;
+  autoStopped: boolean;
+  autoStopMinutes: number | null;
+}
+
+export async function setAutoStopConfig(patch: AutoStopConfig): Promise<MonitorState> {
+  const state = await loadState();
+  state.autoStopAt = patch.autoStopAt;
+  state.autoStopped = patch.autoStopped;
+  state.autoStopMinutes = patch.autoStopMinutes;
   await saveState(state);
   return state;
 }

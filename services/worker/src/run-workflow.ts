@@ -11,6 +11,12 @@ import { detectChallenge } from "./challenge.js";
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const WORKFLOW_NAME = process.env.WORKFLOW_NAME;
 const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
+// Generously below the real Xvfb resolution (1366x768, see
+// services/browser-worker/entrypoint.sh's RESOLUTION) -- only meant to
+// catch genuinely abnormal sizes, not the ~20-40px window-decoration
+// variance already observed as normal (726-748px height range).
+const MIN_EXPECTED_WINDOW_WIDTH = 1200;
+const MIN_EXPECTED_WINDOW_HEIGHT = 600;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const WORKFLOWS_DIR = path.resolve(__dirname, "../workflows");
@@ -144,7 +150,50 @@ async function main(): Promise<void> {
 
   const browser = await step("connect", () => connectToChromium(CDP_URL));
   const context = browser.contexts()[0] ?? (await browser.newContext());
-  const page = context.pages()[0] ?? (await context.newPage());
+
+  // Close every existing page in the shared context (best-effort -- a
+  // close failing here doesn't matter, the goal is just not to leave it
+  // behind) and open exactly one fresh page, instead of reusing the same
+  // page indefinitely -- prevents tab buildup over a long-running
+  // monitor loop. This job only fails if newPage() itself fails (no
+  // page, nothing downstream can run) -- a failed close never does.
+  // Deliberately opens a new PAGE in the existing context, not a new
+  // CONTEXT: a new context would be a genuinely separate top-level
+  // window that does not inherit the existing maximized window state
+  // (confirmed empirically), where a same-context newPage() does.
+  const page = await step("prepare-page", async () => {
+    for (const existing of context.pages()) {
+      await existing.close().catch(() => {});
+    }
+    return context.newPage();
+  });
+
+  // Best-effort only: window sizing is observed, not corrected. An
+  // earlier design tried an explicit-bounds resize fallback here and
+  // confirmed empirically it can *shrink* an already-maximized window
+  // (Fluxbox/X11 quirk) -- ruled out. A same-context newPage() already
+  // inherits the parent window's maximized state on its own; this just
+  // measures the real rendered size and flags it (step goes red, job
+  // does not fail) if abnormally small, for visibility only.
+  await stepBestEffort(
+    "check-window-size",
+    async () => {
+      try {
+        const cdp = await context.newCDPSession(page);
+        const { windowId } = await cdp.send("Browser.getWindowForTarget");
+        await cdp.send("Browser.setWindowBounds", { windowId, bounds: { windowState: "maximized" } });
+      } catch {
+        // Chromium-only CDP calls; harmless if unavailable (e.g. a
+        // future non-Chromium path) or if the browser doesn't cooperate.
+      }
+      const size = await page.evaluate(() => ({ width: window.innerWidth, height: window.innerHeight }));
+      if (size.width < MIN_EXPECTED_WINDOW_WIDTH || size.height < MIN_EXPECTED_WINDOW_HEIGHT) {
+        throw new Error(`Window smaller than expected: ${size.width}x${size.height}`);
+      }
+      return size;
+    },
+    { captureResult: true },
+  );
 
   const policy = getPolicy(workflow.siteId);
   // Raw CDP, not Playwright's newContext({locale, timezoneId}) -- this

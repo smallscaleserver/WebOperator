@@ -30,6 +30,9 @@ export interface MonitorSummary {
   lastError: string | null;
   summary: string | null;
   longRunningWarning: string | null;
+  autoStopAt: string | null;
+  autoStopped: boolean;
+  autoStopMinutes: number | null;
 }
 
 interface MonitorDefinition {
@@ -77,6 +80,9 @@ async function getXcBankSummary(): Promise<MonitorSummary> {
     lastError: state.lastError,
     summary: state.latestBalance !== null ? `Balance: $${state.latestBalance.toFixed(2)}` : null,
     longRunningWarning: computeLongRunningWarning(state.screenshots),
+    autoStopAt: state.autoStopAt,
+    autoStopped: state.autoStopped,
+    autoStopMinutes: state.autoStopMinutes,
   };
 }
 
@@ -113,6 +119,9 @@ export async function listMonitorSummaries(): Promise<MonitorSummary[]> {
           lastError: (err as Error).message,
           summary: null,
           longRunningWarning: null,
+          autoStopAt: null,
+          autoStopped: false,
+          autoStopMinutes: null,
         }),
       ),
     ),

@@ -243,6 +243,28 @@ async function callMonitorAction(id, action) {
   await loadMonitors();
 }
 
+// Start needs an optional JSON body (autoStopMinutes) -- separate from
+// callMonitorAction's plain empty-body POST used by every other action.
+async function startMonitor(id) {
+  const input = document.getElementById(`autostop-${id}`);
+  const raw = input ? input.value.trim() : "";
+  const autoStopMinutes = raw ? Number(raw) : undefined;
+  try {
+    const res = await fetch(`/api/monitors/${id}/start`, {
+      method: "POST",
+      headers: autoStopMinutes !== undefined ? { "Content-Type": "application/json" } : undefined,
+      body: autoStopMinutes !== undefined ? JSON.stringify({ autoStopMinutes }) : undefined,
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      alert(`Could not start monitor: ${data.error}`);
+    }
+  } catch (err) {
+    console.error(`monitor ${id} start failed`, err);
+  }
+  await loadMonitors();
+}
+
 function formatIntervalText(m) {
   if (!m.intervalMs) return "";
   const seconds = Math.round(m.intervalMs / 1000);
@@ -253,6 +275,13 @@ function formatIntervalText(m) {
 function formatNextCheck(m) {
   if (!m.running || m.paused || !m.nextCheckEstimate) return "";
   return `Next check: ~${new Date(m.nextCheckEstimate).toLocaleTimeString()}`;
+}
+
+function formatAutoStop(m) {
+  if (m.running && !m.paused && m.autoStopAt) {
+    return `Auto-stop: ~${new Date(m.autoStopAt).toLocaleTimeString()}`;
+  }
+  return "";
 }
 
 function renderMonitors(monitors) {
@@ -271,32 +300,44 @@ function renderMonitors(monitors) {
       const warningLine = m.longRunningWarning
         ? `<div class="monitor-warning">⚠ ${escapeHtml(m.longRunningWarning)}</div>`
         : "";
+      const autoStoppedLine =
+        !m.running && m.autoStopped
+          ? `<div class="monitor-warning">⏱ Auto-stopped after ${escapeHtml(String(m.autoStopMinutes ?? "?"))} minute(s)</div>`
+          : "";
       const intervalText = formatIntervalText(m);
       const nextCheckText = formatNextCheck(m);
+      const autoStopText = formatAutoStop(m);
       const pauseResumeBtn = m.paused
         ? `<button data-monitor="${escapeHtml(m.id)}" data-monitor-action="resume">Resume</button>`
         : `<button data-monitor="${escapeHtml(m.id)}" data-monitor-action="pause" ${m.running ? "" : "disabled"}>Pause</button>`;
+      const startDisabled = m.running && !m.paused;
       return `<div class="monitor-card">
         <div class="row">
           <span class="dot ${dotClass}"></span>
           <strong>${escapeHtml(m.name)}</strong>
           <span class="hint">${statusLabel}${intervalText ? ` — ${escapeHtml(intervalText)}` : ""}</span>
-          <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="start" ${m.running && !m.paused ? "disabled" : ""}>Start</button>
+          <label class="hint">Run for <input type="number" id="autostop-${escapeHtml(m.id)}" min="1" max="240" placeholder="unlimited" style="width:5rem;" ${startDisabled ? "disabled" : ""}> min</label>
+          <button class="start-monitor-btn" data-monitor="${escapeHtml(m.id)}" ${startDisabled ? "disabled" : ""}>Start</button>
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="stop" ${m.running ? "" : "disabled"}>Stop</button>
           ${pauseResumeBtn}
           <button data-monitor="${escapeHtml(m.id)}" data-monitor-action="check-once">Check once</button>
           <a href="${m.detailPath}">Detail</a>
           <a href="${m.livePath}">Live</a>
         </div>
-        <div class="hint">${summary} — last checked: ${lastChecked}${nextCheckText ? ` — ${escapeHtml(nextCheckText)}` : ""}</div>
+        <div class="hint">${summary} — last checked: ${lastChecked}${nextCheckText ? ` — ${escapeHtml(nextCheckText)}` : ""}${autoStopText ? ` — ${escapeHtml(autoStopText)}` : ""}</div>
+        <div class="hint">Leave "Run for" empty for an unlimited run — set a limit when pointing this at a real site to avoid an unattended loop running for hours.</div>
         ${errorLine}
         ${warningLine}
+        ${autoStoppedLine}
       </div>`;
     })
     .join("");
 
   el.querySelectorAll("[data-monitor-action]").forEach((btn) => {
     btn.addEventListener("click", () => callMonitorAction(btn.dataset.monitor, btn.dataset.monitorAction));
+  });
+  el.querySelectorAll(".start-monitor-btn").forEach((btn) => {
+    btn.addEventListener("click", () => startMonitor(btn.dataset.monitor));
   });
 }
 

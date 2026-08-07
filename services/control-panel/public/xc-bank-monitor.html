@@ -46,6 +46,7 @@
     <span class="dot" id="status-dot"></span>
     <span id="status-label">checking…</span>
     <span class="hint" id="interval-text"></span>
+    <label class="hint">Run for <input type="number" id="autostop-input" min="1" max="240" placeholder="unlimited" style="width:5rem;"> min</label>
     <button id="start-btn">Start monitor</button>
     <button id="stop-btn">Stop monitor</button>
     <button id="pause-btn">Pause</button>
@@ -53,10 +54,13 @@
     <button id="check-once-btn">Check once</button>
     <button id="cleanup-btn">Cleanup (dev-only)</button>
   </div>
+  <p class="hint">Leave "Run for" empty for an unlimited run — set a limit when pointing this at a real site to avoid an unattended loop running for hours.</p>
   <p class="hint" id="last-checked">Last checked: —</p>
   <p class="hint" id="next-check" style="display:none;"></p>
+  <p class="hint" id="autostop-text" style="display:none;"></p>
   <p class="error" id="last-error" style="display:none;"></p>
   <p class="warning" id="long-running-warning" style="display:none;"></p>
+  <p class="warning" id="autostopped-banner" style="display:none;"></p>
   <p class="balance">Balance: <span id="balance">—</span></p>
 </section>
 
