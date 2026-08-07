@@ -203,6 +203,11 @@ function setMonitorStatusUi(data) {
     Number(data.availableBalance) !== Number(data.ledgerBalance);
   mismatchEl.style.display = hasMismatch ? "block" : "none";
 
+  const targetEl = document.getElementById("target-company-text");
+  targetEl.textContent = data.targetCompany
+    ? `Sticky target: ${data.targetCompany} (re-asserted on every check)`
+    : "Sticky target: (none set — monitor reports whatever's currently active)";
+
   const txEl = document.getElementById("monitor-transactions");
   if (!data.latestTransactions || data.latestTransactions.length === 0) {
     txEl.innerHTML = "<em>(no data yet)</em>";

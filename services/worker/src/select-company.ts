@@ -1,5 +1,6 @@
 import { connectToChromium } from "./cdp.js";
 import { step } from "./steps.js";
+import { selectCompany } from "./company-switcher.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
 const OUTPUT_DIR = process.env.OUTPUT_DIR ?? "/app/output";
@@ -30,16 +31,7 @@ async function main(): Promise<void> {
   const page = context.pages()[0] ?? (await context.newPage());
 
   const result = await step("select-company", async () => {
-    const option = page.getByText(COMPANY_NAME, { exact: true }).first();
-    // Reopen the switcher if the dropdown isn't currently showing the
-    // option (e.g. a fresh page load, or it got closed since the last
-    // interaction).
-    if (!(await option.isVisible().catch(() => false))) {
-      await page.getByText("บริษัท", { exact: false }).first().click();
-      await page.waitForTimeout(500);
-    }
-    await option.click();
-    await page.waitForTimeout(1000);
+    await selectCompany(page, COMPANY_NAME);
     const url = page.url();
     const textSnippet = await page.evaluate(() =>
       document.body ? document.body.innerText.slice(0, 2000) : "",

@@ -23,7 +23,7 @@ import {
   stopScbMonitorSchedule,
   enqueueScbMonitorCheckOnce,
 } from "./queue.js";
-import { loadState as loadScbMonitorState } from "./scb-monitor.js";
+import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -406,7 +406,11 @@ app.post("/api/lanes/scb-business-anywhere-1/analyze", async (_req, res) => {
 // select-company: clicks an entry in the company switcher dropdown by
 // its exact visible text (e.g. "เซซุส", "กฤษฎิ์ ดำประสงค์"). Never
 // touches a credential; a navigation/view action on the
-// already-authenticated session only.
+// already-authenticated session only. Also remembers this as the
+// monitor's sticky target company (scb-monitor.ts re-asserts it on
+// every future check, including after a re-login resets the
+// switcher back to the account default) -- per explicit request:
+// "ทำให้อัตโนมัติสลับกลับเซซุสทุกครั้งหลัง login ใหม่...แล้วแต่เลือก".
 app.post("/api/lanes/scb-business-anywhere-1/select-company", express.json(), async (req, res) => {
   const companyName = typeof req.body?.companyName === "string" ? req.body.companyName.trim() : "";
   if (!companyName) {
@@ -415,6 +419,9 @@ app.post("/api/lanes/scb-business-anywhere-1/select-company", express.json(), as
   }
   try {
     const result = await runScbSelectCompany(companyName);
+    if (result.ok) {
+      await setScbTargetCompany(companyName);
+    }
     res.json(result);
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

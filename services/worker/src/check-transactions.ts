@@ -1,7 +1,19 @@
 import { connectToChromium } from "./cdp.js";
 import { step } from "./steps.js";
+import { selectCompany } from "./company-switcher.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
+// Optional -- if set, re-asserts this company is active before every
+// check (base64-encoded, same Windows-execFile-argv-encoding reasoning
+// as select-company.ts). Found empirically that re-login resets the
+// active company back to the account default, silently making the
+// monitor report the wrong company's data -- this closes that gap by
+// re-selecting the intended company on every single check,
+// unconditionally (selectCompany() is a harmless no-op/re-click if
+// it's already active).
+const TARGET_COMPANY = process.env.TARGET_COMPANY_B64
+  ? Buffer.from(process.env.TARGET_COMPANY_B64, "base64").toString("utf-8")
+  : "";
 
 // Read-only: clicks the "Account Summary" left-nav link (in-app SPA
 // navigation via a real click, not page.goto() -- a full page.goto()
@@ -33,6 +45,11 @@ async function main(): Promise<void> {
     if (!(await accountSummaryLink.isVisible({ timeout: 5000 }).catch(() => false))) {
       throw new Error("SESSION_EXPIRED: expected nav (Account Summary) not found -- likely logged out, a human needs to log in again via noVNC");
     }
+
+    if (TARGET_COMPANY) {
+      await selectCompany(page, TARGET_COMPANY);
+    }
+
     await accountSummaryLink.click();
     await page.waitForTimeout(1500);
     // "Account Summary" can land on either the single-account detail

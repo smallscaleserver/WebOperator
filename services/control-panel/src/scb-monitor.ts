@@ -31,6 +31,13 @@ export interface ScbMonitorState {
   // need to do anything special, and the alert fires exactly once per
   // episode rather than every retry while logged out.
   sessionExpiredNotified: boolean;
+  // Re-asserted before every check (see exec.ts's runScbCheckBalance) --
+  // set whenever "Switch company" is used (server.ts), so a manual
+  // switch becomes the sticky default the monitor keeps re-selecting
+  // going forward, including after a re-login resets the switcher back
+  // to the account default. null means "don't enforce any particular
+  // company" (original behavior, whatever's currently active).
+  targetCompany: string | null;
   paused: boolean;
   autoStopAt: string | null;
   autoStopped: boolean;
@@ -46,6 +53,7 @@ function emptyState(): ScbMonitorState {
     latestTransactions: [],
     seenTransactionKeys: [],
     sessionExpiredNotified: false,
+    targetCompany: null,
     paused: false,
     autoStopAt: null,
     autoStopped: false,
@@ -89,17 +97,19 @@ function formatBalanceLine(availableBalance: number | null, ledgerBalance: numbe
 }
 
 // Read-only: runs check-transactions.ts against the SCB lane's own
-// isolated worker (never the shared one), on whatever company is
-// currently active in the switcher -- this module has no concept of
-// switching companies itself, it only reads. Never throws -- every
-// failure mode is captured into state.lastError, matching monitor.ts's
-// own established pattern for the XC Bank monitor.
+// isolated worker (never the shared one). If state.targetCompany is
+// set, re-asserts that company is active on every single check --
+// closes the "re-login resets the active company" gap found
+// empirically. If unset, reports on whatever company is currently
+// active (original behavior). Never throws -- every failure mode is
+// captured into state.lastError, matching monitor.ts's own
+// established pattern for the XC Bank monitor.
 export async function checkOnce(): Promise<ScbMonitorState> {
   const state = await loadState();
   const now = new Date().toISOString();
   const isFirstEverCheck = state.lastCheckedAt === null;
 
-  const result = await runScbCheckBalance().catch((err: Error) => ({
+  const result = await runScbCheckBalance(state.targetCompany).catch((err: Error) => ({
     ok: false,
     stdout: "",
     stderr: "",
@@ -186,6 +196,16 @@ export async function checkOnce(): Promise<ScbMonitorState> {
 export async function setPaused(paused: boolean): Promise<ScbMonitorState> {
   const state = await loadState();
   state.paused = paused;
+  await saveState(state);
+  return state;
+}
+
+// Called whenever "Switch company" is used (server.ts) -- makes that
+// choice the sticky default checkOnce() re-asserts going forward, per
+// explicit request: "ทำให้อัตโนมัติสลับกลับเซซุสทุกครั้งหลัง login ใหม่".
+export async function setTargetCompany(companyName: string): Promise<ScbMonitorState> {
+  const state = await loadState();
+  state.targetCompany = companyName;
   await saveState(state);
   return state;
 }

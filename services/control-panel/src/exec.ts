@@ -235,8 +235,17 @@ export async function runScbSelectCompany(companyName: string): Promise<ActionRe
   ]);
 }
 
-export async function runScbCheckBalance(): Promise<ActionResult> {
-  return execAndParse(["compose", "run", "--rm", SCB_LANE_SERVICE, "npm", "run", "check-transactions"]);
+// targetCompany, if given, is re-asserted (base64-encoded, same
+// Windows execFile argv reasoning as runScbSelectCompany) before every
+// check -- closes the "re-login resets the active company" gap found
+// empirically, without needing a separate step from the caller.
+export async function runScbCheckBalance(targetCompany?: string | null): Promise<ActionResult> {
+  const args = ["compose", "run", "--rm"];
+  if (targetCompany) {
+    args.push("-e", `TARGET_COMPANY_B64=${Buffer.from(targetCompany, "utf-8").toString("base64")}`);
+  }
+  args.push(SCB_LANE_SERVICE, "npm", "run", "check-transactions");
+  return execAndParse(args);
 }
 
 export interface ScbTransaction {
