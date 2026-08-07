@@ -2409,3 +2409,61 @@ Appending correctly from here on. -->
   remains open and is now the most concrete lead for a future
   `/api/health` improvement — add a real `GET
   {CDP_URL}/json/version` check, still the user's call on priority.
+
+### 2026-08-08 — Claude
+
+- Status: Done
+- Context: **Claiming: Bot Lane Isolation design doc** (docs-only, no
+  runtime code). Direct follow-up to the monitor-stability pass above:
+  user's original ask was to move toward per-account/per-site browser
+  isolation (multiple lanes instead of one shared Chromium), but
+  explicitly redirected the design to include lane health/recovery
+  from the start — specifically because the just-completed
+  verification pass found Chromium silently crashing 3 times in ~15
+  minutes while `docker compose ps` stayed green throughout. A
+  naive multi-lane rollout (N independent browser containers, no
+  per-lane CDP-reachability signal) would multiply that exact blind
+  spot, not fix it. Explicit instruction: design doc only this round,
+  do not implement runtime multi-lane, commit + push the doc.
+  Read `docker-compose.yml`, `queue.ts`, `health.ts`, `monitor.ts`,
+  `actions.ts`, `cdp.ts` in full before writing, so the design
+  references real files/patterns rather than being written in the
+  abstract.
+- Files: new `docs/BOT_LANE_ISOLATION.md` — covers lane model
+  (laneId/siteId/accountId/browserType, one browser container per
+  lane, no shared context/profile/session/state/artifact-prefix, data
+  layout `data/lanes/<laneId>/...`), queue routing (one BullMQ
+  `Queue`+`Worker(concurrency:1)` pair *per lane*, not one shared
+  queue routed by laneId, so lanes run genuinely in parallel and a
+  bad lane can't starve others), lane health/recovery (`LaneHealth`
+  shape — the key new field is `cdpReachable` via a real `GET
+  {cdpUrl}/json/version`, the actual signal that closes the blind
+  spot; `containerRunning` alone is proven insufficient; explicit,
+  never-silent per-lane Restart button; crash count/last-failure
+  history surfaced, not just current status), account/session
+  isolation (structural, not just convention — same reasoning already
+  used for XC Bank's own isolation from WebOperator), manual
+  takeover/live view (per-lane noVNC, multiple lanes viewable
+  simultaneously), Docker/compose migration (concrete file-by-file
+  list of what changes when this is implemented), a 5-step
+  incremental migration plan (single-lane registry → CDP-reachability
+  check proven against the real crash repro → state/artifact path
+  isolation → second-lane proof → parallel-execution proof), and
+  security boundaries (CDP never public, isolation-by-construction,
+  Redis/MinIO stay dev-only/no-auth same as today, encrypted vault
+  stays explicitly future/Phase 5). Also updated
+  `docs/PROJECT_PLAN.md`'s decision log with a summary row pointing
+  at the new doc.
+- Verified: N/A — a design doc, not code; nothing to run. Internally
+  cross-checked against the actual current codebase while writing
+  (every file/path/mechanism referenced was read first, not recalled
+  from memory) so the proposed migration steps are grounded in what
+  really exists today, not an idealized version of it.
+- Next: awaiting user review/adjustment of the design before any
+  implementation starts. If approved as-is or with edits, Step 1
+  (single-lane registry, §7 of the doc) is the natural starting point
+  — it's a pure refactor with no behavior change, verifiable in
+  isolation before Step 2 (the actual CDP-reachability health check)
+  lands. Do not skip straight to a second lane or to health checks
+  without Step 1's registry shape existing first, per the doc's own
+  incremental-and-independently-verifiable ordering.
