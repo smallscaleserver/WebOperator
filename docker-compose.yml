@@ -75,3 +75,40 @@ services:
     network_mode: "service:browser-worker-firefox"
     depends_on:
       - browser-worker-firefox
+
+  # First real "lane" (see docs/BOT_LANE_ISOLATION.md): a genuinely
+  # separate Chromium instance + profile for the scb-business-anywhere
+  # site/account (laneId scb-business-anywhere-1, accountId
+  # manual-admin), so it never shares a browser context/cookies/session
+  # with browser-worker-chrome (used by XC Bank and other testing).
+  # Own noVNC port (6090, not published beyond 127.0.0.1) and own
+  # bind-mounted profile/output/sessions under
+  # data/lanes/scb-business-anywhere-1/ -- nothing here is read by or
+  # written to by any other service. No login/OTP automation exists for
+  # this lane yet -- manual takeover via noVNC only, see
+  # docs/PROJECT_PLAN.md decision log.
+  browser-worker-scb-business-anywhere-1:
+    build: ./services/browser-worker
+    environment:
+      - BROWSER=chromium
+      - RESOLUTION=1366x768x24
+      - VNC_PASSWORD=${VNC_PASSWORD:-changeme}
+    ports:
+      - "127.0.0.1:6090:6080"
+    volumes:
+      - ./data/lanes/scb-business-anywhere-1/profile:/data/profile
+    shm_size: "2gb"
+
+  worker-scb-business-anywhere-1:
+    build: ./services/worker
+    environment:
+      - CDP_URL=http://localhost:9222
+      - MINIO_ENDPOINT=minio
+    volumes:
+      - ./services/worker/src:/app/src
+      - ./services/worker/workflows:/app/workflows
+      - ./data/lanes/scb-business-anywhere-1/output:/app/output
+      - ./data/lanes/scb-business-anywhere-1/sessions:/app/sessions
+    network_mode: "service:browser-worker-scb-business-anywhere-1"
+    depends_on:
+      - browser-worker-scb-business-anywhere-1

@@ -571,6 +571,65 @@ fixed in:
   anywhere), flagged again for whoever picks up the health-check work
   next.
 
+**First real isolated lane: `scb-business-anywhere-1`** (a real,
+live bank site — `scbbusinessanywhere.com`, Siam Commercial Bank's
+business banking portal — not a mock like XC Bank). Went through an
+explicit authorization/risk conversation before any code was written:
+confirmed with the user this is their own business account and they
+accept the real ToS/ban/security risk of automating a live bank
+(materially different from XC Bank, which was built specifically to
+sidestep that question). **No login/OTP automation exists for this
+site — deliberately.** What exists so far is isolation-only:
+- `docker-compose.yml`: `browser-worker-scb-business-anywhere-1` +
+  `worker-scb-business-anywhere-1` — a genuinely separate Chromium
+  container/profile from `browser-worker-chrome`, own noVNC port
+  (`127.0.0.1:6090`, loopback-only — tighter than the existing
+  `browser-worker-chrome`/`-firefox` bindings, a deliberate choice
+  given real-bank sensitivity), own bind-mounted
+  `data/lanes/scb-business-anywhere-1/{profile,output,sessions}` —
+  shares nothing (no context, no cookies, no session, no disk path)
+  with `browser-worker-chrome`, verified directly (separate directory
+  trees, `demo` workflow re-run against the shared lane afterward to
+  confirm it was unaffected).
+- Because the queue/worker (`services/control-panel/src/queue.ts`)
+  has zero references to `worker-scb-business-anywhere-1` at all, "a
+  scheduled job can't steal this lane's tab" is true **structurally**,
+  not just procedurally — there's no code path by which anything
+  queued today could reach this lane's browser.
+- New `services/control-panel/public/scb-business-anywhere-live.html`
+  (`GET /monitors/scb-business-anywhere/live`) — noVNC of this lane
+  only, a static "Lane info" panel (no monitor/check logic exists yet,
+  explicitly says so), and a persistent banner: OTP/2FA/security
+  prompts are human-only, the bot must never submit one. A "Lanes"
+  section on `/` (`index.html`/`app.js`) mirrors the existing
+  Browsers section's Start/Stop pattern (`actions.ts`'s
+  `startScbLane1`/`stopScbLane1`, same fixed-allowlist mechanism, not
+  a new one) plus a `Live →` link.
+- `policy.ts` gained a `scb-business-anywhere` site policy (slower
+  pacing than xc-bank's — real site, real caution) and a read-only
+  `scb-business-anywhere-explore.json` workflow (`navigate` +
+  `screenshot` only, **no credentials, no form fill**) — used once to
+  confirm the real login page loads and is a two-step username-then
+  -password flow before any lane isolation existed; from now on this
+  (or anything else touching the real site) should only ever run
+  through `worker-scb-business-anywhere-1`, never the shared `worker`.
+- **Explicitly asked and answered**: whether the current Chrome setup
+  is "stealthy" enough to avoid a real bank's fraud/bot detection.
+  Answer given directly: no, and this project will not build genuine
+  detection-evasion techniques against a live bank's fraud controls,
+  full stop — same "polite automation, not bypass" line already drawn
+  project-wide (`docs/PROJECT_PLAN.md`'s decision log), just restated
+  for higher stakes. The recommended path instead: a human handles
+  login/OTP entirely via manual noVNC takeover (this lane's own
+  `:6090`), and any future automation stays narrow/read-only on top of
+  an already-human-authenticated session — never attempting the login
+  or challenge steps itself.
+- **Next step is explicitly gated on the user manually logging in
+  once via this lane's own noVNC** so real (non-credential) DOM
+  structure past the username step can be observed safely — no
+  further automation work proceeds until that happens and the user
+  says what's next.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 

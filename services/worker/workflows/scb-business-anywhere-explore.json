@@ -1,0 +1,8 @@
+{
+  "name": "scb-business-anywhere-explore",
+  "siteId": "scb-business-anywhere",
+  "steps": [
+    { "type": "navigate", "params": { "url": "https://www.scbbusinessanywhere.com/" } },
+    { "type": "screenshot", "params": { "filename": "scb-business-anywhere-explore.png" } }
+  ]
+}

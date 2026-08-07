@@ -36,16 +36,18 @@ app.use(express.static(PUBLIC_DIR));
 app.use("/screenshots", express.static(WORKER_OUTPUT_DIR));
 
 app.get("/api/status", async (_req, res) => {
-  const status = { chrome: "unknown", firefox: "unknown" };
+  const status = { chrome: "unknown", firefox: "unknown", scbLane1: "unknown" };
   try {
     const stdout = await composePs();
     const entries = parseComposePs(stdout);
     status.chrome = "stopped";
     status.firefox = "stopped";
+    status.scbLane1 = "stopped";
     for (const entry of entries) {
       const running = entry.State === "running";
       if (entry.Service === "browser-worker-chrome") status.chrome = running ? "running" : "stopped";
       if (entry.Service === "browser-worker-firefox") status.firefox = running ? "running" : "stopped";
+      if (entry.Service === "browser-worker-scb-business-anywhere-1") status.scbLane1 = running ? "running" : "stopped";
     }
   } catch (err) {
     console.error("status check failed:", err);
@@ -326,6 +328,16 @@ app.get("/monitors/xc-bank/live", (_req, res) => {
 // Full diagnostics view -- see health.ts / GET /api/health above.
 app.get("/health", (_req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "health.html"));
+});
+
+// Isolated-lane live view for scb-business-anywhere (laneId
+// scb-business-anywhere-1) -- noVNC of that lane's own browser only,
+// never browser-worker-chrome's. No automation/monitor state exists
+// for this site yet, so unlike /monitors/xc-bank/live this page has no
+// data panel -- see docs/BOT_LANE_ISOLATION.md and the decision log
+// entry for why this lane was split off before any login automation.
+app.get("/monitors/scb-business-anywhere/live", (_req, res) => {
+  res.sendFile(path.join(PUBLIC_DIR, "scb-business-anywhere-live.html"));
 });
 
 const server = app.listen(PORT, "127.0.0.1", () => {

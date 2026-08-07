@@ -35,12 +35,22 @@ function setBrowserUi(browser, state) {
   }
 }
 
+function setLaneUi(laneKey, state) {
+  const dot = document.getElementById(`dot-${laneKey}`);
+  const label = document.getElementById(`label-${laneKey}`);
+  dot.className = `dot ${state}`;
+  label.textContent = state;
+  document.getElementById(`start-${laneKey}`).disabled = state === "running";
+  document.getElementById(`stop-${laneKey}`).disabled = state !== "running";
+}
+
 async function pollStatus() {
   try {
     const res = await fetch("/api/status");
     const status = await res.json();
     setBrowserUi("chrome", status.chrome);
     setBrowserUi("firefox", status.firefox);
+    setLaneUi("scb-lane1", status.scbLane1);
 
     document.querySelectorAll(".worker-action").forEach((btn) => {
       const requires = btn.dataset.requires || "chrome";
@@ -55,6 +65,8 @@ document.getElementById("start-chrome").addEventListener("click", () => callActi
 document.getElementById("stop-chrome").addEventListener("click", () => callAction("stopChrome"));
 document.getElementById("start-firefox").addEventListener("click", () => callAction("startFirefox"));
 document.getElementById("stop-firefox").addEventListener("click", () => callAction("stopFirefox"));
+document.getElementById("start-scb-lane1").addEventListener("click", () => callAction("startScbLane1"));
+document.getElementById("stop-scb-lane1").addEventListener("click", () => callAction("stopScbLane1"));
 
 document.getElementById("take-chrome").addEventListener("click", () => {
   const iframe = document.getElementById("iframe-chrome");

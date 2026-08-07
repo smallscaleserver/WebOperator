@@ -2467,3 +2467,77 @@ Appending correctly from here on. -->
   lands. Do not skip straight to a second lane or to health checks
   without Step 1's registry shape existing first, per the doc's own
   incremental-and-independently-verifiable ordering.
+
+### 2026-08-08 (same session, continued) — Claude
+
+- Status: Done (isolated lane + live shell only — explicitly not login automation, see below)
+- Context: **Claiming: first real isolated bot lane, scb-business-anywhere-1**.
+  User asked to add automation for a real, live bank site
+  (`scbbusinessanywhere.com`, SCB Business Anywhere) — paused before
+  writing any code and asked directly whether this is the user's own
+  account and whether they accept the real ToS/ban/security risk of
+  automating a live bank (categorically different from XC Bank, a
+  mock built specifically to avoid this exact question). User
+  confirmed: own business account, risk understood. A first read-only
+  exploration (`navigate`+`screenshot`, no credentials) ran on the
+  *shared* `browser-worker-chrome` to see the real login page — user
+  then explicitly redirected: stop using the shared browser for this
+  site, build a genuinely isolated lane first, before any further SCB
+  work. User also asked directly whether the current Chrome setup is
+  stealthy enough to evade a real bank's fraud detection — answered
+  directly that it is not, and that this project will not build
+  genuine detection-evasion techniques against a live bank's fraud
+  controls; recommended a human handle login/OTP entirely via manual
+  noVNC takeover instead, matching the project's existing
+  non-negotiable CAPTCHA/2FA/passkey hand-off rule.
+- Files: `docker-compose.yml` (new
+  `browser-worker-scb-business-anywhere-1` + `worker-scb-business-anywhere-1`
+  services — genuinely separate Chromium container/profile from
+  `browser-worker-chrome`, own noVNC on `127.0.0.1:6090` loopback-only,
+  own `data/lanes/scb-business-anywhere-1/{profile,output,sessions}`);
+  `services/control-panel/src/actions.ts` (`startScbLane1`/
+  `stopScbLane1` added to the fixed compose-command allowlist);
+  `services/control-panel/src/server.ts` (`/api/status` reports
+  `scbLane1`; new `GET /monitors/scb-business-anywhere/live` route);
+  new `services/control-panel/public/scb-business-anywhere-live.html`+`.js`
+  (noVNC of this lane only, static lane-info panel, persistent
+  human-only-OTP banner — no monitor/check logic exists yet, says so
+  explicitly); `services/control-panel/public/index.html`+`app.js`
+  (new "Lanes" section, mirrors the existing Browsers
+  section's Start/Stop pattern); `services/worker/src/policy.ts` (new
+  `scb-business-anywhere` site policy, slower pacing than xc-bank's);
+  new `services/worker/workflows/scb-business-anywhere-explore.json`
+  (read-only, no credentials — the only workflow that touches this
+  site so far). `AGENTS.md`/`docs/PROJECT_PLAN.md` updated with the
+  full narrative including the authorization conversation.
+- Verified: `tsc --noEmit` clean (control-panel); both new JS files
+  `node --check` clean; isolated lane built and started
+  (`docker compose up -d --build browser-worker-scb-business-anywhere-1`),
+  confirmed its own Chromium/CDP responding inside the container and
+  noVNC responding on host port 6090 (`curl` 200); `/api/status`
+  correctly reports `scbLane1: "running"`; the shared/default lane
+  re-verified unaffected by re-running the `demo` workflow against it
+  after the new lane existed; confirmed on disk that
+  `data/lanes/scb-business-anywhere-1/` and `data/profiles/chrome/`
+  are completely separate directory trees; visually confirmed (real
+  CDP screenshot) both the new Control Center "Lanes" section and the
+  `/monitors/scb-business-anywhere/live` page render correctly, with
+  the iframe pointing at the correct host port (broken-image artifact
+  in that particular screenshot is expected — it was taken from
+  *inside* a different container where `localhost:6090` doesn't
+  resolve to the host, same known artifact as previous rounds'
+  xc-bank-monitor-live.html screenshots; a real desktop browser
+  resolves it correctly). All debug scripts/screenshots deleted before
+  committing, `git status` confirmed clean apart from the user's own
+  `note`/`note2`/`note3`.
+- Next: **explicitly gated on the user manually logging in once**, via
+  this lane's own noVNC at `http://localhost:6090/vnc.html`, through
+  the username step and however far past it they're comfortable going
+  (password/OTP) — purely to reveal the real page structure past
+  username without any credential ever passing through the bot. Only
+  after that, and only with explicit further direction, should any
+  adapter/login-automation code be written for this site. Do not
+  attempt to automate login, submit OTP, or otherwise progress this
+  site's automation without a fresh, explicit go-ahead — this is a
+  real bank account, and the authorization already given was scoped
+  to "isolated lane + manual exploration," not to automated login.

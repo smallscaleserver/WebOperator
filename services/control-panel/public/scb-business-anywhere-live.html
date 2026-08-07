@@ -1,0 +1,86 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<title>SCB Business Anywhere Lane — WebOperator Control Panel</title>
+<style>
+  body { font-family: system-ui, sans-serif; max-width: 1400px; margin: 2rem auto; padding: 0 1rem; }
+  h1 { font-size: 1.4rem; }
+  h1 a { font-size: 0.55em; font-weight: normal; margin-left: 1rem; }
+  section { margin-bottom: 1.5rem; padding: 1rem; border: 1px solid #ccc; border-radius: 8px; }
+  h2 { font-size: 1rem; margin-top: 0; }
+  .row { display: flex; align-items: center; gap: 0.75rem; margin-bottom: 0.5rem; flex-wrap: wrap; }
+  .dot { width: 10px; height: 10px; border-radius: 50%; display: inline-block; background: #999; }
+  .dot.running { background: #2ea043; }
+  .dot.stopped { background: #999; }
+  button { cursor: pointer; padding: 0.4rem 0.8rem; }
+  button:disabled { cursor: not-allowed; opacity: 0.5; }
+  .hint { color: #666; font-size: 0.85rem; }
+  .warning { color: #9a6700; font-size: 0.85rem; background: #fff8c5; border-radius: 4px; padding: 0.5rem 0.7rem; }
+  .danger { color: #82071e; font-size: 0.85rem; background: #ffebe9; border-radius: 4px; padding: 0.5rem 0.7rem; }
+  .live-columns { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
+  .live-left { flex: 1 1 560px; min-width: 320px; }
+  .live-right { flex: 1 1 320px; min-width: 280px; }
+  #live-iframe { width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 6px; display: block; }
+  .lane-offline { padding: 1.5rem 1rem; text-align: center; border: 1px dashed #ccc; border-radius: 6px; }
+  dl { margin: 0; }
+  dt { font-weight: bold; margin-top: 0.6rem; }
+  dd { margin: 0 0 0.2rem 0; color: #444; }
+</style>
+</head>
+<body>
+<h1>SCB Business Anywhere — Lane <a href="/">&larr; Control Panel</a></h1>
+<p class="hint">
+  Isolated lane (see <code>docs/BOT_LANE_ISOLATION.md</code>) — its own
+  Chromium container, own profile, own noVNC endpoint. Never shares a
+  browser context/cookies/session with <code>browser-worker-chrome</code>
+  (used by XC Bank and other testing).
+</p>
+
+<p class="danger">
+  No login/OTP automation exists for this lane yet. Take control below
+  and log in yourself if you need to. The bot must never submit an
+  OTP/2FA/security-challenge prompt — those are human-only, always.
+</p>
+
+<div class="live-columns">
+  <div class="live-left">
+    <section>
+      <h2>Lane browser</h2>
+      <div class="row">
+        <span class="dot" id="status-dot"></span>
+        <span id="status-label">checking…</span>
+        <button id="start-btn">Start lane</button>
+        <button id="stop-btn">Stop lane</button>
+      </div>
+      <div id="lane-offline" class="lane-offline" style="display:none;">
+        <p>This lane's browser is not running.</p>
+        <button id="start-btn-2">Start lane</button>
+      </div>
+      <iframe id="live-iframe" src="about:blank" style="display:none;"></iframe>
+    </section>
+  </div>
+
+  <div class="live-right">
+    <section>
+      <h2>Lane info</h2>
+      <dl>
+        <dt>laneId</dt><dd>scb-business-anywhere-1</dd>
+        <dt>siteId</dt><dd>scb-business-anywhere</dd>
+        <dt>accountId</dt><dd>manual-admin</dd>
+        <dt>browserType</dt><dd>chromium (isolated container)</dd>
+        <dt>profile</dt><dd><code>data/lanes/scb-business-anywhere-1/profile</code></dd>
+        <dt>noVNC</dt><dd><code>127.0.0.1:6090</code> (loopback only)</dd>
+      </dl>
+      <p class="warning">
+        Read-only status placeholder — no monitor/check logic exists for
+        this site yet. Balance/transaction data will appear here once a
+        monitor is built for it, the same way XC Bank Monitor works.
+      </p>
+    </section>
+  </div>
+</div>
+
+<script src="/scb-business-anywhere-live.js"></script>
+</body>
+</html>

@@ -30,6 +30,18 @@ const SITE_POLICIES: Record<string, SitePolicy> = {
     actionDelayMs: { min: 200, max: 800 },
     typingDelayMs: 60,
   },
+  // A real, live bank site (scbbusinessanywhere.com) -- not a mock like
+  // xc-bank. Kept to slower/more cautious pacing than the mock's own
+  // policy on purpose. Login/credential automation is deliberately not
+  // built yet -- see docs/PROJECT_PLAN.md decision log and
+  // docs/AGENT_HANDOFF.md for the explicit authorization/risk
+  // conversation this went through before any workflow touched it.
+  "scb-business-anywhere": {
+    locale: "th-TH",
+    timezoneId: "Asia/Bangkok",
+    actionDelayMs: { min: 400, max: 1200 },
+    typingDelayMs: 90,
+  },
 };
 
 export function getPolicy(siteId?: string): SitePolicy {

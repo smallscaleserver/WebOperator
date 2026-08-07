@@ -15,6 +15,12 @@ export const ACTIONS = {
   runSave: ["compose", "run", "--rm", "worker", "npm", "run", "save"],
   runRestore: ["compose", "run", "--rm", "worker", "npm", "run", "restore"],
   runFirefoxDemo: ["compose", "run", "--rm", "worker-firefox", "npm", "run", "firefox-demo"],
+  // First isolated lane (see docs/BOT_LANE_ISOLATION.md) -- a genuinely
+  // separate Chromium/profile for scb-business-anywhere, never shares
+  // a browser context with browser-worker-chrome. Start/stop only;
+  // no queueable automation action exists for this lane yet.
+  startScbLane1: ["compose", "up", "-d", "browser-worker-scb-business-anywhere-1"],
+  stopScbLane1: ["compose", "stop", "browser-worker-scb-business-anywhere-1"],
 } as const;
 
 export type ActionName = keyof typeof ACTIONS;

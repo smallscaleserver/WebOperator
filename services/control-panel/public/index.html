@@ -87,6 +87,24 @@
 </section>
 
 <section>
+  <h2>Lanes</h2>
+  <p class="hint">
+    Isolated per-account browser lanes (see <code>docs/BOT_LANE_ISOLATION.md</code>) —
+    each lane is a genuinely separate Chromium container/profile/noVNC
+    endpoint, never shared with "Browsers" above or another lane.
+  </p>
+  <div class="row">
+    <span class="dot" id="dot-scb-lane1"></span>
+    <strong>SCB Business Anywhere</strong>
+    <span id="label-scb-lane1">checking…</span>
+    <button id="start-scb-lane1">Start</button>
+    <button id="stop-scb-lane1">Stop</button>
+    <a href="/monitors/scb-business-anywhere/live">Live &rarr;</a>
+  </div>
+  <p class="hint">No login/OTP automation exists for this lane yet — manual takeover via its own noVNC only.</p>
+</section>
+
+<section>
   <h2>Playwright worker</h2>
   <p class="hint">Buttons enqueue a job — a single queue (concurrency 1) serializes access to the shared browser instead of running actions concurrently.</p>
   <div class="row">
