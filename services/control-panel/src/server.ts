@@ -2,7 +2,17 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
-import { runAction, composePs, parseComposePs, listWorkflowNames, validateWorkflowFile, REPO_ROOT } from "./exec.js";
+import {
+  runAction,
+  composePs,
+  parseComposePs,
+  listWorkflowNames,
+  validateWorkflowFile,
+  runScbOpenLoginPage,
+  runScbAnalyzePage,
+  parseLanePageAnalysis,
+  REPO_ROOT,
+} from "./exec.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -34,6 +44,13 @@ app.use(express.static(PUBLIC_DIR));
 // Read-only: the same directory worker containers already write screenshots
 // to via the existing bind mount (data/worker-output:/app/output).
 app.use("/screenshots", express.static(WORKER_OUTPUT_DIR));
+// Same idea, scoped to the isolated scb-business-anywhere-1 lane's own
+// output dir -- deliberately separate from WORKER_OUTPUT_DIR above, so
+// serving one can never accidentally expose the other lane's files.
+app.use(
+  "/lane-screenshots/scb-business-anywhere-1",
+  express.static(path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-1", "output")),
+);
 
 app.get("/api/status", async (_req, res) => {
   const status = { chrome: "unknown", firefox: "unknown", scbLane1: "unknown" };
@@ -338,6 +355,41 @@ app.get("/health", (_req, res) => {
 // entry for why this lane was split off before any login automation.
 app.get("/monitors/scb-business-anywhere/live", (_req, res) => {
   res.sendFile(path.join(PUBLIC_DIR, "scb-business-anywhere-live.html"));
+});
+
+// Assisted Manual Login flow for the scb-business-anywhere-1 lane --
+// two deliberately narrow actions, nothing else touches this lane's
+// browser. Both are synchronous (not queued): each is a single
+// `docker compose run --rm` invocation against that lane's own
+// isolated worker service, already serialized by construction (one
+// `docker compose run` at a time per lane in practice), same
+// synchronous-exec pattern /api/action/:name already uses for
+// container lifecycle calls.
+//
+// open-login: safe to navigate -- meant to run *before* a human logs
+// in (or to deliberately reset/reload the login page). Never fills
+// any field.
+app.post("/api/lanes/scb-business-anywhere-1/open-login", async (_req, res) => {
+  try {
+    res.json(await runScbOpenLoginPage());
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// analyze: read-only, never navigates -- meant to run *after* a human
+// has manually logged in (and/or completed OTP) via this lane's own
+// noVNC. Reports back current URL/title/visible-text-snippet/screenshot
+// of whatever page is already open, without the bot ever touching a
+// credential or driving the login itself.
+app.post("/api/lanes/scb-business-anywhere-1/analyze", async (_req, res) => {
+  try {
+    const result = await runScbAnalyzePage();
+    const analysis = parseLanePageAnalysis(result.stdout);
+    res.json({ ok: result.ok && !!analysis, analysis, error: result.ok ? undefined : (result.error ?? result.stderr) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
 });
 
 const server = app.listen(PORT, "127.0.0.1", () => {

@@ -606,29 +606,67 @@ site — deliberately.** What exists so far is isolation-only:
   `startScbLane1`/`stopScbLane1`, same fixed-allowlist mechanism, not
   a new one) plus a `Live →` link.
 - `policy.ts` gained a `scb-business-anywhere` site policy (slower
-  pacing than xc-bank's — real site, real caution) and a read-only
-  `scb-business-anywhere-explore.json` workflow (`navigate` +
-  `screenshot` only, **no credentials, no form fill**) — used once to
-  confirm the real login page loads and is a two-step username-then
-  -password flow before any lane isolation existed; from now on this
-  (or anything else touching the real site) should only ever run
-  through `worker-scb-business-anywhere-1`, never the shared `worker`.
+  pacing than xc-bank's — real site, real caution). A read-only
+  `scb-business-anywhere-explore.json` workflow (`navigate`+
+  `screenshot`, no credentials) was used once, before the isolated
+  lane existed, to confirm the real login page loads and is a
+  two-step username-then-password flow; superseded by
+  `scb-business-anywhere-open-login.json` (`navigate` only) below.
+  Both are excluded from `exec.ts`'s `listWorkflowNames()` via a
+  `LANE_ONLY_WORKFLOW_PREFIXES` filter — a real safety guard, not
+  cosmetic: without it, the generic Workflows section on `/` would let
+  someone accidentally run either against the *shared* `worker`
+  (browser-worker-chrome), defeating the isolation entirely.
 - **Explicitly asked and answered**: whether the current Chrome setup
   is "stealthy" enough to avoid a real bank's fraud/bot detection.
   Answer given directly: no, and this project will not build genuine
   detection-evasion techniques against a live bank's fraud controls,
   full stop — same "polite automation, not bypass" line already drawn
   project-wide (`docs/PROJECT_PLAN.md`'s decision log), just restated
-  for higher stakes. The recommended path instead: a human handles
-  login/OTP entirely via manual noVNC takeover (this lane's own
-  `:6090`), and any future automation stays narrow/read-only on top of
-  an already-human-authenticated session — never attempting the login
-  or challenge steps itself.
-- **Next step is explicitly gated on the user manually logging in
-  once via this lane's own noVNC** so real (non-credential) DOM
-  structure past the username step can be observed safely — no
-  further automation work proceeds until that happens and the user
-  says what's next.
+  for higher stakes.
+- **"Assisted Manual Login" view** (`scb-business-anywhere-live.html`/
+  `.js`) — the user asked, then was told directly, that having the bot
+  type the username/password itself (even with a human only watching)
+  is *worse* for detection risk than a human typing it themselves
+  (mouse/keyboard/timing patterns differ, and it would mean a real
+  password has to pass through the bot/logs at some point, which this
+  project refuses to do). The page embeds this lane's own noVNC
+  directly (`?autoconnect=true` so the user doesn't need to open a
+  separate tab or click noVNC's own "Connect" button — they still type
+  this lane's own local noVNC access password, `VNC_PASSWORD`, once;
+  that's a dev-only environment password, not the bank credential) so
+  the user types username/password/OTP themselves, directly in the
+  embedded screen. A right-hand 6-step checklist tracks progress
+  (steps 2-5, the actual typing, are purely client-side markers — the
+  bot has no way to know login state and doesn't try to check). Only
+  two bot actions exist, both narrow and named for exactly what they
+  do:
+  - **Open Login Page** (`POST /api/lanes/scb-business-anywhere-1/open-login`
+    → `runScbOpenLoginPage()` in `exec.ts` → the new
+    `scb-business-anywhere-open-login.json` workflow, run through this
+    lane's own `worker-scb-business-anywhere-1`) — safe to navigate,
+    meant to run *before* login; touches no form field. Uses the
+    normal `run-workflow.ts` engine (which always resets to a fresh
+    page first), so using this *after* a manual login discards that
+    session's tab — documented plainly on the page itself.
+  - **Analyze current page** (`POST /api/lanes/scb-business-anywhere-1/analyze`
+    → `runScbAnalyzePage()` → new `services/worker/src/analyze-page.ts`,
+    a standalone script, **not** `run-workflow.ts`) — deliberately
+    never navigates or creates a fresh page; reads `context.pages()[0]`
+    exactly as the human left it (URL, title, a 2000-char visible-text
+    snippet via `document.body.innerText`, and a screenshot), prints a
+    `LANE_PAGE_ANALYSIS {...}` marker line (same convention as
+    `XC_BANK_DASHBOARD`), and exits — never fills or clicks anything.
+    Screenshots for this lane are served from a new,
+    separately-scoped static route
+    (`/lane-screenshots/scb-business-anywhere-1/*` →
+    `data/lanes/scb-business-anywhere-1/output/`), never mixed with
+    the shared `/screenshots/*` route.
+- **Still explicitly gated**: no adapter/login-automation code exists
+  for this site. The next step (if any) needs a fresh, explicit
+  go-ahead from the user after they've used this flow themselves —
+  this round only built the assisted-viewing/analysis tooling, not any
+  path toward automating the login itself.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).

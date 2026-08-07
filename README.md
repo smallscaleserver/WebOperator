@@ -315,6 +315,39 @@ transactions ขยับโดยไม่ต้องรีเฟรชเอ�
 200 รูปล่าสุด/transaction history/notification history — ไม่ใช่หน้า
 live ทั้งสองหน้ามีลิงก์เชื่อมกันไปมาที่มุมบนซ้าย
 
+**20. SCB Business Anywhere Lane — Assisted Manual Login**
+
+เว็บธนาคารจริง (`scbbusinessanywhere.com`) ไม่ใช่ mock เหมือน XC Bank —
+มี Chromium container/profile/noVNC แยกต่างหากโดยสิ้นเชิง
+(`browser-worker-scb-business-anywhere-1`, noVNC ที่
+`127.0.0.1:6090`, ข้อมูลอยู่ใต้
+`data/lanes/scb-business-anywhere-1/`) ไม่แชร์ browser context/session
+กับ `browser-worker-chrome` เลย (ดู `docs/BOT_LANE_ISOLATION.md`)
+
+**บอทไม่พิมพ์ username/password/OTP ให้เด็ดขาด** — คุณต้อง login เอง
+เท่านั้น เปิดที่:
+
+```text
+http://localhost:4000/monitors/scb-business-anywhere/live
+```
+
+หน้านี้เป็น "Assisted Manual Login": ฝั่งซ้าย embed noVNC ของ lane นี้
+โดยตรง (ไม่ต้องเปิด `:6090` แยกอีกแท็บ) พิมพ์ username/password/OTP ใน
+จอฝั่งซ้ายได้เลย (ถ้าขึ้นถามรหัสผ่าน นั่นคือรหัส noVNC ของ lane เอง
+ไม่ใช่รหัสธนาคาร — ดู `VNC_PASSWORD` ใน `.env`) ฝั่งขวาเป็น checklist
+6 ขั้น พร้อมปุ่ม bot ทำได้แค่ 2 อย่าง:
+
+- **Open Login Page** — สั่ง browser ของ lane นี้ไปหน้า login จริง
+  (แค่ navigate ไม่กรอกอะไรเลย) ใช้ก่อน login เท่านั้น — ถ้ากดหลัง
+  login แล้ว จะ reset tab ทิ้ง session ที่ login ไว้
+- **Analyze current page** — ให้บอทอ่านหน้าปัจจุบัน (URL, title,
+  ข้อความที่เห็นบนจอ, screenshot) แบบ read-only เท่านั้น ไม่ navigate
+  ไม่กรอกอะไร ใช้ได้หลังคุณ login เองเสร็จแล้ว เพื่อดูโครงหน้าที่
+  login สำเร็จโดยไม่ต้องให้บอทแตะรหัสผ่านเลย
+
+ยังไม่มี login/OTP automation หรือ monitor สำหรับเว็บนี้ — เป็นแค่
+เครื่องมือช่วยดูหน้าจอ/วิเคราะห์หน้าหลัง login ด้วยตัวเองเท่านั้น
+
 ---
 
 #### Troubleshooting

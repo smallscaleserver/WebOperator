@@ -135,10 +135,23 @@ export function parseXcBankDashboard(stdout: string): XcBankDashboard | undefine
   return undefined;
 }
 
+// Workflow files that must only ever run against their own isolated
+// lane's worker service (see runScbOpenLoginPage/runScbAnalyzePage
+// below), never the shared "worker"/browser-worker-chrome the generic
+// Workflows section on "/" enqueues against. Excluded here rather than
+// just "not linked to" -- listWorkflowNames() feeds
+// /api/enqueue-workflow/:name's own validation, so this is a real
+// guard against accidentally running real-bank navigation on the
+// wrong (shared) browser, not just a UI omission.
+const LANE_ONLY_WORKFLOW_PREFIXES = ["scb-business-anywhere"];
+
 export async function listWorkflowNames(): Promise<string[]> {
   try {
     const entries = await readdir(WORKFLOWS_DIR);
-    return entries.filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+    return entries
+      .filter((f) => f.endsWith(".json"))
+      .map((f) => f.slice(0, -".json".length))
+      .filter((name) => !LANE_ONLY_WORKFLOW_PREFIXES.some((prefix) => name.startsWith(prefix)));
   } catch {
     return [];
   }
@@ -175,6 +188,54 @@ export async function validateWorkflowFile(name: string): Promise<{ ok: true } |
     return { ok: false, error: `Workflow "${name}": step ${badIndex + 1} is missing a string "type"` };
   }
   return { ok: true };
+}
+
+// scb-business-anywhere-1 lane -- fixed, hardcoded service/workflow
+// names (not parameterized by request input), same "no path from a
+// request to shell argv" posture as ACTIONS. These two are the only
+// ways anything ever touches this lane's browser: open-login (safe to
+// navigate -- meant to run before a human logs in) and analyze
+// (read-only, never navigates -- meant to run after).
+const SCB_LANE_SERVICE = "worker-scb-business-anywhere-1";
+
+export async function runScbOpenLoginPage(): Promise<ActionResult> {
+  return execAndParse([
+    "compose",
+    "run",
+    "--rm",
+    "-e",
+    "WORKFLOW_NAME=scb-business-anywhere-open-login",
+    SCB_LANE_SERVICE,
+    "npm",
+    "run",
+    "workflow",
+  ]);
+}
+
+export async function runScbAnalyzePage(): Promise<ActionResult> {
+  return execAndParse(["compose", "run", "--rm", SCB_LANE_SERVICE, "npm", "run", "analyze-page"]);
+}
+
+export interface LanePageAnalysis {
+  url: string;
+  title: string;
+  textSnippet: string;
+  screenshot: string;
+}
+
+// Mirrors parseXcBankDashboard()'s approach -- pulls the one
+// LANE_PAGE_ANALYSIS marker line back out of the job's own stdout.
+export function parseLanePageAnalysis(stdout: string): LanePageAnalysis | undefined {
+  for (const line of stdout.split("\n")) {
+    const match = line.match(/^LANE_PAGE_ANALYSIS (.+)$/);
+    if (!match) continue;
+    try {
+      return JSON.parse(match[1]) as LanePageAnalysis;
+    } catch {
+      // fall through -- treat as unparseable
+    }
+  }
+  return undefined;
 }
 
 export async function composePs(): Promise<string> {

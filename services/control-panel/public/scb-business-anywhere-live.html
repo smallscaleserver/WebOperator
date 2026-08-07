@@ -20,33 +20,44 @@
   .danger { color: #82071e; font-size: 0.85rem; background: #ffebe9; border-radius: 4px; padding: 0.5rem 0.7rem; }
   .live-columns { display: flex; gap: 1rem; align-items: flex-start; flex-wrap: wrap; }
   .live-left { flex: 1 1 560px; min-width: 320px; }
-  .live-right { flex: 1 1 320px; min-width: 280px; }
-  #live-iframe { width: 100%; height: 500px; border: 1px solid #ccc; border-radius: 6px; display: block; }
+  .live-right { flex: 1 1 340px; min-width: 300px; }
+  #live-iframe { width: 100%; height: 560px; border: 1px solid #ccc; border-radius: 6px; display: block; }
   .lane-offline { padding: 1.5rem 1rem; text-align: center; border: 1px dashed #ccc; border-radius: 6px; }
   dl { margin: 0; }
   dt { font-weight: bold; margin-top: 0.6rem; }
   dd { margin: 0 0 0.2rem 0; color: #444; }
+  ol.checklist { margin: 0.5rem 0; padding-left: 1.4rem; }
+  ol.checklist li { margin-bottom: 0.6rem; }
+  ol.checklist li.done { color: #2ea043; text-decoration: line-through; }
+  ol.checklist li .step-btn { margin-top: 0.3rem; display: block; }
+  .analysis-box { font-size: 0.85rem; }
+  .analysis-box dt { margin-top: 0.5rem; }
+  .analysis-box img { max-width: 100%; border: 1px solid #ddd; border-radius: 4px; margin-top: 0.3rem; }
+  .analysis-text { white-space: pre-wrap; background: #f6f8fa; border-radius: 4px; padding: 0.5rem; max-height: 200px; overflow: auto; font-family: monospace; font-size: 0.8rem; }
 </style>
 </head>
 <body>
-<h1>SCB Business Anywhere — Lane <a href="/">&larr; Control Panel</a></h1>
+<h1>SCB Business Anywhere — Assisted Manual Login <a href="/">&larr; Control Panel</a></h1>
 <p class="hint">
   Isolated lane (see <code>docs/BOT_LANE_ISOLATION.md</code>) — its own
   Chromium container, own profile, own noVNC endpoint. Never shares a
   browser context/cookies/session with <code>browser-worker-chrome</code>
-  (used by XC Bank and other testing).
+  (used by XC Bank and other testing). You type your own
+  username/password/OTP directly in the embedded screen below — never
+  through the bot.
 </p>
 
 <p class="danger">
-  No login/OTP automation exists for this lane yet. Take control below
-  and log in yourself if you need to. The bot must never submit an
-  OTP/2FA/security-challenge prompt — those are human-only, always.
+  The bot never types a username/password/OTP, and never submits a
+  login/challenge form. Only two bot actions exist here: open the
+  public login page (no fields touched), and read whatever page is
+  already open after you've logged in (no navigation, no typing).
 </p>
 
 <div class="live-columns">
   <div class="live-left">
     <section>
-      <h2>Lane browser</h2>
+      <h2>Lane browser — type here directly</h2>
       <div class="row">
         <span class="dot" id="status-dot"></span>
         <span id="status-label">checking…</span>
@@ -58,25 +69,51 @@
         <button id="start-btn-2">Start lane</button>
       </div>
       <iframe id="live-iframe" src="about:blank" style="display:none;"></iframe>
+      <p class="hint">
+        If this screen asks for a VNC password (not your bank
+        password) it's this lane's local noVNC access password
+        (<code>VNC_PASSWORD</code> in <code>.env</code>, dev-only, see
+        <code>docs/PROJECT_PLAN.md</code>).
+      </p>
     </section>
   </div>
 
   <div class="live-right">
     <section>
-      <h2>Lane info</h2>
-      <dl>
-        <dt>laneId</dt><dd>scb-business-anywhere-1</dd>
-        <dt>siteId</dt><dd>scb-business-anywhere</dd>
-        <dt>accountId</dt><dd>manual-admin</dd>
-        <dt>browserType</dt><dd>chromium (isolated container)</dd>
-        <dt>profile</dt><dd><code>data/lanes/scb-business-anywhere-1/profile</code></dd>
-        <dt>noVNC</dt><dd><code>127.0.0.1:6090</code> (loopback only)</dd>
-      </dl>
-      <p class="warning">
-        Read-only status placeholder — no monitor/check logic exists for
-        this site yet. Balance/transaction data will appear here once a
-        monitor is built for it, the same way XC Bank Monitor works.
+      <h2>Assisted manual login checklist</h2>
+      <ol class="checklist" id="checklist">
+        <li id="step-1">Open login page
+          <button id="open-login-btn" class="step-btn">Open Login Page</button>
+        </li>
+        <li id="step-2">Enter username manually (in the screen on the left)</li>
+        <li id="step-3">Enter password manually (in the screen on the left)</li>
+        <li id="step-4">Enter OTP manually (in the screen on the left)</li>
+        <li id="step-5">Confirm you're logged in
+          <button id="confirm-login-btn" class="step-btn">I have logged in</button>
+        </li>
+        <li id="step-6">Analyze current page
+          <button id="analyze-btn" class="step-btn" disabled>Analyze current page</button>
+        </li>
+      </ol>
+      <p class="hint">
+        "Open Login Page" resets the lane's tab and navigates — only
+        use it before logging in (using it after login discards that
+        session's tab). "Analyze current page" never navigates; it
+        only reads whatever's already on screen.
       </p>
+      <p class="error" id="lane-error" style="display:none;"></p>
+    </section>
+
+    <section id="analysis-section" style="display:none;">
+      <h2>Page analysis (read-only)</h2>
+      <dl class="analysis-box">
+        <dt>URL</dt><dd id="analysis-url"></dd>
+        <dt>Title</dt><dd id="analysis-title"></dd>
+        <dt>Visible text (first 2000 chars)</dt>
+        <dd><div class="analysis-text" id="analysis-text"></div></dd>
+        <dt>Screenshot</dt>
+        <dd><img id="analysis-screenshot" alt="page screenshot" /></dd>
+      </dl>
     </section>
   </div>
 </div>

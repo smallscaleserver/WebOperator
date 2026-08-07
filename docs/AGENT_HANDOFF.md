@@ -2541,3 +2541,72 @@ Appending correctly from here on. -->
   site's automation without a fresh, explicit go-ahead — this is a
   real bank account, and the authorization already given was scoped
   to "isolated lane + manual exploration," not to automated login.
+
+### 2026-08-08 (same session, continued again) — Claude
+
+- Status: Done (Assisted Manual Login tooling only — still no login/OTP automation)
+- Context: User asked whether the bot could type username/password
+  itself into the real SCB login form while they just watch (no
+  clicking). Declined directly: the real password would have to pass
+  through the bot/logs at some point (unacceptable for a real bank
+  account), and — counter-intuitively — a human typing manually is
+  *more* detection-resistant than automation typing (mouse/keyboard/
+  timing patterns differ; a bank's fraud engine is more likely to flag
+  automated input than manual input). User then asked for an
+  "Assisted Manual Login" view instead: noVNC of the isolated lane
+  embedded directly in the Control Panel page (so they never need to
+  open `:6090` separately) with a checklist, an "Open Login Page"
+  button (navigate only, no fields touched), and an "Analyze current
+  page" button (read-only DOM/screenshot capture after manual login,
+  never navigates).
+- Files: `services/worker/src/analyze-page.ts` (new, standalone —
+  deliberately not `run-workflow.ts`; reads `context.pages()[0]`
+  as-is, never calls `newPage()`/navigates, prints
+  `LANE_PAGE_ANALYSIS {url,title,textSnippet,screenshot}`);
+  `services/worker/workflows/scb-business-anywhere-open-login.json`
+  (new, `navigate`-only, supersedes the earlier `-explore` workflow
+  for UI purposes); `services/worker/package.json` (`analyze-page`
+  npm script); `services/control-panel/src/exec.ts`
+  (`runScbOpenLoginPage`/`runScbAnalyzePage`/`parseLanePageAnalysis`,
+  fixed hardcoded argv, no request-input-to-shell-argv path; also
+  `listWorkflowNames()` now filters out any `scb-business-anywhere*`
+  workflow — a real safety fix, not cosmetic, since the generic
+  Workflows section on `/` always runs against the *shared* `worker`
+  and would otherwise let someone accidentally break the lane
+  isolation by clicking the wrong button); `services/control-panel/src/server.ts`
+  (two new synchronous routes,
+  `POST /api/lanes/scb-business-anywhere-1/{open-login,analyze}`; new
+  static route `/lane-screenshots/scb-business-anywhere-1/*` scoped to
+  that lane's own output dir, kept separate from the shared
+  `/screenshots/*`); `services/control-panel/public/scb-business-anywhere-live.html`+`.js`
+  fully rewritten — left column is the embedded noVNC iframe
+  (`?autoconnect=true` so no separate tab/click needed — the user
+  still types this lane's own local noVNC password once, not a bank
+  credential), right column is the 6-step checklist (steps 2-5 are
+  purely client-side markers, the bot never checks login state itself)
+  plus a page-analysis results panel (URL/title/text
+  snippet/screenshot) populated after "Analyze current page" succeeds.
+  `README.md`/`AGENTS.md`/`docs/PROJECT_PLAN.md` updated with the full
+  narrative.
+- Verified: `tsc --noEmit` clean in both `services/control-panel` and
+  `services/worker`; both new JS files `node --check` clean; `GET
+  /api/workflows` confirmed the two scb-business-anywhere workflows no
+  longer appear (only demo/the-internet-login/xc-bank-* show);
+  `POST /api/lanes/scb-business-anywhere-1/open-login` ran for real —
+  navigated to the real login page, zero fields touched, steps all
+  green; `POST .../analyze` ran for real immediately after (same
+  unauthenticated page, since no manual login had happened yet in this
+  verification pass) and correctly returned the real URL/title/Thai
+  visible-text snippet/a working screenshot, without navigating;
+  confirmed the screenshot is servable via the new lane-scoped static
+  route; visually confirmed (real CDP screenshot) the full Assisted
+  Manual Login page renders correctly end-to-end — checklist
+  strike-through state, both buttons, and the populated analysis panel
+  all correct. All debug scripts and test screenshots deleted before
+  committing.
+- Next: still explicitly gated on the user actually using this flow
+  (open the login page, log in themselves via the embedded noVNC,
+  click "I have logged in" then "Analyze current page") and giving
+  fresh, explicit direction on what — if anything — should be
+  automated next for this site. No adapter/login-automation code
+  exists and none should be added without that direction.

@@ -1,0 +1,7 @@
+{
+  "name": "scb-business-anywhere-open-login",
+  "siteId": "scb-business-anywhere",
+  "steps": [
+    { "type": "navigate", "params": { "url": "https://www.scbbusinessanywhere.com/" } }
+  ]
+}

@@ -9,6 +9,7 @@
     "restore": "tsx src/restore-session.ts",
     "adapter": "tsx src/run-adapter.ts",
     "workflow": "tsx src/run-workflow.ts",
+    "analyze-page": "tsx src/analyze-page.ts",
     "firefox-demo": "tsx src/run-firefox-demo.ts",
     "gmail:authorize": "tsx src/gmail/authorize.ts",
     "gmail:list": "tsx src/gmail/list-messages.ts"
