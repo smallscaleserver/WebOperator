@@ -2,6 +2,7 @@ import { mkdir, readFile, unlink, writeFile } from "node:fs/promises";
 import path from "node:path";
 import { REPO_ROOT, parseXcBankDashboard, runXcBankMonitorCheck, type XcBankTransaction } from "./exec.js";
 import { removeArtifact } from "./artifacts.js";
+import { sendTelegramMessage } from "./telegram.js";
 
 export const MONITOR_JOB_NAME = "xc-bank-monitor-check";
 
@@ -176,6 +177,21 @@ export async function checkOnce(): Promise<MonitorState> {
   }
 
   await saveState(state);
+
+  // Best-effort, one summary message per check rather than one per
+  // transaction -- a check that finds several new transactions at
+  // once (e.g. after being paused/auto-stopped for a while) sends a
+  // single readable message, not a burst. No-op if Telegram isn't
+  // configured (see telegram.ts).
+  if (newTransactions.length > 0) {
+    const lines = newTransactions.map(
+      (t) => `${t.direction === "credit" ? "+" : "-"}$${t.amount.toFixed(2)} ${t.direction === "credit" ? "from" : "to"} ${t.counterparty}`,
+    );
+    await sendTelegramMessage(
+      `💰 XC Bank: ${newTransactions.length} new transaction(s)\n${lines.join("\n")}\nBalance: $${dashboard.balance.toFixed(2)}`,
+    );
+  }
+
   return state;
 }
 

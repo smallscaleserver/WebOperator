@@ -667,6 +667,33 @@ site — deliberately.** What exists so far is isolation-only:
   go-ahead from the user after they've used this flow themselves —
   this round only built the assisted-viewing/analysis tooling, not any
   path toward automating the login itself.
+- **A real credential ended up in the chat session** (the user pasted
+  it directly) and, separately, a local `.userpass` file was found
+  untracked and **not** gitignored — both handled without ever using
+  the credential for automation: `.userpass` added to `.gitignore`
+  (confirmed via `git log` it was never actually committed), a new
+  `.userpass.example` documents a multi-site format for the user's
+  *own* manual reference (typed into the noVNC screen themselves, the
+  bot never reads it), and the user was told plainly to rotate that
+  bank password since chat history isn't an appropriate place for it
+  to have existed. Several follow-up requests to achieve the same
+  outcome a different way (an auto-relogin loop, relaying credentials
+  through a Telegram bot, encrypt-then-decrypt-then-type) were all
+  declined for the same underlying reason each time — see
+  `docs/PROJECT_PLAN.md`'s decision log for the full record, kept
+  explicit so a future session recognizes a reworded version of the
+  same request rather than re-deliberating it as new.
+- **Telegram notifications** (a genuinely different, safe request —
+  one-way alerts, never receiving input or relaying credentials): new
+  `services/control-panel/src/telegram.ts` (`sendTelegramMessage()`,
+  best-effort, no-op if unconfigured), wired into `monitor.ts`'s
+  `checkOnce()` (new-transaction summary) and `queue.ts`'s auto-stop
+  trigger. Needed a real fix to reach it: the two host processes
+  (`server.ts`/`worker.ts`) had never actually loaded `.env` at all
+  (every `process.env.X` elsewhere silently used its hardcoded
+  default) — fixed with a new `dotenv`-based `src/env.ts` imported
+  first in both entry points, which also retroactively fixes the same
+  latent gap for `MINIO_ROOT_USER`/`PASSWORD`.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).

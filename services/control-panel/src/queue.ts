@@ -2,6 +2,7 @@ import { Queue, Worker } from "bullmq";
 import { runAction, runWorkflow, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
 import { checkOnce, loadState, resetState, setPaused, setAutoStopConfig, MONITOR_JOB_NAME } from "./monitor.js";
+import { sendTelegramMessage } from "./telegram.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const QUEUE_NAME = "worker-actions";
@@ -109,6 +110,7 @@ export function startWorker(): Worker {
             // read-modify-write).
             await stopMonitorSchedule();
             await setAutoStopConfig({ autoStopAt: null, autoStopped: true, autoStopMinutes });
+            await sendTelegramMessage(`⏱ XC Bank Monitor auto-stopped after ${autoStopMinutes ?? "?"} minute(s)`);
             return {
               ok: true,
               stdout: `Monitor auto-stopped after ${autoStopMinutes ?? "?"} minute(s)`,

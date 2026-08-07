@@ -1,3 +1,4 @@
+import "./env.js";
 import { startWorker, closeQueue } from "./queue.js";
 
 console.log("WebOperator queue worker starting (concurrency 1)...");

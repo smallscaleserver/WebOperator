@@ -2610,3 +2610,66 @@ Appending correctly from here on. -->
   fresh, explicit direction on what — if anything — should be
   automated next for this site. No adapter/login-automation code
   exists and none should be added without that direction.
+
+### 2026-08-08 (same session, continued once more) — Claude
+
+- Status: Done
+- Context: **Security-sensitive round — no credential values recorded
+  anywhere in this entry or any file.** User made several follow-up
+  requests, in different forms, all ultimately asking the bot to
+  handle real SCB bank credentials/OTP: read a `.userpass` file and
+  auto-login, then pasted the real username/password directly into
+  chat, then asked for an auto-relogin loop, then asked to relay
+  credentials/OTP through a Telegram bot (pasting a real bot token +
+  chat id into chat in the process), then asked about encrypting the
+  credential at rest so the bot could decrypt-and-type it. **All
+  declined**, consistently, for the same core reason restated per
+  form: the concern was never "is storage secure" or "what does the
+  bot do after login" — it's that (1) any credential passing through
+  the bot/conversation at all is a permanent, unrecoverable exposure
+  the moment it happens, and (2) bot-driven credential *typing* is
+  inherently more fraud-detectable than a human typing, regardless of
+  where the value came from or how many hops it took to get there.
+  User was told directly to rotate the exposed bank password. Separate
+  from all of that: also found `.userpass` sitting untracked and **not
+  gitignored** — fixed immediately (confirmed via `git log` it was
+  never committed). User then confirmed a genuinely different, safe
+  request — Telegram *notifications* (one-way alerts only) for XC Bank
+  Monitor — which was built.
+- Files: `.gitignore` (added `.userpass`); new `.userpass.example`
+  (placeholder values only, multi-site format, for the user's own
+  manual typing reference — bot never reads the real file); new
+  `services/control-panel/src/env.ts` (dotenv loading for the two host
+  processes, which had never actually loaded `.env` before — a real,
+  separately-useful fix found while wiring Telegram, also fixes the
+  same latent gap for `MINIO_ROOT_USER`/`PASSWORD`), imported first in
+  `server.ts`/`worker.ts`; new `services/control-panel/src/telegram.ts`
+  (`sendTelegramMessage()`, best-effort, no-op if unconfigured, never
+  used to receive input); wired into `monitor.ts`'s `checkOnce()`
+  (new-transaction summary, one message per check not per transaction)
+  and `queue.ts`'s auto-stop trigger; `.env.example` documents the two
+  new optional vars (`TELEGRAM_BOT_TOKEN_XC`/`TELEGRAM_CHAT_ID_XC`);
+  real values were placed in `.env` itself (confirmed gitignored,
+  confirmed never committed) — **not recorded in this file, in
+  PROJECT_PLAN.md, or anywhere else tracked by git**. `docs/PROJECT_PLAN.md`
+  decision log has the full narrative of both threads (credential
+  handling and the Telegram feature) in detail.
+- Verified: `tsc --noEmit` clean; a direct Telegram Bot API call with
+  the real token/chat_id succeeded (message delivered to the real
+  chat, confirmed via the API's own `"ok":true` response); the actual
+  `sendTelegramMessage()` module (not a reimplementation) was invoked
+  directly via `tsx` after restarting with the new `.env` loading and
+  completed with no error logged; `.env`/`.userpass` both reconfirmed
+  gitignored via `git check-ignore -v` immediately before committing;
+  `git status` confirmed clean (only the user's own untracked
+  `note`/`note2`/`note3`/`New Text Document.txt`) before staging.
+- Next: user still needs to actually rotate the exposed SCB bank
+  password (recommended repeatedly, not something this session can do
+  for them) and, separately, may want to rotate the Telegram bot token
+  that was also pasted into chat (lower stakes, but same hygiene
+  reasoning). The Assisted Manual Login flow from the prior entry is
+  unchanged and still the only path forward for this site — still
+  waiting on the user to actually use it. If another agent/session
+  sees a request shaped like "have the bot handle my real credentials"
+  in any form, the answer is already decided — see the decision log
+  entries above — no need to re-litigate from scratch.
