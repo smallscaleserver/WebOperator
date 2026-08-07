@@ -2790,3 +2790,51 @@ Appending correctly from here on. -->
   currently running for real (60-minute auto-stop from the prior
   entry) — check whether it's still active or already auto-stopped
   when picking this back up.
+
+### 2026-08-08 (same session, continued once more again, again, again) — Claude
+
+- Status: Done
+- Context: Two independent, explicit requests. (1) User confirmed the
+  Telegram bot's private-chat sending already works and asked to also
+  send to a group ("Small and snoopy") using the *same* bot token (no
+  new bot) — found the real group chat id (`-1003924358603`) live via
+  the bot's own `getUpdates` response after the user added it and sent
+  `/start`. (2) User reported real transaction times shown on the live
+  SCB page (and in Telegram reports) didn't match actual Thailand
+  time; initially built a per-script CDP timezone-override fix
+  (mirroring `run-workflow.ts`'s existing `apply-policy` step) but the
+  user explicitly redirected: fix it at the Docker/container level
+  instead, not per-script — so that fix was discarded and redone.
+- Files: `services/control-panel/src/telegram.ts` (`sendTelegramMessage()`
+  now fans out to both `TELEGRAM_CHAT_ID_XC` and a new
+  `TELEGRAM_GROUP_CHAT_ID`, independently, no other call site changed);
+  `.env.example` (new `TELEGRAM_GROUP_CHAT_ID` entry, documented); real
+  value placed in `.env` (gitignored, confirmed, not recorded in any
+  tracked file); `services/browser-worker/Dockerfile` (added `tzdata`
+  package so a runtime `TZ` env var can resolve real IANA zone names);
+  `docker-compose.yml` (`TZ=Asia/Bangkok` added to
+  `browser-worker-scb-business-anywhere-1`'s environment only — not
+  the shared `browser-worker-chrome`/`-firefox`, scoped to where the
+  bug was actually found).
+- Verified: a single `sendTelegramMessage()` call delivered successfully
+  to both the private chat and the group with no error logged; `tsc
+  --noEmit` clean; rebuilt and recreated the SCB lane's browser
+  container, confirmed `date` inside it now reports the correct `+07`
+  offset and CDP came back up cleanly afterward. Could not yet verify
+  the *displayed page* now shows corrected times end-to-end — the
+  session had expired again by the time of that check (caught cleanly
+  by the session-expired detection from the prior entry, alert fired
+  without error) — this is a separate, already-known real-session
+  timeout, not caused by the container recreate itself (the exact same
+  thing happened once before, unrelated to this round's changes).
+- Next: once the user logs back in again, re-run a check (manual
+  "Check once" or wait for the next scheduled tick) to get final visual
+  confirmation that transaction times displayed now match real
+  Thailand time — the container-level fix is confirmed correct at the
+  OS level, just not yet re-confirmed against a live authenticated
+  page render. SCB's session timeout appears to be genuinely short
+  (this is the second real, independent expiry observed this session)
+  — expect this to recur periodically; the existing session-expired
+  alert + manual-relogin-then-reselect-company flow (documented in the
+  prior entry) is the intended, working way to handle it, not something
+  to "fix" further absent a specific new request.

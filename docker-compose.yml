@@ -93,6 +93,12 @@ services:
       - BROWSER=chromium
       - RESOLUTION=1366x768x24
       - VNC_PASSWORD=${VNC_PASSWORD:-changeme}
+      # Real bank site displays dates in the browser's own local
+      # timezone (see the Dockerfile's tzdata comment) -- without this,
+      # the container's default (UTC) leaked into displayed transaction
+      # times, found from a real report that they didn't match actual
+      # Thailand time.
+      - TZ=Asia/Bangkok
     ports:
       - "127.0.0.1:6090:6080"
     volumes:

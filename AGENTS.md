@@ -758,6 +758,35 @@ site — deliberately.** What exists so far is isolation-only:
     balance figures, transaction row, and expanded detail all matched
     exactly what was visually confirmed on the real page — and a real
     Telegram message was sent and delivered.
+- **Telegram group support** — `telegram.ts`'s `sendTelegramMessage()`
+  fans out to both `TELEGRAM_CHAT_ID_XC` (private) and a new
+  `TELEGRAM_GROUP_CHAT_ID` (independent, both optional), same bot
+  token, no other call site changed.
+- **Timezone display bug — fixed at the Docker/container level**: real
+  transaction times shown on the live SCB page (and in Telegram
+  reports) didn't match actual Thailand time, because the lane's
+  browser container had no explicit timezone and SCB's own UI formats
+  dates using the browser's local timezone. `services/browser-worker/Dockerfile`
+  gained `tzdata`; `docker-compose.yml` sets
+  `TZ=Asia/Bangkok` on `browser-worker-scb-business-anywhere-1`'s
+  environment specifically (not the shared chrome/firefox containers).
+  Explicit user direction, not a default choice: an initial per-script
+  CDP `Emulation.setTimezoneOverride` fix (mirroring `run-workflow.ts`'s
+  `apply-policy` step) was built, then discarded in favor of this —
+  container-level covers every script *and* a human's own manual
+  noVNC browsing uniformly, where a per-script override only helps
+  scripts that remember to call it.
+- **Session-expired fast detection**: a real session expiry happened
+  mid-loop and used to hang ~30s with an unclear error. `check-transactions.ts`
+  now checks for the login field / absence of the authenticated nav
+  with short timeouts and throws a `SESSION_EXPIRED:`-prefixed error
+  immediately; `scb-monitor.ts` sends one Telegram alert per expiry
+  episode (never every retry) asking a human to log in again via
+  noVNC — never attempts to log back in itself. **Found alongside
+  this, operationally important**: re-login resets the active company
+  selection back to the account default, so whoever logs back in must
+  re-select the correct company before the monitor's data can be
+  trusted again — not yet automated.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
