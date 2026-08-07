@@ -68,6 +68,19 @@ function formatThb(n: number | null): string {
   return n === null ? "?" : n.toLocaleString(undefined, { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Available Balance vs Ledger Balance mismatch is a real signal, not
+// noise -- per explicit request, it usually means an incoming
+// transfer is recorded (ledger) but not yet usable (available),
+// i.e. still clearing. Included in every notification, not just
+// transaction ones, so a mismatch is visible even on a quiet check.
+function formatBalanceLine(availableBalance: number | null, ledgerBalance: number | null): string {
+  const mismatch = availableBalance !== null && ledgerBalance !== null && availableBalance !== ledgerBalance;
+  const warning = mismatch
+    ? "\n⚠️ Available ≠ Ledger — ยอดที่เห็น (Ledger) กับยอดที่ใช้ได้จริง (Available) ไม่เท่ากัน อาจมีรายการโอนเงินต้นทางรอเคลียร์/มีปัญหา"
+    : "";
+  return `Avail: ${formatThb(availableBalance)} | Ledger: ${formatThb(ledgerBalance)} THB${warning}`;
+}
+
 // Read-only: runs check-transactions.ts against the SCB lane's own
 // isolated worker (never the shared one), on whatever company is
 // currently active in the switcher -- this module has no concept of
@@ -124,11 +137,13 @@ export async function checkOnce(): Promise<ScbMonitorState> {
   // found (per explicit request: "แจ้งบอทด้วยตอนเข้ามาครั้งแรก"). Every
   // check after that only notifies for genuinely new transactions
   // (in/out, description, amount, updated balance) -- per explicit
-  // request: "แจ้ง ว่าเข้าหรือออกจากไหนไปไหนเท่าไหร่ และยอด update".
+  // request: "แจ้ง ว่าเข้าหรือออกจากไหนไปไหนเท่าไหร่ และยอด update". Both
+  // Available and Ledger balance are included in every message (not
+  // just the transaction ones), per explicit request: "เพิ่ม avilable
+  // balance/ledger balance ด้วย...เป็นตัวย่อมาด้วยในทุกๆรอบ".
+  const balanceLine = formatBalanceLine(summary.availableBalance, summary.ledgerBalance);
   if (isFirstEverCheck) {
-    await sendTelegramMessage(
-      `🏦 SCB Business Anywhere — monitoring started\nAvailable Balance: ${formatThb(summary.availableBalance)} THB\nLedger Balance: ${formatThb(summary.ledgerBalance)} THB`,
-    );
+    await sendTelegramMessage(`🏦 SCB Business Anywhere — monitoring started\n${balanceLine}`);
   } else if (newTransactions.length > 0) {
     const lines = newTransactions.map((t) => {
       const direction = t.amount < 0 ? "ออก (debit)" : "เข้า (credit)";
@@ -136,7 +151,7 @@ export async function checkOnce(): Promise<ScbMonitorState> {
       return `${direction}: ${Math.abs(t.amount).toFixed(2)} THB — ${t.description} (${t.date} ${t.time})${detailSuffix}`;
     });
     await sendTelegramMessage(
-      `🏦 SCB Business Anywhere — ${newTransactions.length} รายการใหม่:\n${lines.join("\n")}\n\nBalance: ${formatThb(summary.availableBalance)} THB`,
+      `🏦 SCB Business Anywhere — ${newTransactions.length} รายการใหม่:\n${lines.join("\n")}\n\n${balanceLine}`,
     );
   }
 

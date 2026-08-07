@@ -194,6 +194,15 @@ function setMonitorStatusUi(data) {
   document.getElementById("monitor-ledger-balance").textContent =
     data.ledgerBalance !== null && data.ledgerBalance !== undefined ? `${Number(data.ledgerBalance).toFixed(2)} THB` : "—";
 
+  const mismatchEl = document.getElementById("monitor-balance-mismatch");
+  const hasMismatch =
+    data.availableBalance !== null &&
+    data.availableBalance !== undefined &&
+    data.ledgerBalance !== null &&
+    data.ledgerBalance !== undefined &&
+    Number(data.availableBalance) !== Number(data.ledgerBalance);
+  mismatchEl.style.display = hasMismatch ? "block" : "none";
+
   const txEl = document.getElementById("monitor-transactions");
   if (!data.latestTransactions || data.latestTransactions.length === 0) {
     txEl.innerHTML = "<em>(no data yet)</em>";
