@@ -1,0 +1,16 @@
+# .userpass -- local, plaintext, gitignored (see .gitignore). Your own
+# reference for manual login only -- the bot never reads this file
+# automatically for any site, ever. When using the Assisted Manual
+# Login page (/monitors/<site>/live), you look up the values here
+# yourself and type them into the embedded noVNC screen by hand.
+#
+# One block per site, separated by a blank line. Add as many blocks as
+# you need -- this format supports multiple bots/websites.
+
+website: https://www.scbbusinessanywhere.com/
+username: your-username-here
+password: your-password-here
+
+website: https://example.com/login
+username: your-username-here
+password: your-password-here
