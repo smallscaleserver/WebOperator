@@ -2838,3 +2838,50 @@ Appending correctly from here on. -->
   alert + manual-relogin-then-reselect-company flow (documented in the
   prior entry) is the intended, working way to handle it, not something
   to "fix" further absent a specific new request.
+
+### 2026-08-08 (same session, continued once more again, again, again, again) — Claude
+
+- Status: Done
+- Context: User asked for the company-selection gap (flagged two
+  entries ago as "not yet automated") to actually be automated:
+  auto-reassert the intended company after every check, configurable
+  (not hardcoded to "เซซุส" — could be "กฤษฎิ์ ดำประสงค์"/Krit too).
+  Also added: real Telegram group support (same bot token, found the
+  group's real chat id live via `getUpdates`), an editable script/loop
+  reference panel on the live page (`localStorage`-only, no backend),
+  and confirmed the SCB monitor is currently running unlimited (no
+  auto-stop) per explicit request after the first 60-minute bounded
+  run completed successfully.
+- Files: new `services/worker/src/company-switcher.ts`
+  (`selectCompany()`, shared by `select-company.ts`/`check-transactions.ts`;
+  fixed a real fragility in the dropdown-opener found while building
+  this — the old version only worked when "2 U Estate" was the active
+  company); `scb-monitor.ts` (`targetCompany` state field, set via
+  `server.ts` whenever "Switch company" succeeds, re-asserted by
+  `check-transactions.ts` on every check via a new
+  `TARGET_COMPANY_B64` env var); `telegram.ts` (fans out to both
+  `TELEGRAM_CHAT_ID_XC` and a new `TELEGRAM_GROUP_CHAT_ID`);
+  `scb-business-anywhere-live.html`/`.js` (new editable script/loop
+  reference textarea, and a "Sticky target" status line in the Switch
+  company section).
+- Verified: deliberately forced the browser to "2 U Estate" outside
+  the normal API flow (simulating an external reset) while
+  `targetCompany` was still saved as "เซซุส", then ran a normal
+  check-once — it correctly re-switched to เซซุส first and reported
+  its real balance (8,209.30 THB), not 2 U Estate's; a Telegram
+  message delivered to both the private chat and the group with a
+  single `sendTelegramMessage()` call; `tsc --noEmit` clean in both
+  projects; visually confirmed (real CDP check) the new reference
+  panel and sticky-target text both render correctly; all debug/test
+  files cleaned up before each commit.
+- Next: the user reported SCB shows an idle-timeout "are you still
+  there" popup after a period of inactivity, suspected as a
+  contributing cause of the repeated real session expiries observed
+  this session — not yet handled, because it wasn't visible when
+  checked (no popup showing at that moment). Whoever picks this up:
+  ask the user for a screenshot or exact button text next time it
+  appears before writing any dismiss logic (this project's own
+  discipline — never blind-click a banking UI element without
+  confirming what it actually says first). The monitor is currently
+  running unlimited (no auto-stop) — that's a deliberate, explicit
+  user choice for now, not an oversight; revisit only if asked.
