@@ -2885,3 +2885,42 @@ Appending correctly from here on. -->
   confirming what it actually says first). The monitor is currently
   running unlimited (no auto-stop) — that's a deliberate, explicit
   user choice for now, not an oversight; revisit only if asked.
+
+### 2026-08-08 (same session, final round) — Claude
+
+- Status: Done
+- Context: User asked to check for the idle-timeout popup every ~5
+  min. Rather than actively polling in-conversation, wired the
+  already-running scheduled loop itself to take a screenshot on every
+  check (success or failure) so there's a passive visual trail to
+  review instead. Building this surfaced two real, sequential 30s
+  hangs in the newly-added company-auto-reassert feature — found and
+  fixed both via direct Playwright error traces, not guessed at.
+- Files: `check-transactions.ts` (screenshot on success + catch-all
+  screenshot on any failure, filename embedded in the thrown error
+  message); `company-switcher.ts` (`selectCompany()` now presses
+  `Escape` first, unconditionally, before deciding what to click —
+  fixes both the "clicking an already-active header re-opens the menu
+  and blocks itself" bug and the "a previous hang left the dropdown
+  stuck open" bug that followed right after fixing the first);
+  `scb-monitor.ts` (`latestScreenshot` state field, extracted from
+  either the success path or parsed out of a `SESSION_EXPIRED`-style
+  error message); live page UI shows the latest screenshot.
+- Verified: reproduced both hangs for real via the actual Playwright
+  timeout traces (named the exact blocking element,
+  `.MuiPopover-root`), fixed, rebuilt, re-tested — the next check
+  after the fix failed cleanly and fast instead of hanging, and turned
+  out to be a **genuine** real session expiry (English-language login
+  page this time), correctly detected and screenshotted; `tsc --noEmit`
+  clean; Telegram session-expired alert fired without error.
+- Next: the monitor is currently sitting on a genuine session expiry
+  (screenshot confirms: English "Username"/"Next" login page) —
+  whoever picks this up should expect to see this and may want to log
+  back in to keep observing live data, though the loop itself needs no
+  intervention (it will resume automatically the moment login
+  succeeds again, per the existing session-expired-detection design).
+  The suspected idle-timeout popup still hasn't been directly observed
+  in a screenshot yet — check `data/lanes/scb-business-anywhere-1/output/check-*.png`
+  over time to see if it shows up; still no dismiss logic exists for
+  it and none should be written without seeing its exact text/buttons
+  first.
