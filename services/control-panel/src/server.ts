@@ -11,9 +11,19 @@ import {
   validateWorkflowFile,
   runScbOpenLoginPage,
   runScbAnalyzePage,
+  runScbSelectCompany,
   parseLanePageAnalysis,
   REPO_ROOT,
 } from "./exec.js";
+import {
+  getScbMonitorScheduleInfo,
+  pauseScbMonitor,
+  resumeScbMonitor,
+  startScbMonitorSchedule,
+  stopScbMonitorSchedule,
+  enqueueScbMonitorCheckOnce,
+} from "./queue.js";
+import { loadState as loadScbMonitorState } from "./scb-monitor.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -388,6 +398,90 @@ app.post("/api/lanes/scb-business-anywhere-1/analyze", async (_req, res) => {
     const result = await runScbAnalyzePage();
     const analysis = parseLanePageAnalysis(result.stdout);
     res.json({ ok: result.ok && !!analysis, analysis, error: result.ok ? undefined : (result.error ?? result.stderr) });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// select-company: clicks an entry in the company switcher dropdown by
+// its exact visible text (e.g. "เซซุส", "กฤษฎิ์ ดำประสงค์"). Never
+// touches a credential; a navigation/view action on the
+// already-authenticated session only.
+app.post("/api/lanes/scb-business-anywhere-1/select-company", express.json(), async (req, res) => {
+  const companyName = typeof req.body?.companyName === "string" ? req.body.companyName.trim() : "";
+  if (!companyName) {
+    res.status(400).json({ ok: false, error: "companyName is required" });
+    return;
+  }
+  try {
+    const result = await runScbSelectCompany(companyName);
+    res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// SCB balance/transaction monitor -- mirrors the XC Bank monitor's
+// API shape (GET status, start/stop/check-once/pause/resume), backed
+// by scb-monitor.ts + queue.ts's SCB-specific scheduler. Read-only:
+// checkOnce() only ever reads the currently-active company's account
+// summary/transactions, never navigates the login flow or touches a
+// credential. Auto-stop applies here too -- at least as important as
+// it was for XC Bank, this hits a real production site.
+app.get("/api/lanes/scb-business-anywhere-1/monitor", async (_req, res) => {
+  try {
+    const [state, schedule] = await Promise.all([loadScbMonitorState(), getScbMonitorScheduleInfo()]);
+    res.json({ ok: true, ...state, running: schedule.running, intervalMs: schedule.every, jitterMs: schedule.jitterMs, nextCheckEstimate: schedule.next !== null ? new Date(schedule.next).toISOString() : null });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/monitor/start", express.json(), async (req, res) => {
+  const validation = validateAutoStopMinutes(req.body?.autoStopMinutes);
+  if (!validation.ok) {
+    res.status(400).json({ ok: false, error: validation.error });
+    return;
+  }
+  try {
+    await startScbMonitorSchedule(validation.minutes);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/monitor/stop", async (_req, res) => {
+  try {
+    await stopScbMonitorSchedule();
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/monitor/check-once", async (_req, res) => {
+  try {
+    const jobId = await enqueueScbMonitorCheckOnce();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/monitor/pause", async (_req, res) => {
+  try {
+    const jobId = await pauseScbMonitor();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/monitor/resume", async (_req, res) => {
+  try {
+    const jobId = await resumeScbMonitor();
+    res.json({ ok: true, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }

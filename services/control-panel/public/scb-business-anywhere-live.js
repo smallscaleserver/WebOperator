@@ -142,5 +142,140 @@ document.getElementById("analyze-btn").addEventListener("click", async () => {
   btn.textContent = "Analyze current page";
 });
 
+function formatIntervalText(data) {
+  if (!data.intervalMs) return "";
+  const seconds = Math.round(data.intervalMs / 1000);
+  const jitterSeconds = Math.round((data.jitterMs || 0) / 1000);
+  return jitterSeconds > 0 ? `~${seconds}s (±${jitterSeconds}s jitter)` : `~${seconds}s`;
+}
+
+function setMonitorStatusUi(data) {
+  const running = !!data.running;
+  const paused = !!data.paused;
+  const error = data.lastError || data.error || null;
+
+  const dot = document.getElementById("monitor-status-dot");
+  const label = document.getElementById("monitor-status-label");
+  dot.className = `dot ${error && !running ? "stopped" : running ? "running" : "stopped"}`;
+  label.textContent = paused ? "paused" : running ? "running" : "stopped";
+  document.getElementById("monitor-interval-text").textContent = running ? formatIntervalText(data) : "";
+
+  document.getElementById("monitor-start-btn").disabled = running && !paused;
+  document.getElementById("monitor-stop-btn").disabled = !running;
+  document.getElementById("monitor-autostop-input").disabled = running && !paused;
+
+  const autoStopEl = document.getElementById("monitor-autostop-text");
+  if (running && !paused && data.autoStopAt) {
+    autoStopEl.textContent = `Auto-stop: ~${new Date(data.autoStopAt).toLocaleTimeString()}`;
+    autoStopEl.style.display = "block";
+  } else {
+    autoStopEl.style.display = "none";
+  }
+
+  const autoStoppedEl = document.getElementById("monitor-autostopped-banner");
+  if (!running && data.autoStopped) {
+    autoStoppedEl.textContent = `⏱ Auto-stopped after ${data.autoStopMinutes ?? "?"} minute(s)`;
+    autoStoppedEl.style.display = "block";
+  } else {
+    autoStoppedEl.style.display = "none";
+  }
+
+  const errorEl = document.getElementById("monitor-last-error");
+  if (error) {
+    errorEl.textContent = `Last error: ${error}`;
+    errorEl.style.display = "block";
+  } else {
+    errorEl.style.display = "none";
+  }
+
+  document.getElementById("monitor-last-checked").textContent = `Last checked: ${data.lastCheckedAt || "never"}`;
+  document.getElementById("monitor-available-balance").textContent =
+    data.availableBalance !== null && data.availableBalance !== undefined ? `${Number(data.availableBalance).toFixed(2)} THB` : "—";
+  document.getElementById("monitor-ledger-balance").textContent =
+    data.ledgerBalance !== null && data.ledgerBalance !== undefined ? `${Number(data.ledgerBalance).toFixed(2)} THB` : "—";
+
+  const txEl = document.getElementById("monitor-transactions");
+  if (!data.latestTransactions || data.latestTransactions.length === 0) {
+    txEl.innerHTML = "<em>(no data yet)</em>";
+  } else {
+    txEl.innerHTML = data.latestTransactions
+      .map((t) => {
+        const sign = t.amount < 0 ? "-" : "+";
+        const detail = t.detail ? `<br><span class="hint">${escapeHtml(t.detail)}</span>` : "";
+        return `<div class="hint">${escapeHtml(t.date)} ${escapeHtml(t.time)} — ${escapeHtml(t.description)} — ${sign}${Math.abs(t.amount).toFixed(2)} THB${detail}</div>`;
+      })
+      .join("");
+  }
+}
+
+async function fetchMonitorStatus() {
+  try {
+    const res = await fetch("/api/lanes/scb-business-anywhere-1/monitor");
+    const data = await res.json();
+    setMonitorStatusUi(data.ok ? data : { error: data.error });
+  } catch (err) {
+    console.error("SCB monitor status poll failed", err);
+  }
+}
+
+async function callMonitorAction(url, body) {
+  try {
+    const res = await fetch(url, {
+      method: "POST",
+      headers: body ? { "Content-Type": "application/json" } : undefined,
+      body: body ? JSON.stringify(body) : undefined,
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      setMonitorStatusUi({ error: data.error || "Request failed" });
+    }
+  } catch (err) {
+    setMonitorStatusUi({ error: `Request failed: ${err}` });
+  }
+  await fetchMonitorStatus();
+}
+
+document.getElementById("monitor-start-btn").addEventListener("click", () => {
+  const raw = document.getElementById("monitor-autostop-input").value.trim();
+  const autoStopMinutes = raw ? Number(raw) : undefined;
+  callMonitorAction(
+    "/api/lanes/scb-business-anywhere-1/monitor/start",
+    autoStopMinutes !== undefined ? { autoStopMinutes } : {},
+  );
+});
+document.getElementById("monitor-stop-btn").addEventListener("click", () =>
+  callMonitorAction("/api/lanes/scb-business-anywhere-1/monitor/stop"),
+);
+document.getElementById("monitor-check-once-btn").addEventListener("click", () =>
+  callMonitorAction("/api/lanes/scb-business-anywhere-1/monitor/check-once"),
+);
+
+document.getElementById("switch-company-btn").addEventListener("click", async () => {
+  showError(null);
+  const input = document.getElementById("company-name-input");
+  const companyName = input.value.trim();
+  if (!companyName) return;
+  const btn = document.getElementById("switch-company-btn");
+  btn.disabled = true;
+  btn.textContent = "Switching…";
+  try {
+    const res = await fetch("/api/lanes/scb-business-anywhere-1/select-company", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ companyName }),
+    });
+    const data = await res.json();
+    if (!data.ok) {
+      showError(data.error || `Failed to switch to "${companyName}"`);
+    }
+  } catch (err) {
+    showError(`Request failed: ${err}`);
+  }
+  btn.disabled = false;
+  btn.textContent = "Switch";
+});
+
 fetchStatus();
+fetchMonitorStatus();
 setInterval(fetchStatus, 3000);
+setInterval(fetchMonitorStatus, 3000);

@@ -694,6 +694,70 @@ site — deliberately.** What exists so far is isolation-only:
   default) — fixed with a new `dotenv`-based `src/env.ts` imported
   first in both entry points, which also retroactively fixes the same
   latent gap for `MINIO_ROOT_USER`/`PASSWORD`.
+- **First real, working SCB balance/transaction monitor** — built only
+  after the user manually logged in themselves (via the Assisted
+  Manual Login flow above) and confirmed via live, iterative
+  exploration together (company switcher, Account Summary nav,
+  transaction-detail expansion) what the real authenticated dashboard
+  actually looks like. Every piece is read-only/navigation-only —
+  nothing here ever touches a credential, submits a
+  transfer/payment/challenge form, or drives the login itself:
+  - `services/worker/src/select-company.ts` — clicks a named entry
+    (e.g. `เซซุส`, `กฤษฎิ์ ดำประสงค์`) in the company switcher dropdown,
+    reopening it first if needed. **Non-ASCII (Thai) values are passed
+    base64-encoded** (`COMPANY_NAME_B64`, decoded inside the script) —
+    found empirically that passing Thai text as a plain command-line
+    argument through Node's `child_process.execFile` on Windows
+    corrupts it into literal `?` characters before the child process
+    (docker) ever sees it; base64 sidesteps this regardless of host
+    codepage. (The real browser UI's own `fetch()` call was never
+    affected by this — it only ever showed up when testing via a
+    shell/curl invocation directly.)
+  - `services/worker/src/check-transactions.ts` — clicks the
+    "Account Summary" nav link (in-app SPA navigation via a real
+    click, deliberately **not** `page.goto()`, which would trigger a
+    full reload and risk losing the currently-active company
+    selection since that's session/client state, not part of the
+    URL). Found empirically that this sometimes lands on a
+    single-account detail page directly and sometimes on an "All
+    Accounts" overview requiring an extra "View Details" click
+    (depends on prior navigation state) — handles both. Extracts
+    balance figures and Latest Transactions table rows via labeled
+    regex on `innerText` (no reliable CSS selectors available for a
+    real, unfamiliar production site) rather than deep DOM
+    inspection. For each row, expands its "▾" detail chevron
+    (idempotent — checks whether already-expanded first, since the
+    chevron toggles and a same-session repeat check could otherwise
+    re-collapse it) and parses the revealed
+    Channel/Cheque No./Teller No./Branch Code fields.
+  - `services/control-panel/src/scb-monitor.ts` — mirrors
+    `monitor.ts`'s exact shape (state at the lane-scoped
+    `data/lanes/scb-business-anywhere-1/monitor-state.json`,
+    dedup, `paused`/auto-stop). Dedups by a **composite key**
+    (date+time+trCode+description+amount), not a single ref/id field
+    — this real production page has no visible unique transaction id
+    the way XC Bank's mock does. First-ever check sends a baseline
+    balance snapshot to Telegram; every check after that sends full
+    transaction detail (direction, amount, description, expanded
+    reference fields, updated balance) only for genuinely new
+    transactions — both per explicit request.
+  - `queue.ts`/`server.ts` — a second, entirely separate BullMQ
+    scheduler (`monitor:scb-business-anywhere-1`, its own job types,
+    its own auto-stop) alongside the XC Bank one, driving
+    `worker-scb-business-anywhere-1` specifically — never the shared
+    `worker`. `POST /api/lanes/scb-business-anywhere-1/select-company`
+    and the `/monitor/*` routes mirror the XC Bank monitor's own API
+    shape. UI (`scb-business-anywhere-live.html`/`.js`) added a
+    "Switch company" control and a full "Balance monitor" section
+    (Start/Stop/Check once, Run-for-minutes auto-stop, live
+    balance/transaction display) alongside the existing Assisted
+    Manual Login checklist.
+  - **Verified live, with real money**: the actual transaction found
+    during this session (a real -300.00 THB bill payment,
+    "จ่ายบิล MAXBIT DIGITA") was captured correctly end-to-end —
+    balance figures, transaction row, and expanded detail all matched
+    exactly what was visually confirmed on the real page — and a real
+    Telegram message was sent and delivered.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).

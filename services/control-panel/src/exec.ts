@@ -216,6 +216,59 @@ export async function runScbAnalyzePage(): Promise<ActionResult> {
   return execAndParse(["compose", "run", "--rm", SCB_LANE_SERVICE, "npm", "run", "analyze-page"]);
 }
 
+export async function runScbSelectCompany(companyName: string): Promise<ActionResult> {
+  // Base64-encoded -- found empirically that a non-ASCII (Thai)
+  // argument passed through Node's child_process.execFile on Windows
+  // gets mangled into literal "?" characters before docker even sees
+  // it. See select-company.ts for the full explanation.
+  const companyNameB64 = Buffer.from(companyName, "utf-8").toString("base64");
+  return execAndParse([
+    "compose",
+    "run",
+    "--rm",
+    "-e",
+    `COMPANY_NAME_B64=${companyNameB64}`,
+    SCB_LANE_SERVICE,
+    "npm",
+    "run",
+    "select-company",
+  ]);
+}
+
+export async function runScbCheckBalance(): Promise<ActionResult> {
+  return execAndParse(["compose", "run", "--rm", SCB_LANE_SERVICE, "npm", "run", "check-transactions"]);
+}
+
+export interface ScbTransaction {
+  date: string;
+  time: string;
+  trCode: string;
+  description: string;
+  amount: number;
+  detail: string;
+}
+
+export interface ScbBalanceSummary {
+  availableBalance: number | null;
+  ledgerBalance: number | null;
+  transactions: ScbTransaction[];
+  checkedAt: string;
+  url: string;
+}
+
+export function parseScbBalanceSummary(stdout: string): ScbBalanceSummary | undefined {
+  for (const line of stdout.split("\n")) {
+    const match = line.match(/^SCB_BALANCE_SUMMARY (.+)$/);
+    if (!match) continue;
+    try {
+      return JSON.parse(match[1]) as ScbBalanceSummary;
+    } catch {
+      // fall through -- treat as unparseable
+    }
+  }
+  return undefined;
+}
+
 export interface LanePageAnalysis {
   url: string;
   title: string;

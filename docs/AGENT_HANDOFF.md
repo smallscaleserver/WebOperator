@@ -2673,3 +2673,76 @@ Appending correctly from here on. -->
   sees a request shaped like "have the bot handle my real credentials"
   in any form, the answer is already decided — see the decision log
   entries above — no need to re-litigate from scratch.
+
+### 2026-08-08 (same session, continued once more again) — Claude
+
+- Status: Done
+- Context: User manually logged into their real SCB Business Anywhere
+  account via the Assisted Manual Login flow (prior entry), then
+  drove a live, iterative, message-by-message exploration together —
+  opening the company switcher, confirming the "เซซุส"/"กฤษฎิ์
+  ดำประสงค์" entries, switching companies, navigating to Account
+  Summary, finding a real -300.00 THB transaction ("จ่ายบิล MAXBIT
+  DIGITA"), and expanding its detail view — before any of this was
+  turned into reusable code. Once the real page structure was
+  understood this way, built a full read-only balance/transaction
+  monitor for this lane, mirroring the XC Bank Monitor's architecture
+  exactly, plus real Telegram notifications (first-check baseline,
+  then full detail on genuinely new transactions). Everything stayed
+  strictly within the already-established boundary: no credential
+  handling, no login automation, no form submission of any kind —
+  every new script is either a navigation click or a read.
+- Files: `services/worker/src/select-company.ts` (clicks a named
+  company-switcher entry; Thai text passed base64-encoded via
+  `COMPANY_NAME_B64` — see below), `services/worker/src/check-transactions.ts`
+  (clicks into Account Summary, handles the "sometimes needs an extra
+  View Details click" case found empirically, extracts balance figures
+  + transaction rows via labeled regex on `innerText`, expands each
+  row's detail chevron idempotently); `services/control-panel/src/scb-monitor.ts`
+  (new, mirrors `monitor.ts`'s shape — state at
+  `data/lanes/scb-business-anywhere-1/monitor-state.json`, composite-key
+  transaction dedup, paused/auto-stop); `services/control-panel/src/queue.ts`
+  (second, fully independent BullMQ scheduler
+  `monitor:scb-business-anywhere-1`); `services/control-panel/src/exec.ts`
+  (`runScbSelectCompany`/`runScbCheckBalance`/`parseScbBalanceSummary`,
+  base64 encode/decode for non-ASCII args); `services/control-panel/src/server.ts`
+  (`POST .../select-company`, `GET/POST .../monitor*` routes, mirroring
+  the XC Bank monitor's own API shape); `scb-business-anywhere-live.html`+`.js`
+  (new "Switch company" control and "Balance monitor" section —
+  Start/Stop/Check once/auto-stop input/live balance+transaction
+  display, alongside the existing Assisted Manual Login checklist).
+- Real bug found and fixed mid-session: a Thai company name passed as
+  a plain command-line argument through Node's `child_process.execFile`
+  on Windows arrived at the child process corrupted into literal `?`
+  characters — root-caused by testing the same value two ways (direct
+  Bash-tool `docker compose run` worked, `execFile` didn't), isolating
+  it to Windows argv marshalling specifically, confirmed **not** to
+  affect the real browser UI's own `fetch()` calls (proper UTF-8
+  always). Fixed by base64-encoding the value before it ever becomes a
+  CLI argument.
+- Verified live, with real money, not synthetic data: the actual real
+  transaction found during this session was captured correctly
+  end-to-end (balance figures, transaction row, expanded
+  Channel/Cheque No./Teller No./Branch Code detail all matched what
+  was visually confirmed on the real page via screenshots at each
+  step); a manual check-once correctly saved it as "seen" without
+  re-notifying on a repeat check (dedup proven); a real Telegram
+  message with full transaction detail was sent and delivered (no
+  error logged, same verified-working `sendTelegramMessage()` path as
+  the earlier XC Bank notification round); `tsc --noEmit` clean in
+  both projects; all debug/exploration scripts and test screenshots
+  deleted before committing, `git status` confirmed clean apart from
+  the user's own untracked files.
+- Next: the scheduled recurring loop (Start monitor / auto-stop) has
+  the same code path as XC Bank's own proven mechanism but has **not
+  yet been run as an actual multi-tick scheduled loop against the real
+  site** this round — only manual "check once" was exercised for real
+  money. If picking this up: consider a short auto-stop-bounded test
+  (e.g. 5-10 minutes) before trusting it fully unattended, same
+  precaution as the original XC Bank auto-stop work. The
+  transaction-detail regex has one known cosmetic imperfection (a
+  blank "Terminal No." field can absorb the next label's text) — noted
+  in code, not yet fixed, low priority since the underlying data
+  (amount/description/channel/branch) is unaffected. Login/credential
+  automation remains categorically out of scope, unchanged from every
+  prior entry.

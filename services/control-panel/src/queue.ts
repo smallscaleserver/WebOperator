@@ -2,6 +2,13 @@ import { Queue, Worker } from "bullmq";
 import { runAction, runWorkflow, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
 import { checkOnce, loadState, resetState, setPaused, setAutoStopConfig, MONITOR_JOB_NAME } from "./monitor.js";
+import {
+  checkOnce as scbCheckOnce,
+  loadState as scbLoadState,
+  setPaused as scbSetPaused,
+  setAutoStopConfig as scbSetAutoStopConfig,
+  SCB_MONITOR_JOB_NAME,
+} from "./scb-monitor.js";
 import { sendTelegramMessage } from "./telegram.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -36,6 +43,21 @@ const MONITOR_SET_AUTOSTOP_JOB_NAME = "xc-bank-monitor-set-autostop";
 const MIN_AUTO_STOP_MINUTES = 1;
 const MAX_AUTO_STOP_MINUTES = 240;
 const MONITOR_INTERVAL_MS = Number(process.env.XC_BANK_MONITOR_INTERVAL_MS ?? 20_000);
+
+// SCB Business Anywhere lane monitor -- same queue-serialization and
+// auto-stop reasoning as the XC Bank monitor above, kept as entirely
+// separate job types/scheduler id (not shared) since it drives a
+// genuinely different browser (worker-scb-business-anywhere-1, see
+// exec.ts's runScbCheckBalance). Real-money, real-bank site -- the
+// same "no unattended loop without a bound" caution applies at least
+// as strongly as it did for XC Bank. Longer default interval than XC
+// Bank's dev-speed default: this hits a real production site, not a
+// local mock.
+const SCB_MONITOR_SCHEDULER_ID = "monitor:scb-business-anywhere-1";
+const SCB_MONITOR_SET_PAUSED_JOB_NAME = "scb-business-anywhere-1-monitor-set-paused";
+const SCB_MONITOR_SET_AUTOSTOP_JOB_NAME = "scb-business-anywhere-1-monitor-set-autostop";
+const SCB_MONITOR_INTERVAL_MS = Number(process.env.SCB_MONITOR_INTERVAL_MS ?? 300_000);
+const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 15_000);
 // Max random extra delay before a *scheduled* tick actually runs -- avoids
 // a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
 // jobs (and the immediate first tick after Start) are untagged and skip
@@ -129,6 +151,53 @@ export function startWorker(): Worker {
             ? ""
             : `XC Bank monitor check ok — balance $${state.latestBalance?.toFixed(2)}, ` +
               `${state.notifications.length} notification(s) tracked total`,
+          stderr: state.lastError ?? "",
+          steps: [],
+        };
+      }
+      if (job.name === SCB_MONITOR_SET_PAUSED_JOB_NAME) {
+        const paused = job.data?.paused === true;
+        await scbSetPaused(paused);
+        return { ok: true, stdout: paused ? "SCB monitor paused" : "SCB monitor resumed", stderr: "", steps: [] };
+      }
+      if (job.name === SCB_MONITOR_SET_AUTOSTOP_JOB_NAME) {
+        const data = (job.data ?? {}) as { autoStopAt?: string | null; autoStopMinutes?: number | null };
+        await scbSetAutoStopConfig({
+          autoStopAt: data.autoStopAt ?? null,
+          autoStopped: false,
+          autoStopMinutes: data.autoStopMinutes ?? null,
+        });
+        return {
+          ok: true,
+          stdout: data.autoStopAt ? `SCB monitor auto-stop set for ${data.autoStopAt}` : "SCB monitor auto-stop cleared (unlimited run)",
+          stderr: "",
+          steps: [],
+        };
+      }
+      if (job.name === SCB_MONITOR_JOB_NAME) {
+        const isScheduledTick = job.data?.scheduled === true;
+        if (isScheduledTick) {
+          await sleep(Math.random() * SCB_MONITOR_JITTER_MS);
+          const { autoStopAt, autoStopMinutes, paused } = await scbLoadState();
+          if (autoStopAt && Date.now() >= Date.parse(autoStopAt)) {
+            await stopScbMonitorSchedule();
+            await scbSetAutoStopConfig({ autoStopAt: null, autoStopped: true, autoStopMinutes });
+            await sendTelegramMessage(`⏱ SCB Business Anywhere monitor auto-stopped after ${autoStopMinutes ?? "?"} minute(s)`);
+            return {
+              ok: true,
+              stdout: `SCB monitor auto-stopped after ${autoStopMinutes ?? "?"} minute(s)`,
+              stderr: "",
+              steps: [],
+            };
+          }
+          if (paused) {
+            return { ok: true, stdout: "SCB monitor paused — scheduled check skipped", stderr: "", steps: [] };
+          }
+        }
+        const state = await scbCheckOnce();
+        return {
+          ok: state.lastError === null,
+          stdout: state.lastError ? "" : `SCB balance check ok — last checked ${state.lastCheckedAt}`,
           stderr: state.lastError ?? "",
           steps: [],
         };
@@ -262,6 +331,58 @@ export async function startMonitorSchedule(autoStopMinutes?: number): Promise<vo
 // a real browser session is a bigger feature than this dev tool needs.
 export async function stopMonitorSchedule(): Promise<void> {
   await queue.removeJobScheduler(MONITOR_SCHEDULER_ID);
+}
+
+// --- SCB Business Anywhere lane monitor -- mirrors everything above ---
+
+async function enqueueScbSetPaused(paused: boolean): Promise<string> {
+  const job = await queue.add(SCB_MONITOR_SET_PAUSED_JOB_NAME, { paused }, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function pauseScbMonitor(): Promise<string> {
+  return enqueueScbSetPaused(true);
+}
+export async function resumeScbMonitor(): Promise<string> {
+  return enqueueScbSetPaused(false);
+}
+
+async function enqueueScbSetAutoStop(autoStopAt: string | null, autoStopMinutes: number | null): Promise<string> {
+  const job = await queue.add(SCB_MONITOR_SET_AUTOSTOP_JOB_NAME, { autoStopAt, autoStopMinutes }, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function enqueueScbMonitorCheckOnce(): Promise<string> {
+  const job = await queue.add(SCB_MONITOR_JOB_NAME, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function getScbMonitorScheduleInfo(): Promise<MonitorScheduleInfo> {
+  const schedulers = await queue.getJobSchedulers();
+  const scheduler = schedulers.find((s) => s.key === SCB_MONITOR_SCHEDULER_ID);
+  return {
+    running: scheduler !== undefined,
+    next: scheduler?.next ?? null,
+    every: scheduler?.every ?? SCB_MONITOR_INTERVAL_MS,
+    jitterMs: SCB_MONITOR_JITTER_MS,
+  };
+}
+
+export async function startScbMonitorSchedule(autoStopMinutes?: number): Promise<void> {
+  await queue.upsertJobScheduler(
+    SCB_MONITOR_SCHEDULER_ID,
+    { every: SCB_MONITOR_INTERVAL_MS },
+    { name: SCB_MONITOR_JOB_NAME, data: { scheduled: true } },
+  );
+  await enqueueScbSetPaused(false);
+  const autoStopAt =
+    autoStopMinutes !== undefined ? new Date(Date.now() + autoStopMinutes * 60_000).toISOString() : null;
+  await enqueueScbSetAutoStop(autoStopAt, autoStopMinutes ?? null);
+  await enqueueScbMonitorCheckOnce();
+}
+
+export async function stopScbMonitorSchedule(): Promise<void> {
+  await queue.removeJobScheduler(SCB_MONITOR_SCHEDULER_ID);
 }
 
 export interface JobSummary {

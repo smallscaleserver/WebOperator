@@ -10,6 +10,9 @@
     "adapter": "tsx src/run-adapter.ts",
     "workflow": "tsx src/run-workflow.ts",
     "analyze-page": "tsx src/analyze-page.ts",
+    "select-company": "tsx src/select-company.ts",
+    "click-nav-link": "tsx src/click-nav-link.ts",
+    "check-transactions": "tsx src/check-transactions.ts",
     "firefox-demo": "tsx src/run-firefox-demo.ts",
     "gmail:authorize": "tsx src/gmail/authorize.ts",
     "gmail:list": "tsx src/gmail/list-messages.ts"

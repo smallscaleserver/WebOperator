@@ -104,6 +104,15 @@
       <p class="error" id="lane-error" style="display:none;"></p>
     </section>
 
+    <section>
+      <h2>Switch company</h2>
+      <p class="hint">Clicks the company switcher dropdown by exact name (e.g. เซซุส, กฤษฎิ์ ดำประสงค์, or Krit Dumprasong on the English menu) — a navigation action, never touches a credential.</p>
+      <div class="row">
+        <input type="text" id="company-name-input" placeholder="e.g. เซซุส" style="flex:1; min-width:200px; padding:0.4rem;">
+        <button id="switch-company-btn">Switch</button>
+      </div>
+    </section>
+
     <section id="analysis-section" style="display:none;">
       <h2>Page analysis (read-only)</h2>
       <dl class="analysis-box">
@@ -114,6 +123,37 @@
         <dt>Screenshot</dt>
         <dd><img id="analysis-screenshot" alt="page screenshot" /></dd>
       </dl>
+    </section>
+
+    <section>
+      <h2>Balance monitor (read-only, whichever company is active)</h2>
+      <p class="hint">
+        Checks the Account Summary/Latest Transactions of whichever
+        company is currently selected in the switcher — never
+        navigates the login flow, never touches a credential. New
+        transactions and the first-ever check send a Telegram
+        notification (see <code>TELEGRAM_BOT_TOKEN_XC</code>/
+        <code>TELEGRAM_CHAT_ID_XC</code> in <code>.env</code>).
+      </p>
+      <div class="row">
+        <span class="dot" id="monitor-status-dot"></span>
+        <span id="monitor-status-label">checking…</span>
+        <span class="hint" id="monitor-interval-text"></span>
+        <label class="hint">Run for <input type="number" id="monitor-autostop-input" min="1" max="240" placeholder="unlimited" style="width:5rem;"> min</label>
+        <button id="monitor-start-btn">Start monitor</button>
+        <button id="monitor-stop-btn">Stop monitor</button>
+        <button id="monitor-check-once-btn">Check once</button>
+      </div>
+      <p class="hint">Leave "Run for" empty for an unlimited run — set a limit to avoid an unattended loop against a real site running for hours.</p>
+      <p class="hint" id="monitor-last-checked">Last checked: —</p>
+      <p class="hint" id="monitor-autostop-text" style="display:none;"></p>
+      <p class="error" id="monitor-last-error" style="display:none;"></p>
+      <p class="warning" id="monitor-autostopped-banner" style="display:none;"></p>
+      <dl class="analysis-box">
+        <dt>Available Balance</dt><dd id="monitor-available-balance">—</dd>
+        <dt>Ledger Balance</dt><dd id="monitor-ledger-balance">—</dd>
+      </dl>
+      <div id="monitor-transactions"><em>(no data yet)</em></div>
     </section>
   </div>
 </div>
