@@ -263,6 +263,7 @@ export interface ScbBalanceSummary {
   transactions: ScbTransaction[];
   checkedAt: string;
   url: string;
+  screenshot?: string;
 }
 
 export function parseScbBalanceSummary(stdout: string): ScbBalanceSummary | undefined {

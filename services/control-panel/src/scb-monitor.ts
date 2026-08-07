@@ -20,6 +20,13 @@ export interface ScbMonitorState {
   availableBalance: number | null;
   ledgerBalance: number | null;
   latestTransactions: ScbTransaction[];
+  // Filename only (served via the existing lane-scoped static route,
+  // /lane-screenshots/scb-business-anywhere-1/*) -- captured on every
+  // check, success or SESSION_EXPIRED, per explicit request to have a
+  // visual trail of each ~5-min tick (suspected use: catching an
+  // idle-timeout popup in the act, not yet confirmed to be the actual
+  // cause of the repeated real session expiries observed this session).
+  latestScreenshot: string | null;
   // Composite key per transaction (date+time+trCode+description+amount)
   // -- this real production page has no single visible unique id per
   // row the way XC Bank's mock does, so dedup keys off the combination
@@ -51,6 +58,7 @@ function emptyState(): ScbMonitorState {
     availableBalance: null,
     ledgerBalance: null,
     latestTransactions: [],
+    latestScreenshot: null,
     seenTransactionKeys: [],
     sessionExpiredNotified: false,
     targetCompany: null,
@@ -120,6 +128,15 @@ export async function checkOnce(): Promise<ScbMonitorState> {
   if (!result.ok) {
     state.lastError = result.error ?? result.stderr ?? "SCB balance check failed";
     state.lastCheckedAt = now;
+    // check-transactions.ts screenshots on its way to a SESSION_EXPIRED
+    // throw and embeds the filename in the error message itself
+    // ("...(screenshot: <filename>)") -- no other channel exists to
+    // carry a screenshot out of a thrown error, so pull it back out
+    // here with a small regex.
+    const screenshotMatch = state.lastError.match(/\(screenshot: ([^)]+)\)/);
+    if (screenshotMatch) {
+      state.latestScreenshot = screenshotMatch[1];
+    }
     // "SESSION_EXPIRED:" is thrown specifically by check-transactions.ts
     // when it detects it's back on the login page -- alert once per
     // episode (not every retry) rather than the generic failure path,
@@ -163,6 +180,9 @@ export async function checkOnce(): Promise<ScbMonitorState> {
   state.availableBalance = summary.availableBalance;
   state.ledgerBalance = summary.ledgerBalance;
   state.latestTransactions = summary.transactions;
+  if (summary.screenshot) {
+    state.latestScreenshot = summary.screenshot;
+  }
   state.lastCheckedAt = now;
   state.lastError = null;
   await saveState(state);

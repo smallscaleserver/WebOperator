@@ -208,6 +208,17 @@ function setMonitorStatusUi(data) {
     ? `Sticky target: ${data.targetCompany} (re-asserted on every check)`
     : "Sticky target: (none set — monitor reports whatever's currently active)";
 
+  const screenshotEl = document.getElementById("monitor-screenshot");
+  if (data.latestScreenshot) {
+    const src = `/lane-screenshots/scb-business-anywhere-1/${encodeURIComponent(data.latestScreenshot)}`;
+    if (screenshotEl.src !== new URL(src, window.location.href).href) {
+      screenshotEl.src = src;
+    }
+    screenshotEl.style.display = "block";
+  } else {
+    screenshotEl.style.display = "none";
+  }
+
   const txEl = document.getElementById("monitor-transactions");
   if (!data.latestTransactions || data.latestTransactions.length === 0) {
     txEl.innerHTML = "<em>(no data yet)</em>";
