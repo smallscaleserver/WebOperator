@@ -35,7 +35,7 @@ const HELP_TEXT = [
   "🤖 WebOperator SCB monitor — available commands:",
   "",
   "/status — current balance + latest transactions on the page right now",
-  "/screenshot — a fresh screenshot of the SCB lane's current browser state",
+  "/screenshot — a fresh full-page screenshot of the SCB lane's current browser state",
   "/help — this list",
   "",
   "All commands are strictly read-only — the bot never types, clicks, or navigates a real login/transfer form, and never will, regardless of what's asked.",

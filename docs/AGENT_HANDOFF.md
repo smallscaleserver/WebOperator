@@ -2964,3 +2964,35 @@ Appending correctly from here on. -->
   actions without a fresh, explicit decision — see
   [[webop-credential-boundary]] in Claude's own memory system for why
   this line matters specifically for this project.
+
+### 2026-08-08 (same session, "why didn't it notify" round) — Claude
+
+- Status: Done — root cause found and fixed, verified live
+- Context: User reported a real transaction existed but no automatic
+  Telegram alert fired. Investigated via monitor state, screenshot
+  timestamps, and `.worker.log` (found a real ~47min SESSION_EXPIRED
+  outage earlier that day, correctly single-alerted and auto-recovered
+  — not the bug). User then noticed the SCB balance widget's own "Last
+  Updated: <time>  Refresh" text didn't match reality and asked to try
+  clicking it. That was the actual bug: the widget never auto-refreshes
+  itself, and `check-transactions.ts` never clicked "Refresh" — so
+  every check kept re-reading whatever stale snapshot a human had last
+  manually refreshed, silently missing anything that posted after.
+- Files: `services/worker/src/check-transactions.ts` (clicks "Refresh"
+  before extracting, if visible), `services/control-panel/src/telegram-commands.ts`
+  (`/help` text now says "full-page screenshot", was missing that
+  detail — separate small ask in the same round), `docs/PROJECT_PLAN.md`
+  decision log.
+- Verified: live `check-once` after the fix surfaced a real, previously
+  invisible -6,000 THB transaction (balance dropped 8,209.30 →
+  2,209.30 correctly), added to `seenTransactionKeys`, no Telegram
+  send errors in `.worker.log` — the "new transaction" alert fired for
+  real this round. Restarted the control-panel `worker.ts` process
+  (was live-holding the old `/help` string in memory) to pick up the
+  text fix; `services/worker` changes apply immediately (volume-mounted
+  source, no restart needed).
+- Next: nothing pending from this round. If a transaction is ever
+  reported missing again, check `Refresh` is still the right selector
+  first (SCB could rename/redesign the widget) before assuming a new
+  bug — this exact "silently stale, no error" shape is worth checking
+  for elsewhere on this page too if it recurs.

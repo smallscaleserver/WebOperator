@@ -96,7 +96,45 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // finished its own fetch) -- wait for its own heading specifically
   // rather than a longer blind timeout.
   await page.getByText("Latest Transactions", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => {});
-  await page.waitForTimeout(1000);
+
+  // The balance/transactions widget shows a cached snapshot as of
+  // whatever "Last Updated: <date>, <time>" it displays -- it does NOT
+  // poll or auto-refresh on its own (confirmed directly: the user
+  // found "Last Updated" stuck at an old timestamp not matching a real
+  // new transaction they could see had posted). Click the widget's own
+  // "Refresh" link every check so the data actually reflects "now",
+  // not whenever a human last happened to click it (or never).
+  const refreshLink = page.getByText("Refresh", { exact: true }).first();
+  const refreshLinkVisible = await refreshLink.isVisible({ timeout: 3000 }).catch(() => false);
+  if (refreshLinkVisible) {
+    await refreshLink.click();
+    await page.waitForTimeout(2500);
+  } else {
+    // Fallback if SCB ever renames/relocates that link and the text
+    // match stops finding it -- a full page.reload() forces the SPA to
+    // refetch everything from scratch (unlike page.goto(), still the
+    // same page/session, just re-mounted), so this can never silently
+    // fall back to stale data just because one specific selector broke.
+    // Re-navigate afterwards since a reload drops back to whatever the
+    // SPA's default landing view is; selectCompany() re-asserting the
+    // target company on every check (above) already covers the
+    // "reload reset my company selection" risk this would otherwise
+    // reintroduce.
+    await page.reload().catch(() => {});
+    await page.waitForTimeout(1500);
+    if (TARGET_COMPANY) {
+      await selectCompany(page, TARGET_COMPANY);
+    }
+    await page.getByText("Account Summary", { exact: true }).first().click().catch(() => {});
+    await page.waitForTimeout(1500);
+    const viewDetailsAgain = page.getByText("View Details", { exact: true }).first();
+    if (await viewDetailsAgain.isVisible({ timeout: 6000 }).catch(() => false)) {
+      await viewDetailsAgain.click();
+      await page.waitForTimeout(1500);
+    }
+    await page.getByText("Latest Transactions", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+  }
+
   const text = await page.evaluate(() => (document.body ? document.body.innerText : ""));
 
   const availableMatch = text.match(/Available Balance\s*\n+\s*([\d,]+\.\d{2})\s*THB/);
