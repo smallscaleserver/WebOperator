@@ -28,7 +28,7 @@ async function main(): Promise<void> {
       (limit) => (document.body ? document.body.innerText.slice(0, limit) : ""),
       TEXT_SNIPPET_LIMIT,
     );
-    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}` });
+    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
     return { url, title, textSnippet, screenshot: filename };
   });
 

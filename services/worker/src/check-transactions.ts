@@ -167,7 +167,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // unexpected) shows up in the trail even on a check that otherwise
   // succeeded normally.
   const screenshotFilename = `check-${Date.now()}.png`;
-  await page.screenshot({ path: `${OUTPUT_DIR}/${screenshotFilename}` }).catch(() => {});
+  await page.screenshot({ path: `${OUTPUT_DIR}/${screenshotFilename}`, fullPage: true }).catch(() => {});
 
   return {
     availableBalance: availableMatch ? Number(availableMatch[1].replace(/,/g, "")) : null,
@@ -195,7 +195,7 @@ async function main(): Promise<void> {
       // them, not only a suspected-logout scenario. Best-effort: a
       // failed screenshot still lets the real error through.
       const filename = `check-failed-${Date.now()}.png`;
-      await page.screenshot({ path: `${OUTPUT_DIR}/${filename}` }).catch(() => {});
+      await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true }).catch(() => {});
       const message = err instanceof Error ? err.message : String(err);
       throw new Error(`${message} (screenshot: ${filename})`);
     }

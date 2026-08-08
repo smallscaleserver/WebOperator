@@ -37,7 +37,7 @@ async function main(): Promise<void> {
       document.body ? document.body.innerText.slice(0, 2000) : "",
     );
     const filename = `select-company-${Date.now()}.png`;
-    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}` });
+    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
     return { url, textSnippet, screenshot: filename };
   });
 
