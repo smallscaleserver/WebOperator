@@ -1,5 +1,6 @@
+import path from "node:path";
 import { Queue, Worker } from "bullmq";
-import { runAction, runWorkflow, type ActionResult } from "./exec.js";
+import { runAction, runWorkflow, runScbAnalyzePage, parseLanePageAnalysis, REPO_ROOT, type ActionResult } from "./exec.js";
 import type { ActionName } from "./actions.js";
 import { checkOnce, loadState, resetState, setPaused, setAutoStopConfig, MONITOR_JOB_NAME } from "./monitor.js";
 import {
@@ -9,7 +10,7 @@ import {
   setAutoStopConfig as scbSetAutoStopConfig,
   SCB_MONITOR_JOB_NAME,
 } from "./scb-monitor.js";
-import { sendTelegramMessage } from "./telegram.js";
+import { sendTelegramMessage, sendTelegramPhoto } from "./telegram.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
 const QUEUE_NAME = "worker-actions";
@@ -58,6 +59,15 @@ const SCB_MONITOR_SET_PAUSED_JOB_NAME = "scb-business-anywhere-1-monitor-set-pau
 const SCB_MONITOR_SET_AUTOSTOP_JOB_NAME = "scb-business-anywhere-1-monitor-set-autostop";
 const SCB_MONITOR_INTERVAL_MS = Number(process.env.SCB_MONITOR_INTERVAL_MS ?? 300_000);
 const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 15_000);
+// Telegram-triggered commands (see telegram-commands.ts) -- routed
+// through this same queue (not run directly from the polling loop) so
+// they can never run concurrently with a scheduled check on the
+// shared SCB lane browser. Both strictly read-only: screenshot reuses
+// analyze-page.ts (no navigation, no company switching, no clicking),
+// status only reads already-saved state. Never expand this pair to
+// anything that types/clicks/navigates from arbitrary Telegram text.
+const SCB_TELEGRAM_SCREENSHOT_JOB_NAME = "scb-business-anywhere-1-telegram-screenshot";
+const SCB_TELEGRAM_STATUS_JOB_NAME = "scb-business-anywhere-1-telegram-status";
 // Max random extra delay before a *scheduled* tick actually runs -- avoids
 // a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
 // jobs (and the immediate first tick after Start) are untagged and skip
@@ -201,6 +211,43 @@ export function startWorker(): Worker {
           stderr: state.lastError ?? "",
           steps: [],
         };
+      }
+      if (job.name === SCB_TELEGRAM_SCREENSHOT_JOB_NAME) {
+        const result = await runScbAnalyzePage();
+        const analysis = parseLanePageAnalysis(result.stdout);
+        if (analysis) {
+          const screenshotPath = path.join(
+            REPO_ROOT,
+            "data",
+            "lanes",
+            "scb-business-anywhere-1",
+            "output",
+            analysis.screenshot,
+          );
+          await sendTelegramPhoto(screenshotPath, `📸 ${analysis.title}\n${analysis.url}`);
+        }
+        return {
+          ok: result.ok && !!analysis,
+          stdout: analysis ? "Screenshot sent to Telegram" : "Could not capture/send screenshot",
+          stderr: result.ok ? "" : (result.error ?? result.stderr),
+          steps: [],
+        };
+      }
+      if (job.name === SCB_TELEGRAM_STATUS_JOB_NAME) {
+        const state = await scbLoadState();
+        const lines = [
+          `🏦 SCB Business Anywhere status`,
+          `Last checked: ${state.lastCheckedAt ?? "never"}`,
+          state.lastError ? `Last error: ${state.lastError.slice(0, 300)}` : null,
+          `Available: ${state.availableBalance ?? "?"} THB | Ledger: ${state.ledgerBalance ?? "?"} THB`,
+          state.latestTransactions.length > 0
+            ? `Latest transactions:\n${state.latestTransactions
+                .map((t) => `  ${t.date} ${t.time} — ${t.description} — ${t.amount} THB`)
+                .join("\n")}`
+            : "No transactions on the current page.",
+        ].filter((l): l is string => l !== null);
+        await sendTelegramMessage(lines.join("\n"));
+        return { ok: true, stdout: "Status sent to Telegram", stderr: "", steps: [] };
       }
       if (job.name.startsWith(WORKFLOW_JOB_PREFIX)) {
         const workflowName = job.data?.workflowName as string;
@@ -354,6 +401,20 @@ async function enqueueScbSetAutoStop(autoStopAt: string | null, autoStopMinutes:
 
 export async function enqueueScbMonitorCheckOnce(): Promise<string> {
   const job = await queue.add(SCB_MONITOR_JOB_NAME, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+// Called from telegram-commands.ts's incoming-message polling loop --
+// routed through this same queue (not run directly) so a Telegram
+// command can never execute concurrently with a scheduled check on
+// the shared SCB lane browser.
+export async function enqueueScbTelegramScreenshot(): Promise<string> {
+  const job = await queue.add(SCB_TELEGRAM_SCREENSHOT_JOB_NAME, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function enqueueScbTelegramStatus(): Promise<string> {
+  const job = await queue.add(SCB_TELEGRAM_STATUS_JOB_NAME, {}, JOB_OPTS);
   return job.id ?? "";
 }
 
