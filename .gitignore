@@ -4,3 +4,9 @@ dist/
 .userpass
 data/
 *.log
+
+# Scratch/personal notes, not project content.
+note
+note2
+note3
+New Text Document.txt
