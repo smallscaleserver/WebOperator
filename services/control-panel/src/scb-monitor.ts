@@ -49,6 +49,17 @@ export interface ScbMonitorState {
   autoStopAt: string | null;
   autoStopped: boolean;
   autoStopMinutes: number | null;
+  // The page's own "Last Updated: <date>, <time>" text, captured after
+  // clicking Refresh -- a success signal, not just for display. Ticks
+  // land ~70-105s apart now, so this should advance on nearly every
+  // check if Refresh actually pulled fresh data. staleRefreshStreak
+  // counts consecutive checks where it *didn't* change; a single
+  // no-change is likely just two checks landing in the same displayed
+  // minute (harmless), but several in a row means Refresh is silently
+  // not working even though the check itself reports no error.
+  pageLastUpdatedText: string | null;
+  staleRefreshStreak: number;
+  staleRefreshNotified: boolean;
 }
 
 function emptyState(): ScbMonitorState {
@@ -66,6 +77,9 @@ function emptyState(): ScbMonitorState {
     autoStopAt: null,
     autoStopped: false,
     autoStopMinutes: null,
+    pageLastUpdatedText: null,
+    staleRefreshStreak: 0,
+    staleRefreshNotified: false,
   };
 }
 
@@ -185,6 +199,31 @@ export async function checkOnce(): Promise<ScbMonitorState> {
   }
   state.lastCheckedAt = now;
   state.lastError = null;
+
+  // Refresh-worked signal: with checks now ~70-105s apart, the page's
+  // own "Last Updated" text should advance on nearly every tick if the
+  // Refresh click actually pulled fresh data. One unchanged reading is
+  // most likely just two checks landing in the same displayed minute
+  // (harmless, not flagged) -- several *consecutive* unchanged
+  // readings means Refresh is silently not working even though the
+  // check itself reports no error, which is exactly the failure mode
+  // that caused the original "transaction happened but nothing was
+  // ever detected" report this was built to catch going forward.
+  const newPageLastUpdated = summary.pageLastUpdatedText ?? null;
+  if (newPageLastUpdated && newPageLastUpdated === state.pageLastUpdatedText) {
+    state.staleRefreshStreak += 1;
+  } else {
+    state.staleRefreshStreak = 0;
+    state.staleRefreshNotified = false;
+  }
+  state.pageLastUpdatedText = newPageLastUpdated;
+  if (state.staleRefreshStreak >= 3 && !state.staleRefreshNotified) {
+    state.staleRefreshNotified = true;
+    await sendTelegramMessage(
+      `⚠️ SCB Business Anywhere — "Last Updated" บนหน้าเว็บไม่ขยับมา ${state.staleRefreshStreak} รอบติดกัน แม้เช็คจะไม่ error ก็ตาม อาจแปลว่าปุ่ม Refresh ไม่ทำงานจริง กรุณาดู screenshot/noVNC เพื่อตรวจสอบ`,
+    );
+  }
+
   await saveState(state);
 
   // Best-effort Telegram notification. First-ever check sends a

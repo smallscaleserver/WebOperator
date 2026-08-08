@@ -264,6 +264,7 @@ export interface ScbBalanceSummary {
   checkedAt: string;
   url: string;
   screenshot?: string;
+  pageLastUpdatedText?: string | null;
 }
 
 export function parseScbBalanceSummary(stdout: string): ScbBalanceSummary | undefined {

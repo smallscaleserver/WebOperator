@@ -189,6 +189,16 @@ function setMonitorStatusUi(data) {
   }
 
   document.getElementById("monitor-last-checked").textContent = `Last checked: ${data.lastCheckedAt || "never"}`;
+  document.getElementById("monitor-page-last-updated").textContent =
+    `Page's own "Last Updated": ${data.pageLastUpdatedText || "—"}${data.staleRefreshStreak > 0 ? ` (unchanged for ${data.staleRefreshStreak} check(s))` : ""}`;
+
+  const staleEl = document.getElementById("monitor-stale-refresh-warning");
+  if (data.staleRefreshStreak >= 2) {
+    staleEl.textContent = `⚠️ Refresh may not be working — "Last Updated" hasn't moved for ${data.staleRefreshStreak} consecutive checks.`;
+    staleEl.style.display = "block";
+  } else {
+    staleEl.style.display = "none";
+  }
   document.getElementById("monitor-available-balance").textContent =
     data.availableBalance !== null && data.availableBalance !== undefined ? `${Number(data.availableBalance).toFixed(2)} THB` : "—";
   document.getElementById("monitor-ledger-balance").textContent =

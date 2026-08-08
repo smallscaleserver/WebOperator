@@ -51,14 +51,26 @@ const MONITOR_INTERVAL_MS = Number(process.env.XC_BANK_MONITOR_INTERVAL_MS ?? 20
 // genuinely different browser (worker-scb-business-anywhere-1, see
 // exec.ts's runScbCheckBalance). Real-money, real-bank site -- the
 // same "no unattended loop without a bound" caution applies at least
-// as strongly as it did for XC Bank. Longer default interval than XC
-// Bank's dev-speed default: this hits a real production site, not a
-// local mock.
+// as strongly as it did for XC Bank.
+//
+// Interval shortened from an original 5min/±15s to this, per explicit
+// request, for faster (~1-2 min) transaction detection -- deliberately
+// randomized per-tick, not a fixed cadence, specifically so the gap
+// between real requests to the bank varies every time (70-105s) rather
+// than reading as a perfectly regular bot pattern. Still an inherent
+// tradeoff being made knowingly, not a solved problem: jitter defeats
+// a naive "requests every exactly N seconds" check, it does not make
+// this look like a human (a human doesn't refresh a balance page
+// continuously 24/7 either). If this account is ever flagged/rate
+// limited, this interval is the first thing to widen back out.
 const SCB_MONITOR_SCHEDULER_ID = "monitor:scb-business-anywhere-1";
 const SCB_MONITOR_SET_PAUSED_JOB_NAME = "scb-business-anywhere-1-monitor-set-paused";
 const SCB_MONITOR_SET_AUTOSTOP_JOB_NAME = "scb-business-anywhere-1-monitor-set-autostop";
-const SCB_MONITOR_INTERVAL_MS = Number(process.env.SCB_MONITOR_INTERVAL_MS ?? 300_000);
-const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 15_000);
+// every: 87_500ms with jitter: 17_500ms => sleep(0..17_500) before each
+// tick's actual check, so consecutive real requests land 70_000-105_000ms
+// apart (87_500 - 17_500 to 87_500 + 17_500) -- i.e. roughly 1:10-1:45.
+const SCB_MONITOR_INTERVAL_MS = Number(process.env.SCB_MONITOR_INTERVAL_MS ?? 87_500);
+const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 17_500);
 // Telegram-triggered commands (see telegram-commands.ts) -- routed
 // through this same queue (not run directly from the polling loop) so
 // they can never run concurrently with a scheduled check on the

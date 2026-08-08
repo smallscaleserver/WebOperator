@@ -33,6 +33,7 @@ interface CheckResult {
   checkedAt: string;
   url: string;
   screenshot: string;
+  pageLastUpdatedText: string | null;
 }
 
 // Read-only: clicks the "Account Summary" left-nav link (in-app SPA
@@ -139,6 +140,14 @@ async function runCheck(page: Page): Promise<CheckResult> {
 
   const availableMatch = text.match(/Available Balance\s*\n+\s*([\d,]+\.\d{2})\s*THB/);
   const ledgerMatch = text.match(/Ledger Balance\s*\n+\s*([\d,]+\.\d{2})\s*THB/);
+  // The widget's own "Last Updated: <date>, <time>  Refresh" text --
+  // captured as a success signal, not just for display: if this stays
+  // identical across consecutive checks (each ~70-105s apart), the
+  // Refresh click above silently didn't actually pull fresh data (link
+  // moved, click missed, bank-side throttling, etc.) even though no
+  // error was thrown. scb-monitor.ts compares this against the prior
+  // check's value to catch exactly that silent-stale case.
+  const lastUpdatedMatch = text.match(/Last Updated:\s*(\d{1,2}\s+\w+\s+\d{4},\s*\d{2}:\d{2})/);
 
   // Row shape observed: "DD/MM/YYYY\n\nHH:MM\n\n<TrCode>\n\n<Description>\n\nAdd a Note\n\n[-]amount THB"
   const rowPattern = /(\d{2}\/\d{2}\/\d{4})\s*\n+\s*(\d{2}:\d{2})\s*\n+\s*(\S+)\s*\n+\s*([^\n]+?)\s*\n+\s*Add a Note\s*\n+\s*(-?[\d,]+\.\d{2})\s*THB/g;
@@ -214,6 +223,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
     checkedAt: new Date().toISOString(),
     url: page.url(),
     screenshot: screenshotFilename,
+    pageLastUpdatedText: lastUpdatedMatch ? lastUpdatedMatch[1] : null,
   };
 }
 
