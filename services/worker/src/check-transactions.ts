@@ -71,14 +71,22 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // "Account Summary" can land on either the single-account detail
   // (has the Latest Transactions table directly) or the "All
   // Accounts" overview list (each account is a card with its own
-  // "View Details" link) -- which one depends on prior navigation
-  // state, found empirically rather than assumed. If a "View
-  // Details" link is present, drill into it; there's currently only
-  // one account under any company here, so `.first()` is
+  // "View Details" link, further down the page below account-group
+  // summaries that load async) -- which one depends on prior
+  // navigation state, found empirically rather than assumed. If a
+  // "View Details" link is present, drill into it; there's currently
+  // only one account under any company here, so `.first()` is
   // unambiguous -- would need to target a specific account if a
   // company ever has more than one.
+  //
+  // A bare isVisible() (no timeout) is an instant one-shot check, not
+  // a wait -- found empirically that it can fire before the "All
+  // Accounts" card list (an async-loaded section further down the
+  // page) has rendered yet, silently skipping the click and leaving
+  // the check stuck on the overview with zero transactions extracted.
+  // isVisible({timeout}) polls/retries instead.
   const viewDetails = page.getByText("View Details", { exact: true }).first();
-  if (await viewDetails.isVisible().catch(() => false)) {
+  if (await viewDetails.isVisible({ timeout: 6000 }).catch(() => false)) {
     await viewDetails.click();
     await page.waitForTimeout(1500);
   }
