@@ -2924,3 +2924,43 @@ Appending correctly from here on. -->
   over time to see if it shows up; still no dismiss logic exists for
   it and none should be written without seeing its exact text/buttons
   first.
+
+### 2026-08-08 (same session, telegram commands round) — Claude
+
+- Status: Done (code side) — needs the user to actually send a command
+  in Telegram to confirm the incoming-message loop for real
+- Context: User asked for "override" capability — being able to
+  command the bot mid-operation from Telegram (e.g. take a screenshot
+  on demand), and for the bot to know what to do next automatically
+  once they're done. Also asked about mouse-hover-to-inspect. Two of
+  these were explained rather than built (see decision log for full
+  reasoning, not repeated here): hovering isn't buildable as asked —
+  noVNC's mouse input never passes through the CDP channel the bot
+  uses, a real architectural separation, not a missing feature;
+  "auto-resume" is already true by design, since every check already
+  re-verifies session/company/navigation from scratch regardless of
+  what a human left the page doing. What was actually built: real
+  incoming Telegram commands.
+- Files: `telegram.ts` (`getTelegramUpdates()`, `sendTelegramPhoto()`,
+  `isKnownTelegramChat()`); new `telegram-commands.ts` (poll loop,
+  offset persisted to `data/telegram-command-offset.json`, explicit
+  4-command allowlist: `/status`, `/screenshot`, `/help`, `/start`);
+  `queue.ts` (`SCB_TELEGRAM_SCREENSHOT_JOB_NAME`/
+  `SCB_TELEGRAM_STATUS_JOB_NAME`, routed through the same queue as
+  scheduled checks so they can't race one); `worker.ts` starts the
+  polling loop alongside the existing queue worker.
+- Verified: `tsc --noEmit` clean; both job handlers enqueued directly
+  and processed cleanly by the real running worker with no Telegram
+  send errors logged (a status message and a screenshot photo both
+  went out). **Not yet verified**: the actual incoming-message
+  detection — no way to simulate a real user sending a Telegram
+  message from this side, needs the user to send `/status`,
+  `/screenshot`, or `/help` for real and confirm a response arrives.
+- Next: ask the user to test the three commands live. If something's
+  wrong, check `.worker.log` first (the polling loop's own errors log
+  there) before assuming the command allowlist or offset logic is
+  broken — Telegram API errors (bad token, rate limits) would surface
+  there too. Do not expand the command allowlist beyond read-only
+  actions without a fresh, explicit decision — see
+  [[webop-credential-boundary]] in Claude's own memory system for why
+  this line matters specifically for this project.
