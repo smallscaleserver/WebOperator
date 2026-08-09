@@ -1,8 +1,9 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { REPO_ROOT } from "./exec.js";
+import { REPO_ROOT, listScbRecordings } from "./exec.js";
 import { getTelegramUpdates, isKnownTelegramChat, sendTelegramMessage } from "./telegram.js";
-import { enqueueScbTelegramScreenshot, enqueueScbTelegramStatus } from "./queue.js";
+import { enqueueScbTelegramScreenshot, enqueueScbTelegramStatus, enqueueScbRunRecording } from "./queue.js";
+import { resolvePendingConfirmation } from "./scb-replay.js";
 
 const OFFSET_PATH = path.join(REPO_ROOT, "data", "telegram-command-offset.json");
 const POLL_INTERVAL_MS = 5000;
@@ -21,27 +22,61 @@ async function saveOffset(offset: number): Promise<void> {
   await writeFile(OFFSET_PATH, JSON.stringify({ offset }), "utf-8");
 }
 
-// Explicit, tiny allowlist -- both strictly read-only (see queue.ts's
-// SCB_TELEGRAM_SCREENSHOT_JOB_NAME/SCB_TELEGRAM_STATUS_JOB_NAME
-// handlers: one reuses analyze-page.ts, which never navigates/clicks/
-// types; the other only reads already-saved state). Never expand this
-// to anything that types/clicks/navigates freely from arbitrary
-// Telegram text -- that would turn this into exactly the kind of
-// credential/login-automation channel already declined repeatedly
-// this session (see docs/PROJECT_PLAN.md decision log). Command
-// lookup is case-insensitive and ignores a "@botname" suffix (Telegram
-// appends this automatically for commands used in a group).
+// Originally strictly read-only (/status, /screenshot). /confirm,
+// /cancel, and /run are a deliberate, explicit exception to that,
+// added per direct request -- NOT a drift from the boundary below,
+// a conscious decision recorded in docs/PROJECT_PLAN.md's decision
+// log. Even so, they're narrowly scoped, not a general text-to-
+// automation channel:
+//   - /confirm, /cancel only ever do anything when scb-replay.ts has
+//     a pendingConfirmation waiting (a risky-keyword step mid-replay,
+//     e.g. Transfer/Pay/Confirm/Submit) -- a stray reply with nothing
+//     pending is a documented no-op.
+//   - /run <name> only runs a script that was already recorded,
+//     reviewed, and explicitly saved through the Recorder UI -- it
+//     can never execute arbitrary text as actions, and every
+//     recording it can point to already had its own credential-field
+//     redaction applied at record time (see record-actions.ts).
+// Still never expand this to typing/clicking/navigating from
+// arbitrary Telegram text directly -- that remains the hard line (see
+// docs/PROJECT_PLAN.md decision log). Command lookup is
+// case-insensitive and ignores a "@botname" suffix (Telegram appends
+// this automatically for commands used in a group).
 const HELP_TEXT = [
   "🤖 WebOperator SCB monitor — available commands:",
   "",
   "/status — current balance + latest transactions on the page right now",
   "/screenshot — a fresh full-page screenshot of the SCB lane's current browser state",
+  "/run <name> — run a saved recorded script against the SCB lane",
+  "/confirm — approve a script's currently-paused risky step (Transfer/Pay/Confirm/Submit/etc.)",
+  "/cancel — reject a script's currently-paused risky step",
   "/help — this list",
   "",
-  "All commands are strictly read-only — the bot never types, clicks, or navigates a real login/transfer form, and never will, regardless of what's asked.",
+  "/status and /screenshot are strictly read-only. /run executes only scripts you already recorded, reviewed, and saved yourself -- it never types/clicks/navigates from raw text. Any risky step in a script always pauses for a live /confirm here first.",
 ].join("\n");
 
-const COMMANDS: Record<string, () => Promise<unknown>> = {
+async function handleConfirm(confirmed: boolean): Promise<void> {
+  const resolved = await resolvePendingConfirmation(confirmed);
+  if (!resolved) {
+    await sendTelegramMessage("(nothing is currently waiting for confirmation)");
+  }
+}
+
+async function handleRun(recordingName: string | undefined): Promise<void> {
+  if (!recordingName) {
+    await sendTelegramMessage("Usage: /run <name> — see the Recorder page for saved script names.");
+    return;
+  }
+  const known = await listScbRecordings();
+  if (!known.includes(recordingName)) {
+    await sendTelegramMessage(`No saved recording named "${recordingName}". Saved: ${known.join(", ") || "(none)"}`);
+    return;
+  }
+  await enqueueScbRunRecording(recordingName);
+  await sendTelegramMessage(`▶️ Running "${recordingName}"...`);
+}
+
+const COMMANDS: Record<string, (arg?: string) => Promise<unknown>> = {
   "/screenshot": enqueueScbTelegramScreenshot,
   "/status": enqueueScbTelegramStatus,
   "/help": () => sendTelegramMessage(HELP_TEXT),
@@ -49,10 +84,18 @@ const COMMANDS: Record<string, () => Promise<unknown>> = {
   // answering it with the same help text instead of silently ignoring
   // it is a small but real usability win.
   "/start": () => sendTelegramMessage(HELP_TEXT),
+  "/confirm": () => handleConfirm(true),
+  "/cancel": () => handleConfirm(false),
+  "/run": (arg) => handleRun(arg),
 };
 
 function normalizeCommand(text: string): string {
-  return text.trim().toLowerCase().split(/[\s@]/)[0];
+  return text.trim().split(/\s+/)[0].toLowerCase().split("@")[0];
+}
+
+function commandArg(text: string): string | undefined {
+  const rest = text.trim().split(/\s+/).slice(1).join(" ").trim();
+  return rest.length > 0 ? rest : undefined;
 }
 
 // Polling (getUpdates), not a webhook -- this stack is dev-only and
@@ -87,7 +130,7 @@ export function startTelegramCommandPolling(): void {
       const command = normalizeCommand(text);
       const handler = COMMANDS[command];
       if (handler) {
-        await handler().catch((err) => console.error(`Telegram command "${command}" failed:`, err));
+        await handler(commandArg(text)).catch((err) => console.error(`Telegram command "${command}" failed:`, err));
       }
     }
     await saveOffset(offset);

@@ -2996,3 +2996,124 @@ Appending correctly from here on. -->
   first (SCB could rename/redesign the widget) before assuming a new
   bug — this exact "silently stale, no error" shape is worth checking
   for elsewhere on this page too if it recurs.
+
+### 2026-08-08 (same session, record→analyze→run round) — Claude
+
+- Status: Built and typechecked; core recorder pipeline verified live
+  against the real SCB lane. **Not yet verified**: an actual real
+  click/keystroke being captured into a correct compiled step (needs
+  genuine human interaction via noVNC — the permission classifier
+  correctly blocked me from simulating real-account clicks myself
+  mid-session, which is the right call, not a bug to work around).
+- Context: User asked for a general record→review→save→run feature
+  (element-selector clicks with pixel fallback, plus keyboard),
+  explicitly including the real SCB lane, confirmed via AskUserQuestion.
+  Full design plan (approved, still in `.claude/plans/steady-bouncing-pillow.md`
+  if referenced again) covers: credential redaction (hard, in-page,
+  before anything crosses to Node), a risky-keyword Telegram
+  confirm-gate for replay (best-effort, not a hard block — user's own
+  explicit choice), and manual+scheduled+Telegram `/run` triggering.
+- Files: `services/worker/src/actions/registry.ts` (`clickSmart`/
+  `pressKey`/`typeText`/`REDACTED_FIELD_SENTINEL`), new
+  `services/worker/src/record-actions.ts`, `run-workflow.ts`
+  (`WORKFLOWS_DIR` now overridable), `services/worker/package.json`
+  (new `record-actions` script — **image rebuild required**, this
+  isn't bind-mounted like `src/`), `services/control-panel/src/exec.ts`
+  (`runWorkflowOnLane`, recording save/list/delete/read, stop-flag
+  writer), new `services/control-panel/src/scb-replay.ts`, `queue.ts`
+  (new job types + per-recording BullMQ scheduler), `server.ts` (new
+  `/api/lanes/scb-business-anywhere-1/recordings/*` + `/replay-state`
+  routes), `telegram-commands.ts` (`/confirm`, `/cancel`, `/run <name>`
+  — the one deliberate non-read-only Telegram expansion this session,
+  documented inline as such), `docker-compose.yml` (new `recordings`
+  volume mount for `worker-scb-business-anywhere-1`), new Recorder UI
+  section on `scb-business-anywhere-live.html`/`.js`.
+- Two real bugs found and fixed live, both worth remembering:
+  1. `services/worker/package.json`'s `scripts` section is baked into
+     the Docker image at build time (`COPY package.json ./` in the
+     Dockerfile) — unlike `src/`, it is **not** bind-mounted. Adding
+     `record-actions` there silently did nothing until
+     `docker compose build worker worker-scb-business-anywhere-1` was
+     run — surfaced as `npm error Missing script: "record-actions"`.
+     Any future new npm script needs the same rebuild step.
+  2. Shipping a TS function into the page via `fn.toString()` +
+     `eval()` inside `page.evaluate()` broke with
+     `ReferenceError: __name is not defined` — tsx/esbuild wraps named
+     function declarations in a `__name()` helper that doesn't exist
+     in the isolated eval context. Fixed by passing the function
+     **directly** to `page.evaluate()` instead (Playwright's own
+     serialization handles this correctly) — full writeup in
+     `docs/PROJECT_PLAN.md`'s decision log. General lesson for this
+     project: never `.toString()`+`eval()` a TS function into a
+     browser context again, always pass it directly.
+- Verified: both worker and control-panel `tsc --noEmit` clean. Safe
+  mechanics test against the shared/demo browser (not SCB) confirmed
+  `clickSmart` works both by element and by pixel fallback, and that
+  `typeText` throws `REDACTED_FIELD:` on the sentinel without ever
+  calling `.fill()`. Against the real SCB lane: `guard-not-login-page`
+  correctly passed (account was logged in), `install-recorder`
+  succeeded (after the `__name` fix), the stop-flag file correctly
+  ended the session, and `SCB_RECORDING_RESULT {"steps":[],...}`
+  compiled cleanly with zero events (none were generated — no real
+  clicks happened during the test). Restarted control-panel's
+  `worker.ts`/`server.ts` and rebuilt both worker Docker images to
+  pick up all of the above.
+- Next: ask the user to do one real click-through via noVNC while
+  recording is active (e.g. Account Summary → back), confirm the
+  review pane shows a correct `clickSmart` step with both a selector
+  and pixel coordinates, save it, run it, and confirm it replays.
+  Then construct one safe test script with a step whose text
+  deliberately matches a risky keyword (a harmless/fake target, not a
+  real transfer) to confirm the pause + Telegram `/confirm`/`/cancel`
+  flow actually fires end to end — this round only verified the code
+  path via review, not a live Telegram round-trip. Not committed yet.
+
+### 2026-08-10 — Claude — SHUTDOWN CHECKPOINT (user closing the machine)
+
+Read this one first if picking the session back up cold.
+
+- **Machine state when closed**: everything (Docker Desktop, both
+  control-panel host processes `npm run worker`/`npm start`, all
+  containers) stops when the computer shuts down — nothing was left
+  deliberately running, no cleanup needed. On resume: start Docker
+  Desktop, `docker compose up -d` (or the relevant lane services),
+  then `npm run worker` and `npm start` in `services/control-panel`
+  (two separate host processes, see `docs/PROJECT_PLAN.md`'s decision
+  log for why they're kept separate).
+- **SCB Business Anywhere real account**: session had already expired
+  again by the time the machine was closed (`GET
+  /api/lanes/scb-business-anywhere-1/monitor` → `lastError:
+  "SESSION_EXPIRED: ..."`, `lastCheckedAt: 2026-08-09T20:48:26Z`).
+  This is normal/expected (real bank idle-timeout, not a bug — see the
+  "idle-timeout dialog" and "SESSION_EXPIRED" decision-log entries).
+  **First thing to do on resume**: log back in manually via noVNC
+  (`http://localhost:6090/vnc.html`) — the monitor schedule is still
+  configured `running: true`, `paused: false`, so it self-heals and
+  resumes checking automatically the moment login succeeds, no other
+  action needed.
+- **This session's main deliverable — record→analyze→run — is built,
+  typechecked, and partially live-verified, but NOT YET COMMITTED.**
+  Uncommitted files as of closing:
+  `docker-compose.yml`, `docs/AGENT_HANDOFF.md`, `docs/PROJECT_PLAN.md`,
+  `services/control-panel/public/scb-business-anywhere-live.html`,
+  `services/control-panel/public/scb-business-anywhere-live.js`,
+  `services/control-panel/src/exec.ts`, `queue.ts`, `server.ts`,
+  `telegram-commands.ts`, `services/worker/package.json`,
+  `services/worker/src/actions/registry.ts`, `run-workflow.ts`, plus
+  two new untracked files: `services/control-panel/src/scb-replay.ts`
+  and `services/worker/src/record-actions.ts`. The user was asked
+  whether to commit before closing — check the conversation for the
+  answer; if unclear, ask again rather than assuming, since this
+  touches the real-money SCB lane's capabilities and shouldn't be
+  committed silently.
+- **Full detail on what was built, the two live bugs found/fixed
+  (`package.json` needs an image rebuild, `.toString()+eval()` breaks
+  under tsx/esbuild's `__name()` wrapping), and what's still
+  unverified** (a real click actually being captured correctly, and a
+  live Telegram `/confirm`/`/cancel` round-trip) is in the entry
+  directly above this one ("record→analyze→run round") and in
+  `docs/PROJECT_PLAN.md`'s decision log — read both before continuing,
+  don't re-derive from scratch.
+- Next: resolve the commit question above, then pick up exactly where
+  the previous entry's "Next" section left off (live click-through
+  test via noVNC, then the risky-keyword confirm-gate test).

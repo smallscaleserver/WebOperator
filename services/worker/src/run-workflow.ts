@@ -19,7 +19,11 @@ const MIN_EXPECTED_WINDOW_WIDTH = 1200;
 const MIN_EXPECTED_WINDOW_HEIGHT = 600;
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-const WORKFLOWS_DIR = path.resolve(__dirname, "../workflows");
+// Overridable so the SCB lane can point this at its own mounted
+// recordings directory (/app/recordings) to run a recorded/compiled
+// script -- defaults to the committed-to-git workflows/ dir, unchanged
+// for every existing caller that doesn't set this.
+const WORKFLOWS_DIR = process.env.WORKFLOWS_DIR ? path.resolve(process.env.WORKFLOWS_DIR) : path.resolve(__dirname, "../workflows");
 
 interface WorkflowRetryDef {
   attempts?: number;

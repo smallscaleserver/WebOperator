@@ -115,6 +115,7 @@ services:
       - ./services/worker/workflows:/app/workflows
       - ./data/lanes/scb-business-anywhere-1/output:/app/output
       - ./data/lanes/scb-business-anywhere-1/sessions:/app/sessions
+      - ./data/lanes/scb-business-anywhere-1/recordings:/app/recordings
     network_mode: "service:browser-worker-scb-business-anywhere-1"
     depends_on:
       - browser-worker-scb-business-anywhere-1

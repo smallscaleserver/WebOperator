@@ -187,6 +187,47 @@
       </p>
       <img id="monitor-screenshot" alt="latest check screenshot" style="max-width:100%; border:1px solid #ddd; border-radius:4px; display:none;">
     </section>
+
+    <section>
+      <h2>🎬 Recorder — record → review → run</h2>
+      <p class="danger">
+        Never records a real credential: any password-type field is
+        detected in-page and replaced with a redacted marker before
+        anything leaves the browser — replaying a redacted step fails
+        loudly instead of typing anything. Recording is refused
+        outright while the login page is showing.
+      </p>
+      <p class="warning">
+        Saved scripts CAN run on a schedule or via Telegram <code>/run</code>.
+        Any step whose target text matches a risky keyword
+        (Transfer/Pay/Confirm/Submit/โอนเงิน/ชำระ/ยืนยัน/etc.) always
+        pauses and waits for a live <code>/confirm</code> reply in
+        Telegram before it runs — this is a best-effort keyword match,
+        not a guarantee.
+      </p>
+      <p class="warning" id="pending-confirmation-banner" style="display:none;"></p>
+
+      <div class="row">
+        <span class="dot" id="recording-status-dot"></span>
+        <span id="recording-status-label">idle</span>
+        <button id="recording-start-btn">🔴 Start Recording</button>
+        <button id="recording-stop-btn" disabled>⏹ Stop Recording</button>
+      </div>
+      <p class="hint">Log in and navigate manually first (in the screen above), then start recording once you're past login — max 15 minutes per session.</p>
+
+      <div id="recording-review" style="display:none;">
+        <h3 style="font-size:0.9rem; margin-bottom:0.3rem;">Review captured steps</h3>
+        <p class="hint" id="recording-redacted-hint"></p>
+        <div id="recording-steps-list" class="analysis-text" style="max-height:260px;"></div>
+        <div class="row" style="margin-top:0.5rem;">
+          <input type="text" id="recording-save-name" placeholder="script-name (letters/numbers/-/_)" style="flex:1; min-width:200px; padding:0.4rem;">
+          <button id="recording-save-btn">💾 Save as script</button>
+        </div>
+      </div>
+
+      <h3 style="font-size:0.9rem; margin:1rem 0 0.3rem;">Saved scripts</h3>
+      <div id="recordings-list"><em>(none saved yet)</em></div>
+    </section>
   </div>
 </div>
 

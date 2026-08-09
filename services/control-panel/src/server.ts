@@ -1,5 +1,6 @@
 import "./env.js";
 import { fileURLToPath } from "node:url";
+import { randomUUID } from "node:crypto";
 import path from "node:path";
 import express from "express";
 import { ACTIONS, isActionName } from "./actions.js";
@@ -13,6 +14,12 @@ import {
   runScbAnalyzePage,
   runScbSelectCompany,
   parseLanePageAnalysis,
+  writeScbRecordingStopFlag,
+  listScbRecordings,
+  saveScbRecording,
+  deleteScbRecording,
+  isValidRecordingName,
+  type CompiledRecordingStep,
   REPO_ROOT,
 } from "./exec.js";
 import {
@@ -22,8 +29,14 @@ import {
   startScbMonitorSchedule,
   stopScbMonitorSchedule,
   enqueueScbMonitorCheckOnce,
+  enqueueScbStartRecording,
+  enqueueScbRunRecording,
+  startScbRecordingSchedule,
+  stopScbRecordingSchedule,
+  getScbRecordingScheduleInfo,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
+import { getReplayState } from "./scb-replay.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -489,6 +502,124 @@ app.post("/api/lanes/scb-business-anywhere-1/monitor/resume", async (_req, res) 
   try {
     const jobId = await resumeScbMonitor();
     res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// --- SCB Business Anywhere lane: record -> analyze -> run ---
+// See docs/PROJECT_PLAN.md's decision log and scb-replay.ts's own
+// comments for the full design (redaction, risky-keyword Telegram
+// confirm gate). This is the one deliberate capability expansion
+// beyond "strictly read-only" for this lane this session.
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/start", async (_req, res) => {
+  try {
+    const runId = randomUUID();
+    const jobId = await enqueueScbStartRecording(runId);
+    res.json({ ok: true, runId, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/stop", express.json(), async (req, res) => {
+  const runId = req.body?.runId;
+  if (typeof runId !== "string" || !runId) {
+    res.status(400).json({ ok: false, error: "runId is required" });
+    return;
+  }
+  try {
+    await writeScbRecordingStopFlag(runId);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/api/lanes/scb-business-anywhere-1/recordings", async (_req, res) => {
+  try {
+    const recordings = await listScbRecordings();
+    res.json({ ok: true, recordings });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/save", express.json(), async (req, res) => {
+  const name = req.body?.name;
+  const steps = req.body?.steps;
+  if (typeof name !== "string" || !isValidRecordingName(name)) {
+    res.status(400).json({ ok: false, error: 'Invalid name -- use only letters, numbers, "-", "_"' });
+    return;
+  }
+  if (!Array.isArray(steps) || steps.length === 0) {
+    res.status(400).json({ ok: false, error: "steps must be a non-empty array" });
+    return;
+  }
+  try {
+    await saveScbRecording(name, steps as CompiledRecordingStep[]);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.delete("/api/lanes/scb-business-anywhere-1/recordings/:name", async (req, res) => {
+  try {
+    await deleteScbRecording(req.params.name);
+    await stopScbRecordingSchedule(req.params.name).catch(() => {});
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/run", async (req, res) => {
+  try {
+    const jobId = await enqueueScbRunRecording(req.params.name);
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule", async (req, res) => {
+  try {
+    const info = await getScbRecordingScheduleInfo(req.params.name);
+    res.json({ ok: true, ...info });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule/start", express.json(), async (req, res) => {
+  const everyMinutes = Number(req.body?.everyMinutes);
+  if (!Number.isFinite(everyMinutes) || everyMinutes < 1 || everyMinutes > 1440) {
+    res.status(400).json({ ok: false, error: "everyMinutes must be between 1 and 1440" });
+    return;
+  }
+  try {
+    await startScbRecordingSchedule(req.params.name, everyMinutes * 60_000);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule/stop", async (req, res) => {
+  try {
+    await stopScbRecordingSchedule(req.params.name);
+    res.json({ ok: true });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.get("/api/lanes/scb-business-anywhere-1/replay-state", async (_req, res) => {
+  try {
+    const state = await getReplayState();
+    res.json({ ok: true, ...state });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }

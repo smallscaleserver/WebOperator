@@ -2,7 +2,7 @@ import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
-import { readdir, readFile } from "node:fs/promises";
+import { readdir, readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { ACTIONS, type ActionName } from "./actions.js";
 
 const execFileAsync = promisify(execFile);
@@ -76,8 +76,30 @@ export async function runAction(name: ActionName): Promise<ActionResult> {
 // `name` is always validated against listWorkflowNames() (the real files on
 // disk) before this is called — still array-form execFile argv either way,
 // so there's no shell-injection surface regardless.
+//
+// Generalized so a recorded SCB-lane script can run through the exact
+// same generic run-workflow.ts engine, just pointed at that lane's own
+// service/recordings directory instead of the shared browser/committed
+// workflows/ dir (see run-workflow.ts's now-overridable WORKFLOWS_DIR).
+export async function runWorkflowOnLane(
+  name: string,
+  laneService: string,
+  workflowsDir?: string,
+  extraEnv?: Record<string, string>,
+): Promise<ActionResult> {
+  const args = ["compose", "run", "--rm", "-e", `WORKFLOW_NAME=${name}`];
+  if (workflowsDir) {
+    args.push("-e", `WORKFLOWS_DIR=${workflowsDir}`);
+  }
+  for (const [key, value] of Object.entries(extraEnv ?? {})) {
+    args.push("-e", `${key}=${value}`);
+  }
+  args.push(laneService, "npm", "run", "workflow");
+  return execAndParse(args);
+}
+
 export async function runWorkflow(name: string): Promise<ActionResult> {
-  return execAndParse(["compose", "run", "--rm", "-e", `WORKFLOW_NAME=${name}`, "worker", "npm", "run", "workflow"]);
+  return runWorkflowOnLane(name, "worker");
 }
 
 // Same as runWorkflow, but for the one workflow (xc-bank-monitor-check)
@@ -278,6 +300,152 @@ export function parseScbBalanceSummary(stdout: string): ScbBalanceSummary | unde
     }
   }
   return undefined;
+}
+
+// Record → analyze → run, scoped to the SCB lane. Host-side path for
+// reading/writing/listing saved scripts and for writing the stop-flag
+// file directly (no docker call needed to signal stop — see
+// record-actions.ts's own polling loop). Entirely under data/, which
+// is gitignored wholesale, same as every other lane-scoped state file.
+const SCB_RECORDINGS_HOST_DIR = path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-1", "recordings");
+// Container-side path (see docker-compose.yml's recordings volume
+// mount for worker-scb-business-anywhere-1) -- passed as WORKFLOWS_DIR
+// when replaying a saved recording through run-workflow.ts.
+const SCB_RECORDINGS_CONTAINER_DIR = "/app/recordings";
+
+// Long-running by design: this resolves only once the human clicks
+// Stop (or the recorder's own 15-minute max duration elapses) — not a
+// quick one-shot action like every other Scb* function here, so it
+// needs a much longer timeout than EXEC_OPTS's default 120s. Whatever
+// calls this (a queued job) is expected to just await it; the SCB
+// queue's concurrency=1 already means nothing else can touch this
+// lane's browser while a recording is in progress, which is exactly
+// the desired behavior (a scheduled monitor check firing mid-recording
+// would be visually confusing at best).
+const RECORDING_EXEC_OPTS = { cwd: REPO_ROOT, timeout: 16 * 60 * 1000, maxBuffer: 5 * 1024 * 1024 };
+
+export async function runScbStartRecording(runId: string): Promise<ActionResult> {
+  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+  try {
+    const { stdout, stderr } = await execFileAsync(
+      "docker",
+      ["compose", "run", "--rm", "-e", `RECORDING_RUN_ID=${runId}`, SCB_LANE_SERVICE, "npm", "run", "record-actions"],
+      RECORDING_EXEC_OPTS,
+    );
+    return { ok: true, stdout, stderr, exitCode: 0, steps: parseSteps(stdout) };
+  } catch (err) {
+    const execErr = err as { stdout?: string; stderr?: string; message: string; code?: unknown };
+    const stdout = execErr.stdout ?? "";
+    return {
+      ok: false,
+      stdout,
+      stderr: execErr.stderr ?? "",
+      error: execErr.message,
+      exitCode: typeof execErr.code === "number" ? execErr.code : undefined,
+      steps: parseSteps(stdout),
+    };
+  }
+}
+
+// Writing this file directly (no docker call) is what actually stops a
+// recording session -- record-actions.ts polls for it every ~1s. This
+// is the reason recording uses a stop-flag file at all instead of a
+// second queued "stop" job: the SCB queue only has one concurrency
+// slot, and it's occupied by the recording job itself for the whole
+// session, so a queued stop job would never get a turn to run.
+export async function writeScbRecordingStopFlag(runId: string): Promise<void> {
+  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+  await writeFile(path.join(SCB_RECORDINGS_HOST_DIR, `.stop-${runId}`), "");
+}
+
+export interface CompiledRecordingStep {
+  type: "clickSmart" | "typeText" | "pressKey";
+  params: Record<string, unknown>;
+}
+
+export interface RecordingResult {
+  steps: CompiledRecordingStep[];
+  redactedCount: number;
+  eventCount: number;
+}
+
+export function parseRecordingResult(stdout: string): RecordingResult | undefined {
+  for (const line of stdout.split("\n")) {
+    const match = line.match(/^SCB_RECORDING_RESULT (.+)$/);
+    if (!match) continue;
+    try {
+      return JSON.parse(match[1]) as RecordingResult;
+    } catch {
+      // fall through -- treat as unparseable
+    }
+  }
+  return undefined;
+}
+
+const SAFE_RECORDING_NAME = /^[a-zA-Z0-9_-]{1,80}$/;
+
+export function isValidRecordingName(name: string): boolean {
+  return SAFE_RECORDING_NAME.test(name);
+}
+
+export async function listScbRecordings(): Promise<string[]> {
+  try {
+    const entries = await readdir(SCB_RECORDINGS_HOST_DIR);
+    return entries.filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+  } catch {
+    return [];
+  }
+}
+
+export async function saveScbRecording(name: string, steps: CompiledRecordingStep[]): Promise<void> {
+  if (!isValidRecordingName(name)) {
+    throw new Error(`Invalid recording name "${name}" — use only letters, numbers, "-", "_"`);
+  }
+  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+  const filePath = path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`);
+  await writeFile(filePath, JSON.stringify({ name, steps }, null, 2), "utf-8");
+}
+
+export async function deleteScbRecording(name: string): Promise<void> {
+  if (!isValidRecordingName(name)) return;
+  await unlink(path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`)).catch(() => {});
+}
+
+export interface ScbRecordingFile {
+  name: string;
+  steps: CompiledRecordingStep[];
+}
+
+export async function readScbRecording(name: string): Promise<ScbRecordingFile | undefined> {
+  if (!isValidRecordingName(name)) return undefined;
+  try {
+    const raw = await readFile(path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`), "utf-8");
+    return JSON.parse(raw) as ScbRecordingFile;
+  } catch {
+    return undefined;
+  }
+}
+
+// Runs one saved recording (or, from scb-replay.ts, one *segment* of
+// one -- a small temp file with the same {name, steps} shape) against
+// the SCB lane specifically, through the same generic run-workflow.ts
+// engine every other workflow uses, just pointed at this lane's own
+// service and recordings directory instead of the shared browser.
+export async function runScbRecording(name: string): Promise<ActionResult> {
+  return runWorkflowOnLane(name, SCB_LANE_SERVICE, SCB_RECORDINGS_CONTAINER_DIR);
+}
+
+export async function writeScbTempSegment(fileName: string, steps: CompiledRecordingStep[]): Promise<void> {
+  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+  await writeFile(
+    path.join(SCB_RECORDINGS_HOST_DIR, `${fileName}.json`),
+    JSON.stringify({ name: fileName, steps }, null, 2),
+    "utf-8",
+  );
+}
+
+export async function deleteScbTempSegment(fileName: string): Promise<void> {
+  await unlink(path.join(SCB_RECORDINGS_HOST_DIR, `${fileName}.json`)).catch(() => {});
 }
 
 export interface LanePageAnalysis {

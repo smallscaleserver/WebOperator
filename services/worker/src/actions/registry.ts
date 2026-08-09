@@ -32,6 +32,16 @@ function cleanText(raw: string): string {
   return raw.replace(/×/g, "").replace(/\s+/g, " ").trim();
 }
 
+// Shared with record-actions.ts, which writes this exact string into a
+// typeText step instead of a real keystroke whenever the recording
+// target was a password-type (or autocomplete=*-password) field --
+// never the real value, no matter what. If a step carrying this
+// sentinel is ever replayed, typeText below refuses to type anything
+// and throws instead, so a script that somehow still contains one
+// fails loudly rather than silently typing a placeholder into a real
+// field. See docs/PROJECT_PLAN.md's credential-handling decision log.
+export const REDACTED_FIELD_SENTINEL = " WEBOP_REDACTED_CREDENTIAL_FIELD ";
+
 export const ACTION_HANDLERS: Record<string, ActionHandler> = {
   navigate: async ({ page }, params) => {
     const url = requireString(params, "url");
@@ -140,5 +150,47 @@ export const ACTION_HANDLERS: Record<string, ActionHandler> = {
     return result.wasAlreadyClean
       ? "Already clean (no session to log out of)"
       : "Logged out and cleared session (next login will be fresh)";
+  },
+
+  // Recorder-generated action: element-first, pixel-fallback. A short
+  // locator timeout (not the default ~30s) so a genuinely missing
+  // element fails fast into the pixel path instead of hanging --
+  // matches the same "don't blindly wait the default timeout" lesson
+  // already applied elsewhere in this codebase (check-transactions.ts).
+  clickSmart: async ({ page }, params) => {
+    const selector = requireString(params, "selector");
+    const x = Number(params.x);
+    const y = Number(params.y);
+    const locator = page.locator(selector).first();
+    const foundElement = await locator.isVisible({ timeout: 2000 }).catch(() => false);
+    if (foundElement) {
+      await locator.click();
+      return { via: "element", selector };
+    }
+    if (Number.isFinite(x) && Number.isFinite(y)) {
+      await page.mouse.click(x, y);
+      return { via: "pixel", x, y };
+    }
+    throw new Error(`clickSmart: element "${selector}" not found and no pixel fallback (x/y) provided`);
+  },
+
+  pressKey: async ({ page }, params) => {
+    const key = requireString(params, "key");
+    await page.keyboard.press(key);
+  },
+
+  // Recorder-generated action for ordinary (non-credential) text
+  // fields. Refuses outright if the recorded text is the redaction
+  // sentinel above -- see its comment for why this must be a loud
+  // failure, never a silent skip or a placeholder keystroke.
+  typeText: async ({ page }, params) => {
+    const selector = requireString(params, "selector");
+    const text = requireString(params, "text");
+    if (text === REDACTED_FIELD_SENTINEL) {
+      throw new Error(
+        "REDACTED_FIELD: this step targets a credential field that was intentionally never recorded -- fill it manually via noVNC, this script cannot and will not do it",
+      );
+    }
+    await page.locator(selector).fill(text);
   },
 };
