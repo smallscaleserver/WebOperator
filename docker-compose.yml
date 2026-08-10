@@ -36,6 +36,14 @@ services:
     build: ./services/scb-mock
     ports:
       - "127.0.0.1:4101:3000"
+    volumes:
+      # User-editable convenience file, host-editable/gitignored (see
+      # .gitignore) -- pre-fills the mock's login form fields so
+      # there's nothing to remember/retype. Safe to read automatically
+      # here specifically because this mock never validates against
+      # it (any non-empty value already works) -- unlike .userpass,
+      # which the bot never reads for any real site.
+      - ./.userpassmock:/app/.userpassmock:ro
 
   browser-worker-chrome:
     build: ./services/browser-worker

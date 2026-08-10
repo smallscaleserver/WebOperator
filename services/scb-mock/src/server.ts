@@ -1,3 +1,4 @@
+import { readFileSync } from "node:fs";
 import express from "express";
 import cookieParser from "cookie-parser";
 import { createSession, deleteSession, getSession, MOCK_COMPANIES, type Session } from "./sessions.js";
@@ -5,6 +6,26 @@ import { generateBaselineTransactions, computeBalances, makeManualTransaction, t
 
 const PORT = Number(process.env.PORT ?? 3000);
 const COOKIE_NAME = "scbmock_session";
+const USERPASSMOCK_PATH = process.env.USERPASSMOCK_PATH ?? "/app/.userpassmock";
+
+// Host-editable convenience file (see .gitignore/.userpassmock) --
+// pre-fills the login form so there's nothing to remember/retype.
+// Safe to read automatically here specifically because this mock
+// never validates against these values (any non-empty value already
+// works) -- unlike .userpass, which the bot never reads for any real
+// site. Read fresh on every render (cheap, low-traffic page) so edits
+// apply immediately with no restart. Missing/malformed file just
+// falls back to empty fields, never an error.
+function readUserPassMock(): { username: string; password: string } {
+  try {
+    const raw = readFileSync(USERPASSMOCK_PATH, "utf-8");
+    const username = raw.match(/^username:\s*(.*)$/m)?.[1]?.trim() ?? "";
+    const password = raw.match(/^password:\s*(.*)$/m)?.[1]?.trim() ?? "";
+    return { username, password };
+  } catch {
+    return { username: "", password: "" };
+  }
+}
 
 const app = express();
 app.use(cookieParser());
@@ -53,6 +74,18 @@ function page(title: string, body: string, wide = false): string {
   .tx-detail div { margin-bottom: 0.4rem; }
   .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.4); display: flex; align-items: center; justify-content: center; z-index: 50; }
   .modal-box { background: #fff; border-radius: 8px; padding: 1.5rem 2rem; max-width: 420px; }
+  .auth-split { display: flex; min-height: 100vh; }
+  .auth-left { flex: 1 1 45%; background: linear-gradient(160deg,#5b3fc0,#4a2fa8); color: #fff; padding: 2.5rem; display: flex; flex-direction: column; }
+  .auth-left .logo { display: flex; align-items: center; gap: 0.5rem; font-weight: bold; letter-spacing: 0.15em; font-size: 1.1rem; }
+  .auth-left .logo .mark { width: 1.4rem; height: 1.4rem; border-radius: 6px; background: #f4b942; display: inline-block; }
+  .auth-announce { background: #fff; color: #1a1a2e; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 2rem; max-width: 360px; }
+  .auth-announce .icon { color: #5b3fc0; font-weight: bold; margin-right: 0.4rem; }
+  .auth-illustration { margin-top: auto; opacity: 0.5; font-size: 3.5rem; }
+  .auth-right { flex: 1 1 55%; background: #fff; display: flex; align-items: center; justify-content: center; }
+  .auth-right-inner { width: 100%; max-width: 380px; padding: 2rem; }
+  .auth-lang { text-align: right; color: #666; font-size: 0.85rem; margin-bottom: 2rem; }
+  .user-guides { background: #eef0ff; border: 1px solid #d9dcff; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 1.5rem; font-size: 0.85rem; }
+  .user-guides a { color: #5b3fc0; display: block; margin-top: 0.4rem; text-decoration: underline; }
   ${wide ? "" : ""}
 </style>
 </head>
@@ -87,43 +120,80 @@ function timeoutOverlayHtml(): string {
   </div>`;
 }
 
+// Two-column layout roughly matching the real site's own login page
+// (purple announcement panel on the left, form on the right, "User
+// Guides" box below the form) -- based directly on a real screenshot
+// captured earlier this session, not guessed. Cosmetic only: the
+// functional bits check-transactions.ts's SESSION_EXPIRED detection
+// and the recorder both depend on ("ชื่อผู้ใช้งาน" as its own exact-text
+// label, the form/input/button structure) are unchanged.
+function authLeftPanel(): string {
+  return `<div class="auth-left">
+    <div class="logo"><span class="mark"></span> ANYWHERE</div>
+    <div class="auth-announce">
+      <div><span class="icon">&#9432;</span><strong>Announcement</strong></div>
+      <p class="hint" style="margin-bottom:0;">Direct credit and payroll transactions (mock notice) will be processed from 08:00 am onward.</p>
+    </div>
+    <div class="auth-illustration">&#128188;&#9993;&#65039;</div>
+  </div>`;
+}
+
 // Login-page marker check-transactions.ts's SESSION_EXPIRED detection
 // looks for on the real site -- included here so that same detection
 // logic is directly testable against this mock unchanged.
+function escapeAttr(s: string): string {
+  return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
+}
+
 function loginPage(session: Session | undefined, error?: string): string {
+  const { username } = readUserPassMock();
   return page(
     "Log in",
-    `${announcementBanner()}
-    <div class="auth-shell">
-      <div class="card">
-        <h1>SCB Business Anywhere <span class="hint">(mock)</span></h1>
-        ${error ? `<p class="error">${error}</p>` : ""}
-        <p class="hint">Any non-empty username/password works -- this is a mock, values aren't checked against anything real.</p>
-        <form method="post" action="/login">
-          <label for="username">ชื่อผู้ใช้งาน</label>
-          <span class="hint">(Username)</span>
-          <input id="username" name="username" autofocus />
-          <button type="submit">Next</button>
-        </form>
+    `<div class="auth-split">
+      ${authLeftPanel()}
+      <div class="auth-right">
+        <div class="auth-right-inner">
+          <div class="auth-lang">EN</div>
+          <h1>SCB Business Anywhere</h1>
+          <p class="hint">Mock only -- any non-empty username/password works, nothing is checked against anything real.</p>
+          <p class="hint">Pre-filled from <code>.userpassmock</code> -- edit that file (repo root) to change.</p>
+          ${error ? `<p class="error">${error}</p>` : ""}
+          <form method="post" action="/login">
+            <label for="username">ชื่อผู้ใช้งาน</label>
+            <input id="username" name="username" value="${escapeAttr(username)}" autofocus />
+            <button type="submit" style="margin-top:1.25rem;">Next</button>
+          </form>
+          <div class="user-guides">
+            <strong>User Guides</strong>
+            <a href="#" onclick="return false;">How to Create Transactions</a>
+            <a href="#" onclick="return false;">How to Generate Payment Advices</a>
+            <a href="#" onclick="return false;">All User Guides</a>
+          </div>
+        </div>
       </div>
     </div>`,
   );
 }
 
 function passwordPage(session: Session, error?: string): string {
+  const { password } = readUserPassMock();
   return page(
     "Password",
-    `${announcementBanner()}
-    <div class="auth-shell">
-      <div class="card">
-        <h1>SCB Business Anywhere <span class="hint">(mock)</span></h1>
-        <p class="hint">Signing in as ${session.username}</p>
-        ${error ? `<p class="error">${error}</p>` : ""}
-        <form method="post" action="/password">
-          <label for="password">Password</label>
-          <input id="password" name="password" type="password" autofocus />
-          <button type="submit">Sign In</button>
-        </form>
+    `<div class="auth-split">
+      ${authLeftPanel()}
+      <div class="auth-right">
+        <div class="auth-right-inner">
+          <div class="auth-lang">EN</div>
+          <h1>SCB Business Anywhere</h1>
+          <p class="hint">Signing in as ${session.username}</p>
+          <p class="hint">Pre-filled from <code>.userpassmock</code> -- edit that file (repo root) to change.</p>
+          ${error ? `<p class="error">${error}</p>` : ""}
+          <form method="post" action="/password">
+            <label for="password">Password</label>
+            <input id="password" name="password" type="password" value="${escapeAttr(password)}" autofocus />
+            <button type="submit" style="margin-top:1.25rem;">Sign In</button>
+          </form>
+        </div>
       </div>
     </div>`,
   );

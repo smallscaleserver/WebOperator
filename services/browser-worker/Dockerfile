@@ -41,6 +41,18 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
 RUN mkdir -p /data/profile /var/log
 VOLUME ["/data/profile"]
 
+# Fluxbox's own default startup script (auto-generated into
+# ~/.fluxbox/startup on first launch if none exists) calls `fbsetbg`
+# to restore a wallpaper -- with no compatible tool installed (feh,
+# Eterm/Esetroot, etc.), that fails and pops a blocking `xmessage`
+# dialog over the whole screen. Purely cosmetic (Chromium/CDP/noVNC
+# all work fine regardless -- this only affects what a human sees via
+# noVNC before/if anything else is on screen), and this container has
+# no real use for a wallpaper at all, so the fix is a minimal custom
+# startup script that skips wallpaper-setting entirely rather than
+# installing an extra package just to make the default script happy.
+RUN mkdir -p /root/.fluxbox && printf '#!/bin/sh\nexec fluxbox\n' > /root/.fluxbox/startup && chmod +x /root/.fluxbox/startup
+
 # Firefox automation needs Playwright's own patched Firefox build -- it does
 # not speak CDP and cannot automate the vanilla firefox-esr apt package, so
 # that package is deliberately not installed above.

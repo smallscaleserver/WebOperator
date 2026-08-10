@@ -19,6 +19,21 @@ term_handler() {
 }
 trap term_handler TERM INT
 
+# Same reasoning as the Chromium profile-lock cleanup below: a prior
+# Xvfb instance dying (crash, OOM, or a plain `docker compose restart`/
+# `stop`+`up` cycle, which reuses the same container filesystem/tmpfs
+# rather than a fresh one) can leave /tmp/.X99-lock behind even though
+# nothing is actually listening on that display anymore. Xvfb then
+# refuses to start at all ("Fatal server error: Server is already
+# active for display 99"), and the rest of this script (Fluxbox,
+# Chromium, x11vnc) still launches anyway against a display that was
+# never actually created -- CDP then never becomes reachable, with no
+# clear error surfaced to whoever's waiting on it. Found this the hard
+# way, repeatedly, during a single heavy testing session. Only one
+# Xvfb is ever launched per container by this script, so it's always
+# safe to clear a stale lock here.
+rm -f "/tmp/.X${DISPLAY_NUM}-lock" "/tmp/.X11-unix/X${DISPLAY_NUM}"
+
 echo "Starting Xvfb on ${DISPLAY} (${RESOLUTION})"
 Xvfb "${DISPLAY}" -screen 0 "${RESOLUTION}" -nolisten tcp &
 PIDS="$PIDS $!"
