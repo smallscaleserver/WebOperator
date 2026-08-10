@@ -165,7 +165,24 @@ async function main(): Promise<void> {
   // CONTEXT: a new context would be a genuinely separate top-level
   // window that does not inherit the existing maximized window state
   // (confirmed empirically), where a same-context newPage() does.
+  // Closing every existing page and opening one fresh one prevents tab
+  // buildup over a long-running monitor loop -- but this is wrong for
+  // a script that's meant to CONTINUE an already-open, already-
+  // authenticated page (e.g. one segment of a record->analyze->run
+  // replay picking up right where the previous segment left off).
+  // Found this the hard way: scb-replay.ts running each segment
+  // through this same engine kept losing all page state (login,
+  // filled form fields, current URL) between segments, since each one
+  // reset to a blank page first. KEEP_EXISTING_PAGE opts a caller out
+  // of the reset, reusing the current page like analyze-page.ts/
+  // check-transactions.ts already do -- default behavior (every other
+  // caller: the shared workflow list, the XC Bank monitor, the
+  // scb-business-anywhere-mock-* test workflows) is unchanged.
+  const KEEP_EXISTING_PAGE = process.env.KEEP_EXISTING_PAGE === "1";
   const page = await step("prepare-page", async () => {
+    if (KEEP_EXISTING_PAGE) {
+      return context.pages()[0] ?? context.newPage();
+    }
     for (const existing of context.pages()) {
       await existing.close().catch(() => {});
     }

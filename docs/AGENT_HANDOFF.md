@@ -3117,3 +3117,70 @@ Read this one first if picking the session back up cold.
 - Next: resolve the commit question above, then pick up exactly where
   the previous entry's "Next" section left off (live click-through
   test via noVNC, then the risky-keyword confirm-gate test).
+
+### 2026-08-10 — Claude — SCB mock built, record→analyze→run fully verified end-to-end
+
+- Status: Done. User redirected the previous entry's "Next" (live
+  click-through against the *real* SCB lane) to instead build an
+  isolated mock first — safer, and it fully unblocked verification
+  that a real-account test alone couldn't reach.
+- Context: New `services/scb-mock/` (same isolation posture as
+  `services/xc-bank` — no shared code/DB, HTTP-only). Its DOM text/
+  structure mirrors the real SCB site closely enough that
+  `check-transactions.ts`/`select-company.ts`/`record-actions.ts` run
+  against it completely unchanged. Added: a session-timeout overlay
+  (dev-triggerable, real `position:fixed` blocking dialog, no
+  auto-dismiss) and a `/transfer` page (mock-only, never moves real
+  money) specifically to safely exercise the risky-keyword Telegram
+  confirm gate.
+- Files: new `services/scb-mock/**`, `docker-compose.yml` (new
+  `scb-mock` service), new `services/worker/workflows/scb-business-anywhere-mock-*.json`
+  (open-login/fresh-login/test-login/test-overlay — kept as reusable
+  test fixtures), `services/worker/src/record-actions.ts` (two more
+  real bugs, see below), `services/worker/src/run-workflow.ts` (new
+  `KEEP_EXISTING_PAGE` env var), `services/control-panel/src/exec.ts`
+  (`runScbRecording` now sets it). `README.md`/`AGENTS.md` updated
+  with a full SCB Mock section — mock creds aren't real secrets, the
+  real-account automation boundary is explicitly unchanged.
+- **Three more real bugs found live, all now fixed** (full detail in
+  `docs/PROJECT_PLAN.md`'s decision log, not repeated here):
+  1. The previous round's `__name` fix was incomplete — esbuild wraps
+     ANY function expression assigned to a local const/let, not just
+     named declarations, so `record-actions.ts`'s nested
+     `computeSelector`/`isCredentialField`/`flush` consts still broke
+     it. Real fix: a one-time `window.__name` passthrough shim.
+  2. Recorder's selector computation used unquoted `text=` (substring
+     match) — caused real replay misclicks (a "Transfers" link vs.
+     "Payments and Transfers" parent; an `<h1>Transfer</h1>` vs. the
+     actual submit button). Fixed with quoted exact-match `text="..."`.
+  3. Recorder only flushed the *last* typed field when a form has
+     multiple fields filled without an intervening click — fixed by
+     flushing on element-change, not just on click/Enter/Tab.
+  4. `run-workflow.ts`'s page-reset step (closes all pages, opens
+     fresh) silently broke scb-replay.ts's segment-to-segment
+     continuity — each segment lost all prior state. Fixed with
+     `KEEP_EXISTING_PAGE=1`.
+- Verified, for real, end-to-end, for the first time this session:
+  recorded the mock's Transfer flow (nav click → fill 3 fields →
+  submit → confirm), saved it, ran it via the API. It paused three
+  separate times (each risky-keyword step), sent real Telegram
+  messages, correctly resumed on simulated `/confirm` and correctly
+  aborted on simulated `/cancel` (both tested), and a full confirm-all
+  run completed all 6 steps, landing on "Mock Transfer Submitted — no
+  real funds were moved." Also re-verified `check-transactions.ts`/
+  `select-company.ts` still pass against the updated mock, and both
+  `tsc --noEmit` clean across `worker`/`control-panel`/`scb-mock`.
+- Also hit (and worked around, not fixed) recurring environment
+  instability this round: the SCB browser container and the
+  control-panel `worker.ts` process both needed manual restarts
+  several times under the heavy rapid-fire testing load. A plain
+  `docker compose restart` sometimes wasn't enough (needed a full
+  `stop` + `up -d`) — see decision log for the practical mitigation
+  used (explicitly verify CDP responds before proceeding, don't just
+  wait-and-hope).
+- Next: still not yet done — a live click-through test against the
+  *real* SCB lane, and a real (not simulated) Telegram `/confirm`/
+  `/cancel` round-trip. Given how much the mock testing already
+  covers, these may be lower-priority now; ask the user. Commit/push
+  status for this round: check `git status` and the conversation for
+  whether this was committed before assuming either way.

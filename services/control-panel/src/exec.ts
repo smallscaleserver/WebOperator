@@ -431,8 +431,19 @@ export async function readScbRecording(name: string): Promise<ScbRecordingFile |
 // the SCB lane specifically, through the same generic run-workflow.ts
 // engine every other workflow uses, just pointed at this lane's own
 // service and recordings directory instead of the shared browser.
+//
+// KEEP_EXISTING_PAGE=1 -- found live that scb-replay.ts's
+// segment-by-segment execution was losing all page state (login,
+// filled form fields, current URL) between segments, because
+// run-workflow.ts's own page-reset step closed the page and opened a
+// blank one before every single segment. This lane's every other
+// interaction (check-transactions.ts, select-company.ts, the
+// recorder itself) already reuses the existing page instead of
+// resetting it -- a replayed recording needs that same continuity,
+// not run-workflow.ts's monitor-loop-oriented "always start fresh"
+// behavior. See run-workflow.ts's own comment on this flag.
 export async function runScbRecording(name: string): Promise<ActionResult> {
-  return runWorkflowOnLane(name, SCB_LANE_SERVICE, SCB_RECORDINGS_CONTAINER_DIR);
+  return runWorkflowOnLane(name, SCB_LANE_SERVICE, SCB_RECORDINGS_CONTAINER_DIR, { KEEP_EXISTING_PAGE: "1" });
 }
 
 export async function writeScbTempSegment(fileName: string, steps: CompiledRecordingStep[]): Promise<void> {

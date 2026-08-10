@@ -24,6 +24,19 @@ services:
     ports:
       - "127.0.0.1:4100:3000"
 
+  # Isolated mock of SCB Business Anywhere, same relationship/isolation
+  # posture as xc-bank above (in-memory only, no shared code/DB with
+  # WebOperator, HTTP-only channel) -- built so record-analyze-run and
+  # the balance/transaction monitor can be safely tested end-to-end
+  # without touching the real account. See docs/PROJECT_PLAN.md's
+  # decision log for why this exists and how closely its DOM text
+  # mirrors the real site (it has to, for the same getByText-driven
+  # scripts to work against either one unchanged).
+  scb-mock:
+    build: ./services/scb-mock
+    ports:
+      - "127.0.0.1:4101:3000"
+
   browser-worker-chrome:
     build: ./services/browser-worker
     environment:

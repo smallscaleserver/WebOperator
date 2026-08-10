@@ -1,5 +1,6 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
+import type { Page } from "playwright-core";
 import { connectToChromium } from "./cdp.js";
 import { step } from "./steps.js";
 import { REDACTED_FIELD_SENTINEL } from "./actions/registry.js";
@@ -55,6 +56,39 @@ function sleep(ms: number): Promise<void> {
 // "password") are detected here, in-page, before anything ever
 // crosses back to Node -- the real keystroke content for those fields
 // never leaves the browser at all, not even transiently.
+// Every helper below is a `const` arrow-function expression, not a
+// `function name() {}` declaration -- found empirically that esbuild
+// (tsx's transpiler) wraps NAMED function declarations in a
+// `__name(fn, "fn")` helper call to preserve `.name`, and since these
+// are declared *inside* installRecorderInPage, that wrapping call
+// lands inside its own body, so it comes along when Playwright
+// stringifies the whole outer function to ship it into the page --
+// `__name` doesn't exist in that isolated browser context, so it
+// throws. Arrow-function expressions assigned to `const` don't get
+// this treatment. See docs/PROJECT_PLAN.md's decision log.
+// tsx/esbuild wraps a function EXPRESSION in a `__name(fn, "name")`
+// helper call whenever it's assigned to a local const/let binding --
+// confirmed directly (not guessed): `const f = (x) => x` transpiles to
+// `const f = __name(x => x, "f")`, while the exact same arrow function
+// passed as a bare argument or assigned to a property does NOT get
+// wrapped. installRecorderInPage below declares several such local
+// consts (computeSelector/isCredentialField/flush), so their wrapping
+// calls end up embedded inside its own body -- which matters because
+// that's exactly the text Playwright ships into the page when this
+// function is handed to page.evaluate(). `__name` doesn't exist in
+// that isolated browser context, so it throws. Rather than avoid every
+// local-const pattern in every future in-page function (impractical),
+// this defines a permanent, harmless `window.__name` passthrough shim
+// once per page -- cheap, and fixes the whole class of issue, not just
+// this one call site.
+async function installRecorderWithShim(page: Page): Promise<void> {
+  await page.evaluate(() => {
+    const w = window as unknown as { __name?: (fn: unknown, name: string) => unknown };
+    w.__name = w.__name || ((fn: unknown) => fn);
+  });
+  await page.evaluate(installRecorderInPage);
+}
+
 function installRecorderInPage(): void {
   const w = window as unknown as {
     __webopRecorderInstalled?: boolean;
@@ -64,7 +98,7 @@ function installRecorderInPage(): void {
   if (w.__webopRecorderInstalled) return;
   w.__webopRecorderInstalled = true;
 
-  function computeSelector(el: Element): string {
+  const computeSelector = (el: Element): string => {
     if (el.id) return `#${CSS.escape(el.id)}`;
     const testId = el.getAttribute("data-testid");
     if (testId) return `[data-testid="${testId}"]`;
@@ -72,7 +106,15 @@ function installRecorderInPage(): void {
     if (aria) return `[aria-label="${aria}"]`;
     const text = (el.textContent || "").trim();
     if (text && text.length > 0 && text.length < 60) {
-      return `text=${text}`;
+      // Quoted -- Playwright's text= engine treats an UNQUOTED pattern
+      // as a case-insensitive substring match, found empirically to
+      // cause real ambiguity on replay (e.g. "Transfers" also
+      // substring-matches a "Payments and Transfers" parent link
+      // elsewhere on the same page, and clickSmart's .first() then
+      // clicks whichever happens to come first in DOM order -- not
+      // necessarily the one that was actually clicked when recorded).
+      // Quoting requires the FULL text to match exactly instead.
+      return `text="${text.replace(/"/g, '\\"')}"`;
     }
     const parts: string[] = [];
     let node: Element | null = el;
@@ -86,25 +128,25 @@ function installRecorderInPage(): void {
       node = node.parentElement;
     }
     return parts.join(" > ");
-  }
+  };
 
   let pending: { selector: string; el: Element; redacted: boolean } | null = null;
 
-  function isCredentialField(el: Element): boolean {
+  const isCredentialField = (el: Element): boolean => {
     const type = (el.getAttribute("type") || "").toLowerCase();
     if (type === "password") return true;
     const autocomplete = (el.getAttribute("autocomplete") || "").toLowerCase();
     return autocomplete.includes("password");
-  }
+  };
 
-  function flush(): void {
+  const flush = (): void => {
     if (!pending) return;
     const { selector, el, redacted } = pending;
     pending = null;
     const value = redacted ? null : (el as HTMLInputElement).value ?? "";
     if (!redacted && !value) return; // nothing actually typed, e.g. click-then-blur
     w.__webopRecordEvent__?.({ kind: "typed", selector, text: value, at: Date.now() });
-  }
+  };
   w.__webopFlushPending = flush;
 
   document.addEventListener(
@@ -114,6 +156,16 @@ function installRecorderInPage(): void {
       if (!el || !("value" in el)) return;
       const tag = el.tagName;
       if (tag !== "INPUT" && tag !== "TEXTAREA") return;
+      // Flush whatever was pending for a DIFFERENT field first -- found
+      // empirically that programmatic fills (Playwright's .fill(), used
+      // by typeText/the recorder's own test harness) move between
+      // fields without an intervening click/Tab/Enter, so without this
+      // check every field except the very last one typed into was
+      // silently dropped (overwritten by the next field's input event
+      // before ever being flushed).
+      if (pending && pending.el !== el) {
+        flush();
+      }
       const redacted = isCredentialField(el);
       pending = { selector: computeSelector(el), el, redacted };
     },
@@ -195,12 +247,12 @@ async function main(): Promise<void> {
     await page.exposeFunction("__webopRecordEvent__", (event: RawEvent) => {
       rawEvents.push(event);
     });
-    await page.evaluate(installRecorderInPage);
+    await installRecorderWithShim(page);
     // Re-install after any in-session navigation (SPA route changes don't
     // trigger this, but a genuine full page load would) -- cheap and
     // idempotent thanks to the __webopRecorderInstalled guard above.
     page.on("load", async () => {
-      await page.evaluate(installRecorderInPage).catch(() => {});
+      await installRecorderWithShim(page).catch(() => {});
     });
   });
 

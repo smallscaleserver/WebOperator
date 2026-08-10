@@ -345,8 +345,69 @@ http://localhost:4000/monitors/scb-business-anywhere/live
   ไม่กรอกอะไร ใช้ได้หลังคุณ login เองเสร็จแล้ว เพื่อดูโครงหน้าที่
   login สำเร็จโดยไม่ต้องให้บอทแตะรหัสผ่านเลย
 
-ยังไม่มี login/OTP automation หรือ monitor สำหรับเว็บนี้ — เป็นแค่
-เครื่องมือช่วยดูหน้าจอ/วิเคราะห์หน้าหลัง login ด้วยตัวเองเท่านั้น
+(อัปเดต: ตอนนี้มี balance/transaction monitor จริงพร้อม Telegram
+notification และฟีเจอร์ record→analyze→run แล้วสำหรับ lane นี้ — ดู
+`docs/PROJECT_PLAN.md`/`docs/AGENT_HANDOFF.md` decision log สำหรับ
+รายละเอียดเต็ม ไม่ได้ย่อไว้ในไฟล์นี้เพื่อกันซ้ำซ้อน ยังคงยึดหลักเดิม
+เด็ดขาด: บอทไม่แตะ credential/OTP จริง ไม่ว่ากรณีใด)
+
+---
+
+#### ทดสอบ SCB Mock (mock บัญชีธนาคารจริง สำหรับ dev/test เท่านั้น)
+
+`services/scb-mock` เป็นเว็บจำลองหน้าตา/โครงสร้าง DOM ของ SCB Business
+Anywhere (บัญชีจริงของผู้ใช้ที่ lane `scb-business-anywhere-1` คุยด้วย
+ตามปกติ) — **แยก isolated เด็ดขาดเหมือน `services/xc-bank`** ไม่ share
+code/DB ใด ๆ กับ WebOperator สื่อสารกันได้ทาง browser/HTTP เท่านั้น
+สร้างขึ้นเพื่อทดสอบ record→analyze→run และ monitor logic แบบปลอดภัย
+100% ก่อนแตะบัญชีจริง
+
+**Username/password ของ mock นี้ไม่ใช่ secret จริง** — ใส่ค่าอะไรก็ได้
+(non-empty) ไม่ตรวจสอบกับอะไรทั้งสิ้น **ข้อจำกัดสำคัญยังคงเดิม**: ห้าม
+automate login/OTP ของเว็บ SCB **จริง** ไม่ว่ากรณีใด — mock นี้มีไว้ให้
+ทดสอบเฉพาะกับตัวมันเองเท่านั้น
+
+**เริ่ม scb-mock เพิ่มจากข้อ 2**
+
+```bash
+docker compose up -d scb-mock
+```
+
+เข้าถึงได้จาก host โดยตรงที่ <http://localhost:4101/login> (สำหรับดู
+เฉยๆ) แต่การทดสอบจริงต้องผ่าน lane `scb-business-anywhere-1` เพราะ
+สคริปต์ที่ใช้ทดสอบ (`check-transactions.ts`, `select-company.ts`,
+`record-actions.ts`) ทั้งหมดผูกกับ lane นี้โดยเฉพาะ — รัน workflow
+`scb-business-anywhere-mock-open-login` (ผ่าน `docker compose run`
+ตรง ๆ เพราะ workflow ที่ขึ้นต้นด้วย `scb-business-anywhere` ถูกกันไว้
+ไม่ให้ขึ้นในรายการ Workflows ทั่วไปโดยเจตนา — กันไม่ให้เผลอรันกับ
+browser จริง) เพื่อ navigate ไปหน้า mock แล้วจึงใช้ปุ่ม/ฟีเจอร์ต่าง ๆ
+ในหน้า SCB lane live page (`/monitors/scb-business-anywhere/live`)
+ได้ตามปกติ (balance monitor, company switcher, Recorder) เหมือนใช้
+กับบัญชีจริงทุกอย่าง
+
+**สิ่งที่ทดสอบได้กับ mock นี้:**
+
+- Login สองหน้า (username → password) — mock มี label
+  "ชื่อผู้ใช้งาน" ตรงกับที่ `check-transactions.ts` ใช้ตรวจ session
+  หลุดจริง
+- Balance/transaction extraction, company switcher (ใช้ชื่อบริษัท 3
+  ชื่อเดียวกับที่ `company-switcher.ts` รู้จัก), กลไก "Last Updated /
+  Refresh ไม่ auto-update" (เหมือนเว็บจริงเป๊ะ — reload เฉยๆ ยอดไม่ขยับ
+  ต้องกด Refresh)
+- **Session-timeout overlay** — ปุ่ม "Simulate session timeout (dev)"
+  บนหน้า Account Summary/Transfer จำลอง popup "you have been logged
+  out" แบบเดียวกับเว็บจริง (ทับหน้าจริง บล็อกคลิกไปยัง element ข้างใต้
+  จริง ไม่ auto-bypass ต้องกด OK เองหรือทดสอบผ่าน logic เท่านั้น) — ใช้
+  ทดสอบว่า recorder/challenge-handling เห็น popup ได้จริง
+- **หน้า Transfer จำลอง** (`/transfer`) — ฟอร์ม From/To Account, Amount,
+  Memo → หน้า confirm → mock success page ("no real funds were
+  moved") ไม่มีทางโอนเงินจริงได้ไม่ว่ากรณีใด — มีไว้ทดสอบ **record→
+  analyze→run และ risky-keyword confirm gate โดยเฉพาะ**: บันทึกการคลิก
+  ผ่าน Transfer/Confirm Transfer แล้วลอง Run สคริปต์ที่บันทึกไว้ — ควร
+  หยุดรอ `/confirm` ทาง Telegram ก่อนทุกครั้งที่ถึง step ที่มีคำว่า
+  transfer/confirm/submit ฯลฯ (ดู `DANGEROUS_KEYWORDS` ใน
+  `services/control-panel/src/scb-replay.ts`) — ทดสอบ `/cancel` ด้วย
+  เพื่อยืนยันว่ายกเลิกได้จริงโดยไม่กดปุ่มจริงบนหน้า mock
 
 ---
 

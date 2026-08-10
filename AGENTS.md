@@ -788,6 +788,61 @@ site — deliberately.** What exists so far is isolation-only:
   re-select the correct company before the monitor's data can be
   trusted again — not yet automated.
 
+- **Record → analyze → run** — the first capability on this lane beyond
+  strictly read-only, built only after explicit scope confirmation
+  (AskUserQuestion) that the user wanted it against the real account.
+  Three new action types in `services/worker/src/actions/registry.ts`
+  (`clickSmart` element+pixel-fallback, `pressKey`, `typeText`); new
+  `record-actions.ts` observes the already-open page (never navigates)
+  via injected page-level listeners, hard-refuses to start while the
+  login page is showing, and **redacts credential fields in-page**
+  (password-type/`autocomplete=*password*`) before anything ever
+  crosses back to Node — the sentinel it substitutes
+  (`REDACTED_FIELD_SENTINEL`) makes `typeText` throw loudly on replay
+  rather than silently skip or type a placeholder. Saved scripts run
+  through a generalized `runWorkflowOnLane()` and can be triggered
+  manually, on a schedule, or via a new Telegram `/run <name>` — the
+  one deliberate non-read-only Telegram command this project has,
+  documented as such in `telegram-commands.ts`. Every risky-keyword
+  step (`services/control-panel/src/scb-replay.ts`'s
+  `DANGEROUS_KEYWORDS` — transfer/pay/confirm/submit/โอนเงิน/ชำระ/
+  ยืนยัน/etc.) pauses mid-replay and requires a live `/confirm` in
+  Telegram before it runs — best-effort, not a hard block, per
+  explicit user decision; everything else in a script runs with no
+  gate. Two real, generalizable bugs found and fixed live: tsx/esbuild
+  wraps function *expressions* assigned to a local const/let (not just
+  named declarations) in a `__name(fn,"name")` helper, which breaks
+  when that function is shipped into a page via `page.evaluate()` —
+  fixed with a one-time `window.__name` passthrough shim, not by
+  avoiding local-const patterns everywhere; and `run-workflow.ts`'s
+  own page-reset step (closes all pages, opens one fresh) silently
+  broke cross-segment continuity when replay ran each segment through
+  it — fixed with an opt-in `KEEP_EXISTING_PAGE=1` env var so a
+  replay's segments continue on the same page instead of resetting
+  between each one. Full writeup: `docs/PROJECT_PLAN.md`'s decision
+  log.
+- **`services/scb-mock/`** — an isolated mock of SCB Business Anywhere
+  (same isolation posture as `services/xc-bank`: no shared code/DB/
+  queue, HTTP-only channel), built so record→analyze→run (and the
+  balance monitor) can be tested end-to-end without ever touching the
+  real account. Its DOM text/structure deliberately mirrors the real
+  site closely enough that `check-transactions.ts`/`select-company.ts`/
+  `record-actions.ts` run against it completely unchanged — including
+  reproducing the real site's own "Last Updated / Refresh doesn't
+  auto-poll" behavior and a real parsing quirk (`Terminal No.: Teller
+  No.` when that field is blank) observed on the actual account.
+  Includes a dev-triggerable session-timeout overlay (real position:
+  fixed overlay that blocks underlying clicks, same mechanism as the
+  real site's own idle-timeout dialog — no auto-dismiss, only a real
+  "OK" click clears it) and a `/transfer` page (mock-only, never moves
+  real funds) specifically so the risky-keyword confirm gate has
+  something safe to test against before ever pointing at anything
+  real. Mock username/password aren't real secrets — any non-empty
+  value works. **The real-account boundary is unchanged**: this mock
+  exists so record→analyze→run could be *tested* safely, not as a
+  loophole — automating login/OTP on the real SCB site remains
+  forbidden, full stop.
+
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
 
@@ -813,6 +868,7 @@ services/worker/workflows/    Named JSON workflow definitions run by run-workflo
 services/worker/src/gmail/    Phase 3 Gmail OAuth/API scaffold, dev/local, host-run (not in Docker) -- see decision log
 services/browser-worker/firefox-launcher/  Node script (launch-firefox.js) that runs Playwright's own Firefox build as a launchServer
 services/xc-bank/             Isolated mock third-party bank site (Node/Express, in-memory only) for browser-automation testing -- no shared code/DB/queue with WebOperator
+services/scb-mock/            Isolated mock of SCB Business Anywhere (same posture as xc-bank) -- dev/test only, for safely testing record->analyze->run before touching the real account
 data/profiles/                Bind-mounted browser profiles (gitignored, dev-only, unencrypted)
 data/worker-output/           Worker output (screenshots etc.), gitignored
 data/sessions/                Saved storageState session files (gitignored, dev-only, unencrypted)

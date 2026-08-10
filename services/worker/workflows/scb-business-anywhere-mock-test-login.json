@@ -1,0 +1,11 @@
+{
+  "name": "scb-business-anywhere-mock-test-login",
+  "siteId": "scb-business-anywhere",
+  "steps": [
+    { "type": "navigate", "params": { "url": "http://scb-mock:3000/login" } },
+    { "type": "typeText", "params": { "selector": "#username", "text": "mocktester" } },
+    { "type": "clickSmart", "params": { "selector": "text=Next", "x": 300, "y": 300 } },
+    { "type": "typeText", "params": { "selector": "#password", "text": "mockpass" } },
+    { "type": "clickSmart", "params": { "selector": "text=Sign In", "x": 300, "y": 300 } }
+  ]
+}
