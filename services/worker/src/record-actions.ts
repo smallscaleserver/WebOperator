@@ -19,6 +19,19 @@ const POLL_INTERVAL_MS = 1000;
 // just because a human forgot to click Stop.
 const MAX_DURATION_MS = 15 * 60 * 1000;
 
+// Best-effort credential-field signal, shared by both the page-level
+// guard (below, via a CSS selector built from this list) and the
+// in-page per-field redaction (installRecorderInPage's
+// isCredentialField). type="password" is the one *structural*
+// signal that's reliably present on real login forms; the rest are
+// heuristic (id/name/autocomplete containing one of these words) to
+// also catch OTP/PIN/token/secret-style fields that aren't literally
+// type="password" but are still clearly credential-shaped. This is
+// NOT a guarantee -- a field that matches none of these (a custom
+// masked-text widget with an unrelated id, for instance) won't be
+// caught. Documented plainly in docs/PROJECT_PLAN.md.
+const CREDENTIAL_HINT_KEYWORDS = ["password", "otp", "pin", "token", "secret"];
+
 interface RawEvent {
   kind: "click" | "typed" | "key";
   selector?: string;
@@ -132,11 +145,20 @@ function installRecorderInPage(): void {
 
   let pending: { selector: string; el: Element; redacted: boolean } | null = null;
 
+  // Keyword list duplicated here (not imported/shared) because this
+  // whole function is shipped into the browser as a string via
+  // page.evaluate() -- it can't reference a Node-side module binding.
+  // Keep in sync with CREDENTIAL_HINT_KEYWORDS above; both exist so
+  // this in-page redaction check and the Node-side page-level guard
+  // agree on what counts as "credential-shaped."
   const isCredentialField = (el: Element): boolean => {
     const type = (el.getAttribute("type") || "").toLowerCase();
     if (type === "password") return true;
+    const hints = ["password", "otp", "pin", "token", "secret"];
     const autocomplete = (el.getAttribute("autocomplete") || "").toLowerCase();
-    return autocomplete.includes("password");
+    const id = (el.getAttribute("id") || "").toLowerCase();
+    const name = (el.getAttribute("name") || "").toLowerCase();
+    return hints.some((h) => autocomplete.includes(h) || id.includes(h) || name.includes(h));
   };
 
   const flush = (): void => {
@@ -230,15 +252,31 @@ async function main(): Promise<void> {
   const page = context.pages()[0] ?? (await context.newPage());
 
   await step("guard-not-login-page", async () => {
-    // Same login-page marker as check-transactions.ts. Recording the
-    // login flow isn't just discouraged -- it's structurally impossible
-    // with this tool, on purpose. If a human genuinely needs to log in
-    // first, they do that manually via noVNC, same as every other lane
-    // interaction this session, then start recording afterward.
-    const loginField = page.getByText("ชื่อผู้ใช้งาน", { exact: true }).first();
-    const onLoginPage = await loginField.isVisible({ timeout: 2000 }).catch(() => false);
+    // Universal, not SCB-specific: refuse to start while ANY
+    // credential-shaped field is visible, on any site. type="password"
+    // is a real structural DOM signal; the id/name/autocomplete
+    // keyword checks are heuristic, best-effort (see
+    // CREDENTIAL_HINT_KEYWORDS's own comment) -- together this is the
+    // same criterion installRecorderInPage's isCredentialField() uses
+    // per-field for redaction, so the page-level guard and the
+    // field-level redaction always agree with each other. Recording
+    // the login flow isn't just discouraged -- it's structurally
+    // impossible with this tool, on purpose. If a human genuinely
+    // needs to log in first, they do that manually via noVNC, then
+    // start recording afterward.
+    const attrParts = CREDENTIAL_HINT_KEYWORDS.flatMap((kw) => [
+      `input[autocomplete*="${kw}" i]`,
+      `input[id*="${kw}" i]`,
+      `input[name*="${kw}" i]`,
+    ]);
+    const credentialSelector = ['input[type="password"]', ...attrParts].join(", ");
+    const onLoginPage = await page
+      .locator(credentialSelector)
+      .first()
+      .isVisible({ timeout: 2000 })
+      .catch(() => false);
     if (onLoginPage) {
-      throw new Error("REFUSED: SCB login page is currently showing -- recording the login flow is not permitted, log in manually first");
+      throw new Error("REFUSED: a credential-shaped field (password/OTP/PIN/token/secret) is currently visible on this page -- recording a login/credential flow is not permitted, log in manually first");
     }
   });
 

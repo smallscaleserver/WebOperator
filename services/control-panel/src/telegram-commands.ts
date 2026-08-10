@@ -1,9 +1,10 @@
 import { readFile, writeFile, mkdir } from "node:fs/promises";
 import path from "node:path";
-import { REPO_ROOT, listScbRecordings } from "./exec.js";
+import { REPO_ROOT, listRecordings } from "./exec.js";
 import { getTelegramUpdates, isKnownTelegramChat, sendTelegramMessage } from "./telegram.js";
-import { enqueueScbTelegramScreenshot, enqueueScbTelegramStatus, enqueueScbRunRecording } from "./queue.js";
-import { resolvePendingConfirmation } from "./scb-replay.js";
+import { enqueueScbTelegramScreenshot, enqueueScbTelegramStatus, enqueueRunRecording } from "./queue.js";
+import { resolvePendingConfirmation } from "./replay-engine.js";
+import { laneIds } from "./lanes.js";
 
 const OFFSET_PATH = path.join(REPO_ROOT, "data", "telegram-command-offset.json");
 const POLL_INTERVAL_MS = 5000;
@@ -22,32 +23,33 @@ async function saveOffset(offset: number): Promise<void> {
   await writeFile(OFFSET_PATH, JSON.stringify({ offset }), "utf-8");
 }
 
-// Originally strictly read-only (/status, /screenshot). /confirm,
-// /cancel, and /run are a deliberate, explicit exception to that,
-// added per direct request -- NOT a drift from the boundary below,
-// a conscious decision recorded in docs/PROJECT_PLAN.md's decision
-// log. Even so, they're narrowly scoped, not a general text-to-
-// automation channel:
-//   - /confirm, /cancel only ever do anything when scb-replay.ts has
-//     a pendingConfirmation waiting (a risky-keyword step mid-replay,
-//     e.g. Transfer/Pay/Confirm/Submit) -- a stray reply with nothing
-//     pending is a documented no-op.
+// Originally strictly read-only (/status, /screenshot -- both SCB
+// lane-specific). /confirm, /cancel, and /run are a deliberate,
+// explicit exception to that, added per direct request -- NOT a drift
+// from the boundary below, a conscious decision recorded in
+// docs/PROJECT_PLAN.md's decision log. Even so, they're narrowly
+// scoped, not a general text-to-automation channel:
+//   - /confirm, /cancel only ever do anything when replay-engine.ts
+//     has a pendingConfirmation waiting (a risky-keyword step
+//     mid-replay, e.g. Transfer/Pay/Confirm/Submit) -- a stray reply
+//     with nothing pending is a documented no-op.
 //   - /run <name> only runs a script that was already recorded,
-//     reviewed, and explicitly saved through the Recorder UI -- it
-//     can never execute arbitrary text as actions, and every
-//     recording it can point to already had its own credential-field
-//     redaction applied at record time (see record-actions.ts).
+//     reviewed, and explicitly saved through the Recorder UI, on
+//     whichever lane it was saved against (see lanes.ts) -- it can
+//     never execute arbitrary text as actions, and every recording it
+//     can point to already had its own credential-field redaction
+//     applied at record time (see record-actions.ts).
 // Still never expand this to typing/clicking/navigating from
 // arbitrary Telegram text directly -- that remains the hard line (see
 // docs/PROJECT_PLAN.md decision log). Command lookup is
 // case-insensitive and ignores a "@botname" suffix (Telegram appends
 // this automatically for commands used in a group).
 const HELP_TEXT = [
-  "🤖 WebOperator SCB monitor — available commands:",
+  "🤖 WebOperator — available commands:",
   "",
-  "/status — current balance + latest transactions on the page right now",
-  "/screenshot — a fresh full-page screenshot of the SCB lane's current browser state",
-  "/run <name> — run a saved recorded script against the SCB lane",
+  "/status — SCB lane: current balance + latest transactions on the page right now",
+  "/screenshot — SCB lane: a fresh full-page screenshot of its current browser state",
+  "/run <name> — run a saved recorded script (searches every lane for that name)",
   "/confirm — approve a script's currently-paused risky step (Transfer/Pay/Confirm/Submit/etc.)",
   "/cancel — reject a script's currently-paused risky step",
   "/help — this list",
@@ -62,18 +64,32 @@ async function handleConfirm(confirmed: boolean): Promise<void> {
   }
 }
 
+// No lane prefix in the Telegram UX (/run <name>, not /run <lane> <name>)
+// -- searches every known lane for a saved recording with this name and
+// runs it wherever found. Ambiguous (same name saved on more than one
+// lane) asks the human to rename/delete one rather than silently
+// picking -- this can only ever happen if someone deliberately reuses
+// a name across lanes, not from normal use of the Recorder UI.
 async function handleRun(recordingName: string | undefined): Promise<void> {
   if (!recordingName) {
     await sendTelegramMessage("Usage: /run <name> — see the Recorder page for saved script names.");
     return;
   }
-  const known = await listScbRecordings();
-  if (!known.includes(recordingName)) {
-    await sendTelegramMessage(`No saved recording named "${recordingName}". Saved: ${known.join(", ") || "(none)"}`);
+  const matches: string[] = [];
+  for (const laneId of laneIds()) {
+    const known = await listRecordings(laneId);
+    if (known.includes(recordingName)) matches.push(laneId);
+  }
+  if (matches.length === 0) {
+    await sendTelegramMessage(`No saved recording named "${recordingName}" on any lane.`);
     return;
   }
-  await enqueueScbRunRecording(recordingName);
-  await sendTelegramMessage(`▶️ Running "${recordingName}"...`);
+  if (matches.length > 1) {
+    await sendTelegramMessage(`"${recordingName}" is saved on more than one lane (${matches.join(", ")}) — rename or delete one via the Recorder UI first.`);
+    return;
+  }
+  await enqueueRunRecording(matches[0], recordingName);
+  await sendTelegramMessage(`▶️ Running "${recordingName}" (lane: ${matches[0]})...`);
 }
 
 const COMMANDS: Record<string, (arg?: string) => Promise<unknown>> = {

@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import path from "node:path";
 import { readdir, readFile, writeFile, mkdir, unlink } from "node:fs/promises";
 import { ACTIONS, type ActionName } from "./actions.js";
+import { getLane, type LaneConfig } from "./lanes.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -302,34 +303,38 @@ export function parseScbBalanceSummary(stdout: string): ScbBalanceSummary | unde
   return undefined;
 }
 
-// Record → analyze → run, scoped to the SCB lane. Host-side path for
-// reading/writing/listing saved scripts and for writing the stop-flag
-// file directly (no docker call needed to signal stop — see
-// record-actions.ts's own polling loop). Entirely under data/, which
-// is gitignored wholesale, same as every other lane-scoped state file.
-const SCB_RECORDINGS_HOST_DIR = path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-1", "recordings");
-// Container-side path (see docker-compose.yml's recordings volume
-// mount for worker-scb-business-anywhere-1) -- passed as WORKFLOWS_DIR
-// when replaying a saved recording through run-workflow.ts.
-const SCB_RECORDINGS_CONTAINER_DIR = "/app/recordings";
+// Record → analyze → run -- lane-parameterized (see lanes.ts). Started
+// out hard-wired to the SCB lane specifically; generalized after an
+// explicit request that this work against any lane/website, not just
+// SCB, with no per-lane code (see docs/PROJECT_PLAN.md's decision
+// log). Every function below resolves its host/container paths via
+// getLane(laneId) rather than a hardcoded SCB path.
 
 // Long-running by design: this resolves only once the human clicks
 // Stop (or the recorder's own 15-minute max duration elapses) — not a
-// quick one-shot action like every other Scb* function here, so it
-// needs a much longer timeout than EXEC_OPTS's default 120s. Whatever
-// calls this (a queued job) is expected to just await it; the SCB
-// queue's concurrency=1 already means nothing else can touch this
-// lane's browser while a recording is in progress, which is exactly
-// the desired behavior (a scheduled monitor check firing mid-recording
-// would be visually confusing at best).
+// quick one-shot action, so it needs a much longer timeout than
+// EXEC_OPTS's default 120s. Whatever calls this (a queued job) is
+// expected to just await it; the shared queue's concurrency=1 already
+// means nothing else can touch that lane's browser while a recording
+// is in progress, which is exactly the desired behavior (a scheduled
+// job firing mid-recording would be visually confusing at best).
 const RECORDING_EXEC_OPTS = { cwd: REPO_ROOT, timeout: 16 * 60 * 1000, maxBuffer: 5 * 1024 * 1024 };
 
-export async function runScbStartRecording(runId: string): Promise<ActionResult> {
-  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+function requireLane(laneId: string): LaneConfig {
+  const lane = getLane(laneId);
+  if (!lane) {
+    throw new Error(`Unknown lane "${laneId}"`);
+  }
+  return lane;
+}
+
+export async function runStartRecording(laneId: string, runId: string): Promise<ActionResult> {
+  const lane = requireLane(laneId);
+  await mkdir(lane.recordingsHostDir, { recursive: true });
   try {
     const { stdout, stderr } = await execFileAsync(
       "docker",
-      ["compose", "run", "--rm", "-e", `RECORDING_RUN_ID=${runId}`, SCB_LANE_SERVICE, "npm", "run", "record-actions"],
+      ["compose", "run", "--rm", "-e", `RECORDING_RUN_ID=${runId}`, lane.workerService, "npm", "run", "record-actions"],
       RECORDING_EXEC_OPTS,
     );
     return { ok: true, stdout, stderr, exitCode: 0, steps: parseSteps(stdout) };
@@ -350,12 +355,13 @@ export async function runScbStartRecording(runId: string): Promise<ActionResult>
 // Writing this file directly (no docker call) is what actually stops a
 // recording session -- record-actions.ts polls for it every ~1s. This
 // is the reason recording uses a stop-flag file at all instead of a
-// second queued "stop" job: the SCB queue only has one concurrency
-// slot, and it's occupied by the recording job itself for the whole
-// session, so a queued stop job would never get a turn to run.
-export async function writeScbRecordingStopFlag(runId: string): Promise<void> {
-  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
-  await writeFile(path.join(SCB_RECORDINGS_HOST_DIR, `.stop-${runId}`), "");
+// second queued "stop" job: the lane's queue slot is occupied by the
+// recording job itself for the whole session, so a queued stop job
+// would never get a turn to run.
+export async function writeRecordingStopFlag(laneId: string, runId: string): Promise<void> {
+  const lane = requireLane(laneId);
+  await mkdir(lane.recordingsHostDir, { recursive: true });
+  await writeFile(path.join(lane.recordingsHostDir, `.stop-${runId}`), "");
 }
 
 export interface CompiledRecordingStep {
@@ -388,51 +394,58 @@ export function isValidRecordingName(name: string): boolean {
   return SAFE_RECORDING_NAME.test(name);
 }
 
-export async function listScbRecordings(): Promise<string[]> {
+export async function listRecordings(laneId: string): Promise<string[]> {
+  const lane = requireLane(laneId);
   try {
-    const entries = await readdir(SCB_RECORDINGS_HOST_DIR);
-    return entries.filter((f) => f.endsWith(".json")).map((f) => f.slice(0, -".json".length));
+    const entries = await readdir(lane.recordingsHostDir);
+    return entries
+      .filter((f) => f.endsWith(".json") && !f.startsWith("."))
+      .map((f) => f.slice(0, -".json".length));
   } catch {
     return [];
   }
 }
 
-export async function saveScbRecording(name: string, steps: CompiledRecordingStep[]): Promise<void> {
+export async function saveRecording(laneId: string, name: string, steps: CompiledRecordingStep[]): Promise<void> {
   if (!isValidRecordingName(name)) {
     throw new Error(`Invalid recording name "${name}" — use only letters, numbers, "-", "_"`);
   }
-  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
-  const filePath = path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`);
+  const lane = requireLane(laneId);
+  await mkdir(lane.recordingsHostDir, { recursive: true });
+  const filePath = path.join(lane.recordingsHostDir, `${name}.json`);
   await writeFile(filePath, JSON.stringify({ name, steps }, null, 2), "utf-8");
 }
 
-export async function deleteScbRecording(name: string): Promise<void> {
+export async function deleteRecording(laneId: string, name: string): Promise<void> {
   if (!isValidRecordingName(name)) return;
-  await unlink(path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`)).catch(() => {});
+  const lane = requireLane(laneId);
+  await unlink(path.join(lane.recordingsHostDir, `${name}.json`)).catch(() => {});
 }
 
-export interface ScbRecordingFile {
+export interface RecordingFile {
   name: string;
   steps: CompiledRecordingStep[];
 }
 
-export async function readScbRecording(name: string): Promise<ScbRecordingFile | undefined> {
+export async function readRecording(laneId: string, name: string): Promise<RecordingFile | undefined> {
   if (!isValidRecordingName(name)) return undefined;
+  const lane = getLane(laneId);
+  if (!lane) return undefined;
   try {
-    const raw = await readFile(path.join(SCB_RECORDINGS_HOST_DIR, `${name}.json`), "utf-8");
-    return JSON.parse(raw) as ScbRecordingFile;
+    const raw = await readFile(path.join(lane.recordingsHostDir, `${name}.json`), "utf-8");
+    return JSON.parse(raw) as RecordingFile;
   } catch {
     return undefined;
   }
 }
 
-// Runs one saved recording (or, from scb-replay.ts, one *segment* of
-// one -- a small temp file with the same {name, steps} shape) against
-// the SCB lane specifically, through the same generic run-workflow.ts
-// engine every other workflow uses, just pointed at this lane's own
+// Runs one saved recording (or, from replay-engine.ts, one *segment*
+// of one -- a small temp file with the same {name, steps} shape)
+// against a specific lane, through the same generic run-workflow.ts
+// engine every other workflow uses, just pointed at that lane's own
 // service and recordings directory instead of the shared browser.
 //
-// KEEP_EXISTING_PAGE=1 -- found live that scb-replay.ts's
+// KEEP_EXISTING_PAGE=1 -- found live that replay-engine.ts's
 // segment-by-segment execution was losing all page state (login,
 // filled form fields, current URL) between segments, because
 // run-workflow.ts's own page-reset step closed the page and opened a
@@ -442,21 +455,25 @@ export async function readScbRecording(name: string): Promise<ScbRecordingFile |
 // resetting it -- a replayed recording needs that same continuity,
 // not run-workflow.ts's monitor-loop-oriented "always start fresh"
 // behavior. See run-workflow.ts's own comment on this flag.
-export async function runScbRecording(name: string): Promise<ActionResult> {
-  return runWorkflowOnLane(name, SCB_LANE_SERVICE, SCB_RECORDINGS_CONTAINER_DIR, { KEEP_EXISTING_PAGE: "1" });
+export async function runRecording(laneId: string, name: string): Promise<ActionResult> {
+  const lane = requireLane(laneId);
+  return runWorkflowOnLane(name, lane.workerService, lane.recordingsContainerDir, { KEEP_EXISTING_PAGE: "1" });
 }
 
-export async function writeScbTempSegment(fileName: string, steps: CompiledRecordingStep[]): Promise<void> {
-  await mkdir(SCB_RECORDINGS_HOST_DIR, { recursive: true });
+export async function writeTempSegment(laneId: string, fileName: string, steps: CompiledRecordingStep[]): Promise<void> {
+  const lane = requireLane(laneId);
+  await mkdir(lane.recordingsHostDir, { recursive: true });
   await writeFile(
-    path.join(SCB_RECORDINGS_HOST_DIR, `${fileName}.json`),
+    path.join(lane.recordingsHostDir, `${fileName}.json`),
     JSON.stringify({ name: fileName, steps }, null, 2),
     "utf-8",
   );
 }
 
-export async function deleteScbTempSegment(fileName: string): Promise<void> {
-  await unlink(path.join(SCB_RECORDINGS_HOST_DIR, `${fileName}.json`)).catch(() => {});
+export async function deleteTempSegment(laneId: string, fileName: string): Promise<void> {
+  const lane = getLane(laneId);
+  if (!lane) return;
+  await unlink(path.join(lane.recordingsHostDir, `${fileName}.json`)).catch(() => {});
 }
 
 export interface LanePageAnalysis {

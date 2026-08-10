@@ -1,16 +1,14 @@
 import { mkdir, readFile, writeFile } from "node:fs/promises";
 import path from "node:path";
 import {
-  REPO_ROOT,
-  readScbRecording,
-  runScbRecording,
-  writeScbTempSegment,
-  deleteScbTempSegment,
+  readRecording,
+  runRecording,
+  writeTempSegment,
+  deleteTempSegment,
   type CompiledRecordingStep,
 } from "./exec.js";
+import { getLane, laneIds } from "./lanes.js";
 import { sendTelegramMessage } from "./telegram.js";
-
-const STATE_PATH = path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-1", "replay-state.json");
 
 // Checked case-insensitively against each step's selector/text params.
 // Best-effort, not a guarantee -- a real button whose text doesn't
@@ -18,6 +16,8 @@ const STATE_PATH = path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-
 // language) isn't caught. Documented plainly in docs/PROJECT_PLAN.md;
 // this is the one thing standing between a replayed script and a real
 // transaction, so it errs toward over-matching rather than under.
+// Deliberately lane-agnostic content -- these are generic risky-action
+// words, not specific to any one site.
 const DANGEROUS_KEYWORDS = [
   "transfer",
   "pay",
@@ -73,33 +73,54 @@ function emptyState(): ReplayState {
   return { pendingConfirmation: null, lastDecision: null, lastRunSummary: null, lastRunAt: null };
 }
 
-async function loadState(): Promise<ReplayState> {
+// Colocated with the lane's saved recordings, dotfile-prefixed so
+// listRecordings()'s existing ".json, not starting with a dot" filter
+// already excludes it automatically -- same convention temp segment
+// files already use, no special-casing needed there.
+function replayStatePath(laneId: string): string | undefined {
+  const lane = getLane(laneId);
+  return lane ? path.join(lane.recordingsHostDir, ".replay-state.json") : undefined;
+}
+
+async function loadState(laneId: string): Promise<ReplayState> {
+  const statePath = replayStatePath(laneId);
+  if (!statePath) return emptyState();
   try {
-    const raw = await readFile(STATE_PATH, "utf-8");
+    const raw = await readFile(statePath, "utf-8");
     return { ...emptyState(), ...(JSON.parse(raw) as Partial<ReplayState>) };
   } catch {
     return emptyState();
   }
 }
 
-async function saveState(state: ReplayState): Promise<void> {
-  await mkdir(path.dirname(STATE_PATH), { recursive: true });
-  await writeFile(STATE_PATH, JSON.stringify(state, null, 2), "utf-8");
+async function saveState(laneId: string, state: ReplayState): Promise<void> {
+  const statePath = replayStatePath(laneId);
+  if (!statePath) return;
+  await mkdir(path.dirname(statePath), { recursive: true });
+  await writeFile(statePath, JSON.stringify(state, null, 2), "utf-8");
 }
 
-export async function getReplayState(): Promise<ReplayState> {
-  return loadState();
+export async function getReplayState(laneId: string): Promise<ReplayState> {
+  return loadState(laneId);
 }
 
 // Called by telegram-commands.ts on an incoming /confirm or /cancel --
-// only meaningful when pendingConfirmation is currently set; a stray
-// reply with nothing pending is a documented no-op, not an error.
+// Telegram doesn't say which lane, so this checks every known lane for
+// a pending confirmation. Only one can ever be pending at a time
+// across ALL lanes (the whole control-panel shares one BullMQ queue
+// with concurrency=1, so at most one recording/replay job is ever
+// actually executing) -- a stray reply with nothing pending anywhere
+// is a documented no-op, not an error.
 export async function resolvePendingConfirmation(confirmed: boolean): Promise<boolean> {
-  const state = await loadState();
-  if (!state.pendingConfirmation) return false;
-  state.lastDecision = { runId: state.pendingConfirmation.runId, confirmed };
-  await saveState(state);
-  return true;
+  for (const laneId of laneIds()) {
+    const state = await loadState(laneId);
+    if (state.pendingConfirmation) {
+      state.lastDecision = { runId: state.pendingConfirmation.runId, confirmed };
+      await saveState(laneId, state);
+      return true;
+    }
+  }
+  return false;
 }
 
 function sleep(ms: number): Promise<void> {
@@ -115,17 +136,17 @@ const CONFIRM_TIMEOUT_MS = 10 * 60 * 1000;
 // Telegram too would race it for the same offset. Times out (aborts,
 // same as an explicit /cancel) if nothing arrives in time -- a script
 // must never sit forever waiting on a reply that isn't coming.
-async function waitForConfirmation(runId: string): Promise<boolean> {
+async function waitForConfirmation(laneId: string, runId: string): Promise<boolean> {
   const startedAt = Date.now();
   for (;;) {
-    const state = await loadState();
+    const state = await loadState(laneId);
     if (state.lastDecision?.runId === runId) {
       const confirmed = state.lastDecision.confirmed;
-      await saveState({ ...state, pendingConfirmation: null, lastDecision: null });
+      await saveState(laneId, { ...state, pendingConfirmation: null, lastDecision: null });
       return confirmed;
     }
     if (Date.now() - startedAt > CONFIRM_TIMEOUT_MS) {
-      await saveState({ ...state, pendingConfirmation: null });
+      await saveState(laneId, { ...state, pendingConfirmation: null });
       return false;
     }
     await sleep(CONFIRM_POLL_INTERVAL_MS);
@@ -138,19 +159,19 @@ export interface ReplayResult {
 }
 
 // Runs one saved recording segment by segment: everything up to the
-// next risky-keyword step runs as a normal workflow through the SCB
+// next risky-keyword step runs as a normal workflow through the given
 // lane's own worker; a risky step pauses first and requires a live
 // /confirm in Telegram (see DANGEROUS_KEYWORDS above) before it's
 // allowed to run. Never runs inside a single run-workflow.ts process --
 // orchestrated here so the pause-and-wait can happen between two
 // separate `docker compose run` invocations, without needing any new
 // cross-container communication.
-export async function runScbRecordingReplay(recordingName: string): Promise<ReplayResult> {
-  const recording = await readScbRecording(recordingName);
+export async function runRecordingReplay(laneId: string, recordingName: string): Promise<ReplayResult> {
+  const recording = await readRecording(laneId, recordingName);
   if (!recording) {
-    return { ok: false, summary: `No saved recording named "${recordingName}"` };
+    return { ok: false, summary: `No saved recording named "${recordingName}" on lane "${laneId}"` };
   }
-  const runId = `${recordingName}-${Date.now()}`;
+  const runId = `${laneId}-${recordingName}-${Date.now()}`;
   const steps = recording.steps;
 
   let segment: CompiledRecordingStep[] = [];
@@ -160,16 +181,16 @@ export async function runScbRecordingReplay(recordingName: string): Promise<Repl
     if (segment.length === 0) return { ok: true };
     const tempName = `.__segment-${runId}-${segmentIndex}`;
     segmentIndex += 1;
-    await writeScbTempSegment(tempName, segment);
+    await writeTempSegment(laneId, tempName, segment);
     segment = [];
     try {
-      const result = await runScbRecording(tempName);
+      const result = await runRecording(laneId, tempName);
       if (!result.ok) {
         return { ok: false, error: result.error ?? result.stderr ?? "Segment failed" };
       }
       return { ok: true };
     } finally {
-      await deleteScbTempSegment(tempName);
+      await deleteTempSegment(laneId, tempName);
     }
   }
 
@@ -183,7 +204,7 @@ export async function runScbRecordingReplay(recordingName: string): Promise<Repl
     const flushResult = await runSegment();
     if (!flushResult.ok) {
       const summary = `Stopped before step ${i + 1}: ${flushResult.error}`;
-      await saveState({ ...(await loadState()), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
+      await saveState(laneId, { ...(await loadState(laneId)), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
       return { ok: false, summary };
     }
 
@@ -195,16 +216,16 @@ export async function runScbRecordingReplay(recordingName: string): Promise<Repl
       stepDescription,
       sentAt: new Date().toISOString(),
     };
-    await saveState({ ...(await loadState()), pendingConfirmation: pending });
+    await saveState(laneId, { ...(await loadState(laneId)), pendingConfirmation: pending });
     await sendTelegramMessage(
-      `⚠️ Script "${recordingName}" กำลังจะทำ:\n${stepDescription}\n\nพิมพ์ /confirm เพื่อทำต่อ หรือ /cancel เพื่อยกเลิก (หมดเวลาอัตโนมัติใน 10 นาทีถ้าไม่ตอบ)`,
+      `⚠️ Script "${recordingName}" (lane: ${laneId}) กำลังจะทำ:\n${stepDescription}\n\nพิมพ์ /confirm เพื่อทำต่อ หรือ /cancel เพื่อยกเลิก (หมดเวลาอัตโนมัติใน 10 นาทีถ้าไม่ตอบ)`,
     );
 
-    const confirmed = await waitForConfirmation(runId);
+    const confirmed = await waitForConfirmation(laneId, runId);
     if (!confirmed) {
       const summary = `Cancelled (or timed out waiting for /confirm) at step ${i + 1}: ${stepDescription}`;
       await sendTelegramMessage(`🛑 Script "${recordingName}" ${summary}`);
-      await saveState({ ...(await loadState()), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
+      await saveState(laneId, { ...(await loadState(laneId)), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
       return { ok: false, summary };
     }
 
@@ -212,7 +233,7 @@ export async function runScbRecordingReplay(recordingName: string): Promise<Repl
     const stepResult = await runSegment();
     if (!stepResult.ok) {
       const summary = `Failed on confirmed risky step ${i + 1}: ${stepResult.error}`;
-      await saveState({ ...(await loadState()), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
+      await saveState(laneId, { ...(await loadState(laneId)), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
       return { ok: false, summary };
     }
   }
@@ -221,6 +242,6 @@ export async function runScbRecordingReplay(recordingName: string): Promise<Repl
   const summary = finalFlush.ok
     ? `Completed all ${steps.length} step(s) of "${recordingName}"`
     : `Stopped near the end: ${finalFlush.error}`;
-  await saveState({ ...(await loadState()), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
+  await saveState(laneId, { ...(await loadState(laneId)), lastRunSummary: summary, lastRunAt: new Date().toISOString() });
   return { ok: finalFlush.ok, summary };
 }

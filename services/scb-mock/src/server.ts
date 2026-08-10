@@ -146,7 +146,7 @@ function escapeAttr(s: string): string {
 }
 
 function loginPage(session: Session | undefined, error?: string): string {
-  const { username } = readUserPassMock();
+  const { username, password } = readUserPassMock();
   return page(
     "Log in",
     `<div class="auth-split">
@@ -155,12 +155,10 @@ function loginPage(session: Session | undefined, error?: string): string {
         <div class="auth-right-inner">
           <div class="auth-lang">EN</div>
           <h1>SCB Business Anywhere</h1>
-          <p class="hint">Mock only -- any non-empty username/password works, nothing is checked against anything real.</p>
-          <p class="hint">Pre-filled from <code>.userpassmock</code> -- edit that file (repo root) to change.</p>
           ${error ? `<p class="error">${error}</p>` : ""}
           <form method="post" action="/login">
             <label for="username">ชื่อผู้ใช้งาน</label>
-            <input id="username" name="username" value="${escapeAttr(username)}" autofocus />
+            <input id="username" name="username" autofocus />
             <button type="submit" style="margin-top:1.25rem;">Next</button>
           </form>
           <div class="user-guides">
@@ -169,6 +167,7 @@ function loginPage(session: Session | undefined, error?: string): string {
             <a href="#" onclick="return false;">How to Generate Payment Advices</a>
             <a href="#" onclick="return false;">All User Guides</a>
           </div>
+          <p class="hint" style="margin-top:1.5rem;">Mock only, nothing checked against anything real. From <code>.userpassmock</code>: username <strong>${escapeAttr(username)}</strong>, password <strong>${escapeAttr(password)}</strong></p>
         </div>
       </div>
     </div>`,
@@ -176,7 +175,7 @@ function loginPage(session: Session | undefined, error?: string): string {
 }
 
 function passwordPage(session: Session, error?: string): string {
-  const { password } = readUserPassMock();
+  const { username, password } = readUserPassMock();
   return page(
     "Password",
     `<div class="auth-split">
@@ -186,13 +185,13 @@ function passwordPage(session: Session, error?: string): string {
           <div class="auth-lang">EN</div>
           <h1>SCB Business Anywhere</h1>
           <p class="hint">Signing in as ${session.username}</p>
-          <p class="hint">Pre-filled from <code>.userpassmock</code> -- edit that file (repo root) to change.</p>
           ${error ? `<p class="error">${error}</p>` : ""}
           <form method="post" action="/password">
             <label for="password">Password</label>
-            <input id="password" name="password" type="password" value="${escapeAttr(password)}" autofocus />
+            <input id="password" name="password" type="password" autofocus />
             <button type="submit" style="margin-top:1.25rem;">Sign In</button>
           </form>
+          <p class="hint" style="margin-top:1.5rem;">Mock only, nothing checked against anything real. From <code>.userpassmock</code>: username <strong>${escapeAttr(username)}</strong>, password <strong>${escapeAttr(password)}</strong></p>
         </div>
       </div>
     </div>`,

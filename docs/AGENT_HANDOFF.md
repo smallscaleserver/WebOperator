@@ -3184,3 +3184,100 @@ Read this one first if picking the session back up cold.
   covers, these may be lower-priority now; ask the user. Commit/push
   status for this round: check `git status` and the conversation for
   whether this was committed before assuming either way.
+
+### 2026-08-10/11 (later) — Claude — record→analyze→run generalized to any lane; Xvfb stale-lock root cause fixed
+
+- Status: Done. Two threads this round: (1) fixed the real, previously
+  undiagnosed root cause of the "Failed to open a new tab"/"CDP
+  endpoint never became ready" instability logged in several prior
+  entries; (2) the user rejected further SCB-only iteration outright —
+  "ต้องทำให้ universal คือได้กับทุก web นะไม่เว้น... ไม่ใช่เราไปแก้
+  หน้านั้นๆ แต่เราต้องทำให้อัดได้" — and the whole record→analyze→run
+  feature was refactored from SCB-only to lane-agnostic.
+- Context, infra fix: `entrypoint.sh` never cleared Xvfb's own stale
+  `/tmp/.X99-lock` on restart, unlike it already did for Chromium's
+  profile lock a few lines below — a crashed/soft-restarted container
+  reused the same tmpfs, Xvfb refused to start ("Server is already
+  active for display 99"), but Fluxbox/Chromium/noVNC launched anyway
+  against a display that was never created, so CDP silently never
+  became reachable. This explains most of the flaky-restart pattern
+  logged across this whole session. Fixed with an `rm -f` before Xvfb
+  starts. Also fixed, unrelated: Fluxbox's `fbsetbg` wallpaper-setter
+  popped a blocking `xmessage` over noVNC with no `feh` installed
+  (cosmetic only) — fixed via a minimal custom `~/.fluxbox/startup`
+  that skips wallpaper-setting, not by installing a package.
+- Context, mock polish (small, before the pivot): login/password pages
+  redesigned to match the real SCB two-column layout; new
+  `.userpassmock` (gitignored, host-editable) pre-fills the mock's
+  login form, shown as gray hint text *below* the form rather than
+  inside the input boxes so the boxes still look like the real site's
+  clean empty ones.
+- Context, the generalization itself: new `services/control-panel/src/lanes.ts`
+  registry (`"shared"` — the pre-existing `browser-worker-chrome`/
+  `worker` pair already used by XC Bank/the-internet/demo/scb-mock —
+  and `"scb-business-anywhere-1"`); every recording/replay function in
+  `exec.ts`/`queue.ts`/`server.ts` now takes a `laneId`, routes are
+  `/api/lanes/:laneId/recordings/*` (always 404 on an unknown lane,
+  never a silent fallback to `shared`); `scb-replay.ts` renamed to
+  `replay-engine.ts`. The credential-page guard in `record-actions.ts`
+  changed from a literal Thai-text check (SCB's own username label,
+  useless on any other site) to a structural one: refuses while any
+  visible field looks credential-shaped (`type="password"`, or
+  `autocomplete`/`id`/`name` containing password/otp/pin/token/secret
+  — `CREDENTIAL_HINT_KEYWORDS`, shared with the in-page redaction so
+  both always agree) — explicitly documented as best-effort, not a
+  guarantee, per the user's own review feedback. New
+  `services/control-panel/public/recorder-ui.js`: the entire Recorder
+  section (record/review/save/list/run/schedule/pending-confirmation)
+  extracted into one reusable component mounted via
+  `<div id="recorder-root" data-lane-base="/api/lanes/<laneId>">` —
+  used unchanged on both `/` (new section, explicit dev/test-only
+  warning) and the SCB live page (replacing ~230 lines of page-
+  specific JS). Telegram `/run <name>` now searches every lane and
+  refuses (naming the lanes) rather than picking one on a name
+  collision; `/confirm`/`/cancel` resolve whichever lane currently has
+  a pending confirmation (safe because the whole control-panel shares
+  one BullMQ queue at concurrency 1 — at most one confirmation is ever
+  pending anywhere).
+- Files: `services/browser-worker/entrypoint.sh`, `Dockerfile`;
+  `services/scb-mock/src/server.ts`; new `.userpassmock` (gitignored)
+  + `.gitignore`; new `services/control-panel/src/lanes.ts`,
+  `replay-engine.ts` (replaces deleted `scb-replay.ts`), new
+  `services/control-panel/public/recorder-ui.js`; modified
+  `services/control-panel/src/exec.ts`, `queue.ts`, `server.ts`,
+  `telegram-commands.ts`, `public/index.html`,
+  `public/scb-business-anywhere-live.html` + `.js`;
+  `services/worker/src/record-actions.ts`; `docker-compose.yml` (new
+  `worker` recordings volume); `AGENTS.md`, `docs/PROJECT_PLAN.md`
+  (decision log).
+- Verified, all against live containers, not just `tsc --noEmit`
+  (clean in both projects throughout): (1) universal guard — refused
+  recording on the **shared** lane (not SCB) while a password field
+  was visible on scb-mock's `/password` page, broadened error message
+  confirmed. (2) Full record→save→run cycle on the shared lane: logged
+  the shared browser into the mock, recorded one click ("Refresh" on
+  account-summary), stopped, saved, ran the saved script back through
+  `/api/lanes/shared/recordings/*` — completed. (3) SCB-lane
+  regression: re-ran the pre-existing `test-mock-transfer` recording
+  through the renamed/generalized route — identical to before the
+  refactor (3 separate risky-keyword pauses, resolved via direct calls
+  to `resolvePendingConfirmation()` since real Telegram replies aren't
+  available in this environment, all 6 steps completed). (4) UI
+  parity: screenshotted `recorder-ui.js` rendering correctly and
+  identically on both `/` and `/monitors/scb-business-anywhere/live`.
+  (5) Telegram `/run`: temporarily exported `handleRun()` (reverted
+  right after) to exercise the no-arg/unknown-name/cross-lane-
+  ambiguity cases directly — all three real messages sent with no
+  Telegram send errors logged. Incidentally re-hit the exact
+  `Failed to open a new tab`/`CDP endpoint never became ready` symptom
+  once mid-verification (from an unrelated stuck-page state, not a
+  regression of the lock fix above) — recovered via `stop`+`up -d` as
+  usual. All scratch workflow files/screenshots/temp scripts created
+  during verification were deleted before committing; `git status`
+  confirmed clean (no `data/`, no screenshots, no credential-looking
+  content staged).
+- Next: commit is ready (not yet pushed as of this entry — confirm
+  with the user or check `git log`/`git status` before assuming
+  either way). After that: no specific next item requested yet: ask
+  the user, or pick up any open item from earlier entries (MinIO/S3
+  polish, Gmail Phase 3 live test, etc.) if nothing new comes up.

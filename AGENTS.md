@@ -788,39 +788,82 @@ site — deliberately.** What exists so far is isolation-only:
   re-select the correct company before the monitor's data can be
   trusted again — not yet automated.
 
-- **Record → analyze → run** — the first capability on this lane beyond
-  strictly read-only, built only after explicit scope confirmation
-  (AskUserQuestion) that the user wanted it against the real account.
-  Three new action types in `services/worker/src/actions/registry.ts`
-  (`clickSmart` element+pixel-fallback, `pressKey`, `typeText`); new
+- **Record → analyze → run** — started as an SCB-lane-only capability,
+  built after explicit scope confirmation (AskUserQuestion) that the
+  user wanted it against the real account, then **generalized to any
+  lane** after the user explicitly rejected a per-page/per-site
+  implementation ("ต้องทำให้ universal คือได้กับทุก web นะไม่เว้น...
+  ไม่ใช่เราไปแก้หน้านั้นๆ แต่เราต้องทำให้อัดได้"). The generalization
+  rests on a small lane registry, `services/control-panel/src/lanes.ts`
+  (`LANES: Record<string, LaneConfig>` — currently `"shared"`, the
+  existing `browser-worker-chrome`/`worker` pair already used by XC
+  Bank/the-internet/demo/scb-mock, and `"scb-business-anywhere-1"`, the
+  isolated real-bank lane): every recording/replay function in
+  `exec.ts`, every job/route/scheduler-id in `queue.ts`/`server.ts`,
+  and the replay engine (`replay-engine.ts`, renamed from
+  `scb-replay.ts`) take a `laneId` and look up that lane's own worker
+  service + recordings dir — adding a future lane is one registry
+  entry, not new code. Routes are `/api/lanes/:laneId/recordings/*`;
+  an unknown `laneId` always 404s rather than silently falling back to
+  `shared`. The frontend mirrors this: one reusable component,
+  `services/control-panel/public/recorder-ui.js`, reads
+  `data-lane-base` off its mount point and is used unchanged by both
+  `/` (shared lane, with an explicit warning that it's dev/test-only —
+  a real account should use its own isolated lane) and
+  `/monitors/scb-business-anywhere/live` (the SCB lane) — no
+  page-specific JS.
+
+  Three action types in `services/worker/src/actions/registry.ts`
+  (`clickSmart` element+pixel-fallback, `pressKey`, `typeText`);
   `record-actions.ts` observes the already-open page (never navigates)
-  via injected page-level listeners, hard-refuses to start while the
-  login page is showing, and **redacts credential fields in-page**
-  (password-type/`autocomplete=*password*`) before anything ever
-  crosses back to Node — the sentinel it substitutes
-  (`REDACTED_FIELD_SENTINEL`) makes `typeText` throw loudly on replay
-  rather than silently skip or type a placeholder. Saved scripts run
-  through a generalized `runWorkflowOnLane()` and can be triggered
-  manually, on a schedule, or via a new Telegram `/run <name>` — the
-  one deliberate non-read-only Telegram command this project has,
-  documented as such in `telegram-commands.ts`. Every risky-keyword
-  step (`services/control-panel/src/scb-replay.ts`'s
-  `DANGEROUS_KEYWORDS` — transfer/pay/confirm/submit/โอนเงิน/ชำระ/
-  ยืนยัน/etc.) pauses mid-replay and requires a live `/confirm` in
-  Telegram before it runs — best-effort, not a hard block, per
-  explicit user decision; everything else in a script runs with no
-  gate. Two real, generalizable bugs found and fixed live: tsx/esbuild
-  wraps function *expressions* assigned to a local const/let (not just
-  named declarations) in a `__name(fn,"name")` helper, which breaks
-  when that function is shipped into a page via `page.evaluate()` —
-  fixed with a one-time `window.__name` passthrough shim, not by
-  avoiding local-const patterns everywhere; and `run-workflow.ts`'s
-  own page-reset step (closes all pages, opens one fresh) silently
-  broke cross-segment continuity when replay ran each segment through
-  it — fixed with an opt-in `KEEP_EXISTING_PAGE=1` env var so a
-  replay's segments continue on the same page instead of resetting
-  between each one. Full writeup: `docs/PROJECT_PLAN.md`'s decision
-  log.
+  via injected page-level listeners. The credential guard is
+  **universal and best-effort, not a guarantee**: it hard-refuses to
+  start (and separately, per-field, redacts in-page before anything
+  crosses back to Node) whenever a field looks credential-shaped —
+  `type="password"`, or `autocomplete`/`id`/`name` containing
+  password/otp/pin/token/secret (`CREDENTIAL_HINT_KEYWORDS`, shared
+  between the Node-side guard and the in-page redaction so they always
+  agree). A site using a genuinely non-standard credential widget
+  (e.g. a masked plain `<input>` with none of those hints) would not
+  be caught — this is a real limitation, not just a caveat. The
+  sentinel substituted for a redacted field (`REDACTED_FIELD_SENTINEL`)
+  makes `typeText` throw loudly on replay rather than silently skip or
+  type a placeholder. Saved scripts can be triggered manually, on a
+  schedule, or via Telegram `/run <name>` — the one deliberate
+  non-read-only Telegram command this project has, documented as such
+  in `telegram-commands.ts`; `/run` searches every lane for that name
+  and **refuses (naming the lanes) rather than picking one** if the
+  same name is saved on more than one lane. Every risky-keyword step
+  (`replay-engine.ts`'s `DANGEROUS_KEYWORDS` —
+  transfer/pay/confirm/submit/โอนเงิน/ชำระ/ยืนยัน/etc., lane-agnostic
+  content) pauses mid-replay and requires a live `/confirm` in
+  Telegram before it runs — best-effort keyword match, not a hard
+  block, per explicit user decision; everything else in a script runs
+  with no gate. `/confirm`/`/cancel` resolve whichever lane currently
+  has a pending confirmation — safe because the whole control-panel
+  shares one BullMQ queue at concurrency 1, so at most one
+  confirmation is ever pending across all lanes at a time.
+
+  Four real, generalizable bugs found and fixed live via mock-testing
+  (none caught by `tsc --noEmit`): tsx/esbuild wraps function
+  *expressions* assigned to a local const/let (not just named
+  declarations) in a `__name(fn,"name")` helper, which breaks when
+  that function is shipped into a page via `page.evaluate()` — fixed
+  with a one-time `window.__name` passthrough shim (itself written as
+  a property assignment, immune to the same wrapping); the recorder's
+  `computeSelector()` used unquoted `text=...` (Playwright substring
+  match), causing real misclicks when one recorded label was a
+  substring of another element's text — fixed by quoting for exact
+  match; the in-page recorder only tracked one in-flight typed field,
+  silently dropping every field but the last when navigating between
+  form fields without an intervening click/Tab/Enter — fixed by
+  flushing any pending value before tracking a new element; and
+  `run-workflow.ts`'s own page-reset step (closes all pages, opens one
+  fresh) silently broke cross-segment continuity when replay ran each
+  segment through it — fixed with an opt-in `KEEP_EXISTING_PAGE=1` env
+  var so a replay's segments continue on the same page instead of
+  resetting between each one. Full writeup: `docs/PROJECT_PLAN.md`'s
+  decision log.
 - **`services/scb-mock/`** — an isolated mock of SCB Business Anywhere
   (same isolation posture as `services/xc-bank`: no shared code/DB/
   queue, HTTP-only channel), built so record→analyze→run (and the
@@ -855,6 +898,9 @@ docker-compose.yml            browser-worker services (chrome + firefox) + worke
 services/control-panel/       Host-run Express UI + BullMQ (src/server.ts = API/UI/producer, src/worker.ts = queue consumer -- two separate processes)
 services/control-panel/src/monitor.ts  XC Bank Monitor: state/dedup/retention (dev-only JSON state)
 services/control-panel/src/monitors-registry.ts  Data-driven monitor listing for "/" + GET /api/monitors -- add future monitors here (detailPath + livePath per monitor)
+services/control-panel/src/lanes.ts  Lane registry (workerService/recordingsHostDir/recordingsContainerDir per laneId) -- add a future lane here, nothing else
+services/control-panel/src/replay-engine.ts  Runs a saved recording segment-by-segment across any lane, pausing for Telegram /confirm on risky-keyword steps (renamed from scb-replay.ts)
+services/control-panel/public/recorder-ui.js  Reusable record->review->save->run UI component, mounted via <div id="recorder-root" data-lane-base="/api/lanes/<laneId>"> -- used unchanged by "/" and the SCB live page
 services/control-panel/src/health.ts  Read-only diagnostics for every dependency (Docker services, queue worker, Redis, MinIO, XC Bank, noVNC) -- GET /api/health, never starts/stops anything
 services/control-panel/public/health.html+.js  /health diagnostics page -- polls GET /api/health, renders green/yellow/red rows with fix commands as plain text
 services/control-panel/public/xc-bank-monitor-live.html+.js  XC Bank live/current-operation view -- noVNC iframe (or latest-screenshot fallback) + polling data panel, distinct from the history/detail page

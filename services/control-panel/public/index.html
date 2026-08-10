@@ -18,6 +18,10 @@
   iframe { width: 100%; height: 500px; border: 1px solid #ccc; margin-top: 0.5rem; display: none; }
   pre { background: #111; color: #ddd; padding: 0.75rem; border-radius: 6px; max-height: 300px; overflow: auto; white-space: pre-wrap; }
   .hint { color: #666; font-size: 0.85rem; }
+  .warning { color: #9a6700; font-size: 0.85rem; background: #fff8c5; border-radius: 4px; padding: 0.5rem 0.7rem; }
+  .danger { color: #82071e; font-size: 0.85rem; background: #ffebe9; border-radius: 4px; padding: 0.5rem 0.7rem; }
+  .error { color: #b00020; font-size: 0.85rem; }
+  .analysis-text { white-space: pre-wrap; background: #f6f8fa; border-radius: 4px; padding: 0.5rem; max-height: 200px; overflow: auto; font-family: monospace; font-size: 0.8rem; }
   table { width: 100%; border-collapse: collapse; font-size: 0.9rem; }
   th, td { text-align: left; padding: 0.3rem 0.5rem; border-bottom: 1px solid #eee; vertical-align: top; }
   .badge { padding: 0.1rem 0.5rem; border-radius: 4px; font-size: 0.8rem; color: #fff; }
@@ -124,6 +128,20 @@
 </section>
 
 <section>
+  <p class="danger">
+    ⚠️ This Recorder targets the <strong>shared</strong> browser
+    (<code>browser-worker-chrome</code>/<code>worker</code> — the same
+    one used for XC Bank/the-internet/demo testing above). Fine for
+    dev/test sites. For a <strong>real account</strong>, use that
+    account's own isolated lane instead (e.g. the SCB Business Anywhere
+    live page) — the shared lane offers none of an isolated lane's
+    separation (own container/profile/noVNC), so recording against a
+    real site here is not recommended.
+  </p>
+  <div id="recorder-root" data-lane-base="/api/lanes/shared"></div>
+</section>
+
+<section>
   <h2>Monitors</h2>
   <p class="hint">Continuous bots that periodically check a site's dashboard through the real browser (DOM extraction only, never an internal API) and track new activity. Rendered from <code>GET /api/monitors</code> — a future second monitor shows up here automatically.</p>
   <div class="row">
@@ -163,5 +181,6 @@
 </section>
 
 <script src="app.js"></script>
+<script src="/recorder-ui.js"></script>
 </body>
 </html>

@@ -14,10 +14,10 @@ import {
   runScbAnalyzePage,
   runScbSelectCompany,
   parseLanePageAnalysis,
-  writeScbRecordingStopFlag,
-  listScbRecordings,
-  saveScbRecording,
-  deleteScbRecording,
+  writeRecordingStopFlag,
+  listRecordings,
+  saveRecording,
+  deleteRecording,
   isValidRecordingName,
   type CompiledRecordingStep,
   REPO_ROOT,
@@ -29,14 +29,15 @@ import {
   startScbMonitorSchedule,
   stopScbMonitorSchedule,
   enqueueScbMonitorCheckOnce,
-  enqueueScbStartRecording,
-  enqueueScbRunRecording,
-  startScbRecordingSchedule,
-  stopScbRecordingSchedule,
-  getScbRecordingScheduleInfo,
+  enqueueStartRecording,
+  enqueueRunRecording,
+  startRecordingSchedule,
+  stopRecordingSchedule,
+  getRecordingScheduleInfo,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
-import { getReplayState } from "./scb-replay.js";
+import { getReplayState } from "./replay-engine.js";
+import { getLane } from "./lanes.js";
 import {
   enqueueAction,
   enqueueWorkflow,
@@ -507,46 +508,67 @@ app.post("/api/lanes/scb-business-anywhere-1/monitor/resume", async (_req, res) 
   }
 });
 
-// --- SCB Business Anywhere lane: record -> analyze -> run ---
-// See docs/PROJECT_PLAN.md's decision log and scb-replay.ts's own
+// --- Record -> analyze -> run, any lane (see lanes.ts) ---
+// See docs/PROJECT_PLAN.md's decision log and replay-engine.ts's own
 // comments for the full design (redaction, risky-keyword Telegram
-// confirm gate). This is the one deliberate capability expansion
-// beyond "strictly read-only" for this lane this session.
+// confirm gate). Originally SCB-only; generalized so this works
+// against any lane/website with no per-lane route -- every handler
+// below is parameterized by :laneId, validated against the lane
+// registry (unknown lane -> 404, same safety posture the old
+// hardcoded SCB-only path had).
+import type { Request, Response } from "express";
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/start", async (_req, res) => {
+function requireLaneOr404(req: Request, res: Response): string | null {
+  const laneId = req.params.laneId;
+  if (!getLane(laneId)) {
+    res.status(404).json({ ok: false, error: `Unknown lane "${laneId}"` });
+    return null;
+  }
+  return laneId;
+}
+
+app.post("/api/lanes/:laneId/recordings/start", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
     const runId = randomUUID();
-    const jobId = await enqueueScbStartRecording(runId);
+    const jobId = await enqueueStartRecording(laneId, runId);
     res.json({ ok: true, runId, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/stop", express.json(), async (req, res) => {
+app.post("/api/lanes/:laneId/recordings/stop", express.json(), async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   const runId = req.body?.runId;
   if (typeof runId !== "string" || !runId) {
     res.status(400).json({ ok: false, error: "runId is required" });
     return;
   }
   try {
-    await writeScbRecordingStopFlag(runId);
+    await writeRecordingStopFlag(laneId, runId);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.get("/api/lanes/scb-business-anywhere-1/recordings", async (_req, res) => {
+app.get("/api/lanes/:laneId/recordings", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    const recordings = await listScbRecordings();
+    const recordings = await listRecordings(laneId);
     res.json({ ok: true, recordings });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/save", express.json(), async (req, res) => {
+app.post("/api/lanes/:laneId/recordings/save", express.json(), async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   const name = req.body?.name;
   const steps = req.body?.steps;
   if (typeof name !== "string" || !isValidRecordingName(name)) {
@@ -558,67 +580,79 @@ app.post("/api/lanes/scb-business-anywhere-1/recordings/save", express.json(), a
     return;
   }
   try {
-    await saveScbRecording(name, steps as CompiledRecordingStep[]);
+    await saveRecording(laneId, name, steps as CompiledRecordingStep[]);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.delete("/api/lanes/scb-business-anywhere-1/recordings/:name", async (req, res) => {
+app.delete("/api/lanes/:laneId/recordings/:name", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    await deleteScbRecording(req.params.name);
-    await stopScbRecordingSchedule(req.params.name).catch(() => {});
+    await deleteRecording(laneId, req.params.name);
+    await stopRecordingSchedule(laneId, req.params.name).catch(() => {});
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/run", async (req, res) => {
+app.post("/api/lanes/:laneId/recordings/:name/run", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    const jobId = await enqueueScbRunRecording(req.params.name);
+    const jobId = await enqueueRunRecording(laneId, req.params.name);
     res.json({ ok: true, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.get("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule", async (req, res) => {
+app.get("/api/lanes/:laneId/recordings/:name/schedule", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    const info = await getScbRecordingScheduleInfo(req.params.name);
+    const info = await getRecordingScheduleInfo(laneId, req.params.name);
     res.json({ ok: true, ...info });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule/start", express.json(), async (req, res) => {
+app.post("/api/lanes/:laneId/recordings/:name/schedule/start", express.json(), async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   const everyMinutes = Number(req.body?.everyMinutes);
   if (!Number.isFinite(everyMinutes) || everyMinutes < 1 || everyMinutes > 1440) {
     res.status(400).json({ ok: false, error: "everyMinutes must be between 1 and 1440" });
     return;
   }
   try {
-    await startScbRecordingSchedule(req.params.name, everyMinutes * 60_000);
+    await startRecordingSchedule(laneId, req.params.name, everyMinutes * 60_000);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.post("/api/lanes/scb-business-anywhere-1/recordings/:name/schedule/stop", async (req, res) => {
+app.post("/api/lanes/:laneId/recordings/:name/schedule/stop", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    await stopScbRecordingSchedule(req.params.name);
+    await stopRecordingSchedule(laneId, req.params.name);
     res.json({ ok: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }
 });
 
-app.get("/api/lanes/scb-business-anywhere-1/replay-state", async (_req, res) => {
+app.get("/api/lanes/:laneId/replay-state", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
   try {
-    const state = await getReplayState();
+    const state = await getReplayState(laneId);
     res.json({ ok: true, ...state });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

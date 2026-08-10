@@ -5,7 +5,7 @@ import {
   runWorkflow,
   runScbAnalyzePage,
   parseLanePageAnalysis,
-  runScbStartRecording,
+  runStartRecording,
   parseRecordingResult,
   REPO_ROOT,
   type ActionResult,
@@ -19,7 +19,7 @@ import {
   setAutoStopConfig as scbSetAutoStopConfig,
   SCB_MONITOR_JOB_NAME,
 } from "./scb-monitor.js";
-import { runScbRecordingReplay } from "./scb-replay.js";
+import { runRecordingReplay } from "./replay-engine.js";
 import { sendTelegramMessage, sendTelegramPhoto } from "./telegram.js";
 
 const REDIS_URL = process.env.REDIS_URL ?? "redis://127.0.0.1:6379";
@@ -90,23 +90,26 @@ const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 17_500
 // anything that types/clicks/navigates from arbitrary Telegram text.
 const SCB_TELEGRAM_SCREENSHOT_JOB_NAME = "scb-business-anywhere-1-telegram-screenshot";
 const SCB_TELEGRAM_STATUS_JOB_NAME = "scb-business-anywhere-1-telegram-status";
-// Record → analyze → run, scoped to the SCB lane (see exec.ts and
-// scb-replay.ts). Long-running by design (resolves only once a human
-// clicks Stop or the recorder's own 15-min max elapses) -- occupying
-// this queue's one concurrency slot for the whole session is
-// intentional, not a bug: nothing else should touch this lane's
-// browser while a human is actively recording against it.
-const SCB_RECORDING_JOB_NAME = "scb-business-anywhere-1-recording";
+// Record → analyze → run -- lane-parameterized (see lanes.ts/exec.ts/
+// replay-engine.ts). Originally SCB-only, generalized to work against
+// any lane (see docs/PROJECT_PLAN.md decision log). Long-running by
+// design (resolves only once a human clicks Stop or the recorder's
+// own 15-min max elapses) -- occupying this queue's one concurrency
+// slot for the whole session is intentional, not a bug: nothing else
+// should touch that lane's browser while a human is actively
+// recording against it.
+const RECORDING_JOB_NAME = "recording";
 // Replaying a saved script -- runs segment by segment with a live
-// Telegram confirm gate on any risky-keyword step (scb-replay.ts).
+// Telegram confirm gate on any risky-keyword step (replay-engine.ts).
 // Also the job type a per-recording BullMQ schedule fires, tagged via
 // data.scheduled the same way SCB_MONITOR_JOB_NAME distinguishes a
 // scheduled tick from a manual run-now.
-const SCB_RUN_RECORDING_JOB_NAME = "scb-business-anywhere-1-run-recording";
-// One BullMQ Job Scheduler id per saved recording name, so each script
-// can have its own independent on/off schedule.
-function scbRecordingSchedulerId(name: string): string {
-  return `scb-recording-schedule:${name}`;
+const RUN_RECORDING_JOB_NAME = "run-recording";
+// One BullMQ Job Scheduler id per (lane, saved recording name) pair,
+// so each script can have its own independent on/off schedule and two
+// different lanes can reuse the same script name without colliding.
+function recordingSchedulerId(laneId: string, name: string): string {
+  return `recording-schedule:${laneId}:${name}`;
 }
 // Max random extra delay before a *scheduled* tick actually runs -- avoids
 // a perfectly robotic exact-every-N-seconds cadence. Manual "Check once"
@@ -289,9 +292,10 @@ export function startWorker(): Worker {
         await sendTelegramMessage(lines.join("\n"));
         return { ok: true, stdout: "Status sent to Telegram", stderr: "", steps: [] };
       }
-      if (job.name === SCB_RECORDING_JOB_NAME) {
+      if (job.name === RECORDING_JOB_NAME) {
+        const laneId = job.data?.laneId as string;
         const runId = job.data?.runId as string;
-        const result = await runScbStartRecording(runId);
+        const result = await runStartRecording(laneId, runId);
         const parsed = parseRecordingResult(result.stdout);
         return {
           ok: result.ok && !!parsed,
@@ -300,9 +304,10 @@ export function startWorker(): Worker {
           steps: [],
         };
       }
-      if (job.name === SCB_RUN_RECORDING_JOB_NAME) {
+      if (job.name === RUN_RECORDING_JOB_NAME) {
+        const laneId = job.data?.laneId as string;
         const recordingName = job.data?.recordingName as string;
-        const { ok, summary } = await runScbRecordingReplay(recordingName);
+        const { ok, summary } = await runRecordingReplay(laneId, recordingName);
         return { ok, stdout: ok ? summary : "", stderr: ok ? "" : summary, steps: [] };
       }
       if (job.name.startsWith(WORKFLOW_JOB_PREFIX)) {
@@ -502,39 +507,39 @@ export async function stopScbMonitorSchedule(): Promise<void> {
   await queue.removeJobScheduler(SCB_MONITOR_SCHEDULER_ID);
 }
 
-// --- SCB Business Anywhere lane: record -> analyze -> run ---
+// --- Record -> analyze -> run, any lane (see lanes.ts) ---
 
 // Long-running (see the processor branch above); the caller (server.ts)
 // does not await job completion synchronously -- it enqueues and
 // returns the runId/jobId immediately so the UI can poll for status
 // while the human interacts via noVNC. Stopping is NOT a queued job
-// (see writeScbRecordingStopFlag's own comment in exec.ts for why) --
+// (see writeRecordingStopFlag's own comment in exec.ts for why) --
 // server.ts's stop route writes the flag file directly.
-export async function enqueueScbStartRecording(runId: string): Promise<string> {
-  const job = await queue.add(SCB_RECORDING_JOB_NAME, { runId }, { ...JOB_OPTS, attempts: 1 });
+export async function enqueueStartRecording(laneId: string, runId: string): Promise<string> {
+  const job = await queue.add(RECORDING_JOB_NAME, { laneId, runId }, { ...JOB_OPTS, attempts: 1 });
   return job.id ?? "";
 }
 
-export async function enqueueScbRunRecording(recordingName: string, scheduled = false): Promise<string> {
-  const job = await queue.add(SCB_RUN_RECORDING_JOB_NAME, { recordingName, scheduled }, { ...JOB_OPTS, attempts: 1 });
+export async function enqueueRunRecording(laneId: string, recordingName: string, scheduled = false): Promise<string> {
+  const job = await queue.add(RUN_RECORDING_JOB_NAME, { laneId, recordingName, scheduled }, { ...JOB_OPTS, attempts: 1 });
   return job.id ?? "";
 }
 
-export async function startScbRecordingSchedule(recordingName: string, everyMs: number): Promise<void> {
+export async function startRecordingSchedule(laneId: string, recordingName: string, everyMs: number): Promise<void> {
   await queue.upsertJobScheduler(
-    scbRecordingSchedulerId(recordingName),
+    recordingSchedulerId(laneId, recordingName),
     { every: everyMs },
-    { name: SCB_RUN_RECORDING_JOB_NAME, data: { recordingName, scheduled: true } },
+    { name: RUN_RECORDING_JOB_NAME, data: { laneId, recordingName, scheduled: true } },
   );
 }
 
-export async function stopScbRecordingSchedule(recordingName: string): Promise<void> {
-  await queue.removeJobScheduler(scbRecordingSchedulerId(recordingName));
+export async function stopRecordingSchedule(laneId: string, recordingName: string): Promise<void> {
+  await queue.removeJobScheduler(recordingSchedulerId(laneId, recordingName));
 }
 
-export async function getScbRecordingScheduleInfo(recordingName: string): Promise<{ running: boolean; next: number | null; every: number | null }> {
+export async function getRecordingScheduleInfo(laneId: string, recordingName: string): Promise<{ running: boolean; next: number | null; every: number | null }> {
   const schedulers = await queue.getJobSchedulers();
-  const scheduler = schedulers.find((s) => s.key === scbRecordingSchedulerId(recordingName));
+  const scheduler = schedulers.find((s) => s.key === recordingSchedulerId(laneId, recordingName));
   return { running: scheduler !== undefined, next: scheduler?.next ?? null, every: scheduler?.every ?? null };
 }
 
