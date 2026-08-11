@@ -33,7 +33,10 @@ git clone git@github.com:smallscaleserver/WebOperator.git
 `http://localhost:4000` ทันที ดู [`StepByStep.md`](./StepByStep.md)
 ก่อน ส่วน section นี้เป็นรายละเอียด testing guide แบบเต็มกว่า ถ้า Docker
 image/container ค้างหรืออยากล้างทุกอย่างแล้วสร้างใหม่ทั้งหมด ดู
-[`CleanAll.md`](./CleanAll.md)
+[`CleanAll.md`](./CleanAll.md) — ถ้าจะใช้ฟีเจอร์ Recorder
+(record→analyze→run บันทึกการคลิก/พิมพ์บนเว็บจริงแล้วรันซ้ำได้ ใช้ได้
+กับ lane ไหนก็ได้) ดู
+[`UniversalRecorderUsage.md`](./UniversalRecorderUsage.md) โดยเฉพาะ
 
 ครอบคลุม flow หลักที่ implement และ verify แล้วจนถึงตอนนี้ (Phase 1-2
 เต็ม — ยังไม่รวม Gmail/Phase 3 ซึ่งเป็น dev scaffold แยกต่างหาก ดู
@@ -406,8 +409,9 @@ browser จริง) เพื่อ navigate ไปหน้า mock แล้
   ผ่าน Transfer/Confirm Transfer แล้วลอง Run สคริปต์ที่บันทึกไว้ — ควร
   หยุดรอ `/confirm` ทาง Telegram ก่อนทุกครั้งที่ถึง step ที่มีคำว่า
   transfer/confirm/submit ฯลฯ (ดู `DANGEROUS_KEYWORDS` ใน
-  `services/control-panel/src/scb-replay.ts`) — ทดสอบ `/cancel` ด้วย
-  เพื่อยืนยันว่ายกเลิกได้จริงโดยไม่กดปุ่มจริงบนหน้า mock
+  `services/control-panel/src/replay-engine.ts`) — ทดสอบ `/cancel` ด้วย
+  เพื่อยืนยันว่ายกเลิกได้จริงโดยไม่กดปุ่มจริงบนหน้า mock (คู่มือใช้งาน
+  Recorder แบบเต็ม รวม UI/API/Telegram: [`UniversalRecorderUsage.md`](./UniversalRecorderUsage.md))
 
 ---
 

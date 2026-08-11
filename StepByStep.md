@@ -4,6 +4,11 @@
 `http://localhost:4000` และทดสอบ XC Bank monitor/live view ได้เอง
 ทีละขั้นตอนบน Windows/PowerShell.
 
+ถ้าต้องการใช้ฟีเจอร์ Recorder (record→analyze→run — บันทึกการคลิก/พิมพ์
+บนเว็บจริงแล้วเซฟรันซ้ำได้ ใช้ได้กับ lane ไหนก็ได้) ดู
+[`UniversalRecorderUsage.md`](./UniversalRecorderUsage.md) แทน — คู่มือ
+นี้ครอบคลุมแค่การเปิดระบบพื้นฐาน/ทดสอบ XC Bank เท่านั้น.
+
 ## 0. สิ่งที่ต้องมีก่อน
 
 - เปิด **Docker Desktop** ให้พร้อมใช้งาน
