@@ -3281,3 +3281,87 @@ Read this one first if picking the session back up cold.
   either way). After that: no specific next item requested yet: ask
   the user, or pick up any open item from earlier entries (MinIO/S3
   polish, Gmail Phase 3 live test, etc.) if nothing new comes up.
+
+### 2026-08-11 — Claude — Real per-lane CDP-reachability health checks (BOT_LANE_ISOLATION.md Migration Step 2)
+
+- Status: Done. Previous entry's work (universal recorder) was pushed;
+  user then asked what to do next, offered a choice between this and a
+  Recordings Library UX page, picked this one.
+- Context: `docs/BOT_LANE_ISOLATION.md` documents a real, already-proven
+  blind spot — `docker compose ps`/container-`Up` status stayed green
+  through three real Chromium crashes found during an earlier monitor-
+  stability round, and today's `/api/status`/`/health` never checked
+  anything beyond container state or a bare noVNC HTTP ping. Went
+  through `EnterPlanMode`/`ExitPlanMode` (user approved without
+  changes) before implementing, scoped narrowly to Migration Step 2
+  only: real `cdpReachable`/tab-count checks against the two lanes that
+  already exist as real separate containers (`shared`/`browser-worker-
+  chrome`, `scb-business-anywhere-1`) — not the doc's full `Lane`
+  interface/registry rewrite (per-lane compose templating, a genuine
+  second lane, per-lane queues), which stay later steps. Firefox out of
+  scope (different reachability mechanism, not in `lanes.ts`).
+  Key design constraint: `CDP_URL` is loopback-only inside each lane's
+  own network namespace, never a published host port (deliberate,
+  unchanged) — so the check can't `fetch()` from the host process. Runs
+  instead as `docker compose exec -T <browserWorkerService> curl -sf
+  --max-time 2 http://localhost:9222/json/version` (+ `.../json/list`
+  for tab count) directly against the long-running `browser-worker-
+  <lane>` container itself (where Chromium's `--remote-debugging-port`
+  actually opens, confirmed via `entrypoint.sh`), not the ephemeral
+  `worker`/`worker-scb-business-anywhere-1` services (no `command:`,
+  only exist transiently via `docker compose run --rm`).
+  Also deliberately additive, not a breaking change: `app.js`'s
+  `setBrowserUi`/`setLaneUi` use `/api/status`'s existing
+  `chrome`/`firefox`/`scbLane1` strings both as a CSS class *and* for
+  exact-match button-gating (`disabled = state === "running"`) —
+  changing what "running" means for an unhealthy-but-up lane would have
+  silently broken Start/Stop/Take-control/worker-action enablement.
+  Instead those three fields are untouched; two new fields
+  (`chromeHealth`/`scbLane1Health`) carry the richer signal, and the
+  frontend only uses them to recolor the dot (reusing the already-
+  defined `.dot.error`/`.dot.paused` classes from the Monitors section)
+  and append a label suffix when `state === "running"` but
+  `health.status !== "healthy"` — button logic reads only the original
+  field, unchanged.
+- Files: `services/control-panel/src/lanes.ts` (`LaneConfig` gained
+  `browserWorkerService`/`novncUrl`), new `services/control-panel/src/
+  lane-health.ts` (`getLaneHealth`/`getAllLaneHealth`, in-memory
+  `crashCount`/`lastFailureAt`/`lastFailureReason` tracking — dev-only,
+  not persisted, resets on control-panel restart), `services/control-
+  panel/src/health.ts` (new per-lane `/health` rows), `exec.ts` (new
+  `restartLane()`, `stop` then `up -d` — the pattern already proven
+  more reliable than a plain `restart` earlier this session),
+  `server.ts` (`/api/status` gains the two additive health fields, new
+  `POST /api/lanes/:laneId/restart`), `public/app.js` (dot recoloring,
+  new `restartLane()` helper), `public/index.html` (Restart buttons +
+  a hint paragraph explaining the red-dot-while-"running" case),
+  `docs/BOT_LANE_ISOLATION.md` (Migration Step 2 marked done, full
+  implementation note), `docs/PROJECT_PLAN.md` (decision log),
+  `AGENTS.md` (new bullet + fixed a now-stale "not fixed this round"
+  note left over from the incident that originally motivated this).
+- Verified, all against live containers, exactly per the doc's own
+  required proof: `docker exec weboperator-browser-worker-chrome-1
+  pkill -f chromium` while `docker ps` kept confirming the container
+  stayed `Up` the whole time — the new check correctly flipped to
+  `unhealthy`/`cdpReachable: false`/`crashCount: 1`; repeated against
+  `weboperator-browser-worker-scb-business-anywhere-1-1` with the same
+  result (read-only check only, no navigation, safe against the real-
+  bank lane). Restart button/endpoint recovered both back to
+  `cdpReachable: true`/`status: healthy` (tab count settling to exactly
+  1), with `crashCount`/`lastFailureAt` correctly preserved as history
+  rather than reset. Regression check: ran the `demo` workflow through
+  the restarted shared lane afterward — completed normally, confirming
+  Start/Stop/Take-control/worker-action gating and normal job execution
+  are all unaffected. Incidental true-positive along the way: before
+  any kill test, the shared lane's real tab count was 2 (stray tabs
+  left over from earlier same-session testing), which the new check
+  correctly reported as `degraded` — not a synthetic test, a real
+  anomaly the check caught on its own. `npx tsc --noEmit` clean
+  throughout. `git status` confirmed clean before staging (no `data/`,
+  no screenshots, no scratch files).
+- Next: commit is ready (check `git status`/`git log` for current
+  push state before assuming). After that: no specific next item
+  requested — ask the user, or offer the previously-discussed
+  Recordings Library UX page, or a further BOT_LANE_ISOLATION.md
+  migration step (state/artifact path isolation is next per that
+  doc's own ordering) if nothing else comes up.

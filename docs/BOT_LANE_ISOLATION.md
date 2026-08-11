@@ -362,14 +362,44 @@ throughout `docs/PROJECT_PLAN.md`'s decision log).
    system still work identically when expressed through the new
    registry shape." Proves the abstraction doesn't break anything
    before a second lane ever exists.
-2. **Lane health/CDP reachability.** Add the real `cdpReachable` check
-   (§3) against that one existing lane, surfaced on `/health` and the
-   Control Center. Verify by deliberately killing Chromium inside the
-   container (`docker exec ... pkill chromium`, the exact repro from
-   this round's own incident) and confirming the new check catches it
-   while `docker compose ps` still says `Up` — the concrete test named
-   in §3. This step alone is valuable even with only one lane; it
-   directly closes the blind spot this whole doc was motivated by.
+2. **Lane health/CDP reachability. — Done**, implemented against the two
+   lanes that already exist as real separate containers (`shared`/
+   `browser-worker-chrome` and `scb-business-anywhere-1`, both already
+   entries in `services/control-panel/src/lanes.ts` from the earlier
+   record→analyze→run generalization — not the full `Lane`
+   interface/registry from §1/§6, which remains future work). New
+   `services/control-panel/src/lane-health.ts` (`getLaneHealth`/
+   `getAllLaneHealth`): since `CDP_URL` is loopback-only inside each
+   lane's own network namespace (§8's boundary, unchanged — no port was
+   published), the check runs as `docker compose exec -T
+   <browserWorkerService> curl ... http://localhost:9222/json/version`
+   (and `.../json/list` for tab count) directly against the long-running
+   browser container itself, not the ephemeral `worker`/`worker-scb-
+   business-anywhere-1` services. Surfaced on `/health` (new per-lane
+   rows) and `/api/status` (additive `chromeHealth`/`scbLane1Health`
+   fields — the existing `chrome`/`firefox`/`scbLane1` fields and every
+   button's enable/disable logic keyed on them are untouched, so this
+   couldn't regress Start/Stop/Take-control/worker-action gating). New
+   `POST /api/lanes/:laneId/restart` + a Restart button per §3's
+   "explicit, never silent auto-heal" rule. In-memory (dev-only, not
+   persisted) `crashCount`/`lastFailureAt`/`lastFailureReason` tracking,
+   incremented only on a `cdpReachable` true→false transition observed
+   while the container stayed running. **Verified exactly per this
+   step's own required proof**: `docker exec weboperator-browser-worker-
+   chrome-1 pkill -f chromium` while `docker compose ps` kept reporting
+   the container `Up` — the new check correctly flipped to
+   `unhealthy`/`cdpReachable: false` and `crashCount: 1`; repeated
+   against the SCB lane container with the same result; the Restart
+   button/endpoint recovered both back to `healthy` (`cdpReachable:
+   true`), with `crashCount`/`lastFailureAt` correctly preserved as
+   history rather than reset. Full detail: `docs/PROJECT_PLAN.md`'s
+   decision log. **Explicitly not built this round**: no background/
+   always-on polling daemon (health is computed live on each `/health`
+   or `/api/status` request, same on-demand posture `health.ts` already
+   had — a lane dying while neither page is open won't be noticed until
+   one is opened again); no `lastSuccessfulJobAt` (would need a new job-
+   queue hook); Firefox lane health (different reachability mechanism,
+   not in `lanes.ts` today).
 3. **State/artifact path isolation.** Move the one existing lane's
    monitor state and worker output onto the `data/lanes/<laneId>/...`
    layout (§1). Still one lane, still no behavior change from a user's

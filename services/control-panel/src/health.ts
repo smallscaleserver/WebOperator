@@ -1,6 +1,8 @@
 import { composePs, parseComposePs } from "./exec.js";
 import { checkQueueWorkerHealth, checkRedisHealth } from "./queue.js";
 import { checkMinioHealth } from "./artifacts.js";
+import { getAllLaneHealth, type LaneHealth } from "./lane-health.js";
+import { getLane } from "./lanes.js";
 
 export interface HealthCheck {
   id: string;
@@ -85,8 +87,30 @@ async function dockerServiceChecks(): Promise<HealthCheck[]> {
   }
 }
 
+// Real per-lane CDP-reachability rows -- see docs/BOT_LANE_ISOLATION.md
+// §3: container-"Up" status alone (dockerServiceChecks above) is proven
+// insufficient, this is the check that actually closes that blind spot.
+function laneHealthCheck(health: LaneHealth): HealthCheck {
+  const lane = getLane(health.laneId);
+  const id = `lane-${health.laneId}`;
+  const label = `Lane: ${health.laneId}`;
+  const hint = lane ? `docker compose restart ${lane.browserWorkerService}` : undefined;
+
+  if (health.status === "stopped") {
+    return { id, label, status: "warn", message: "Container not running", hint };
+  }
+  const detail = `CDP: ${health.cdpReachable ? "ok" : "unreachable"}, tabs: ${health.browserTargetCount ?? "?"}, noVNC: ${health.novncReachable ? "ok" : "unreachable"}, crashes: ${health.crashCount}`;
+  if (health.status === "unhealthy") {
+    return { id, label, status: "error", message: `Container Up but browser dead -- ${detail}`, hint };
+  }
+  if (health.status === "degraded") {
+    return { id, label, status: "warn", message: detail, hint };
+  }
+  return { id, label, status: "ok", message: detail };
+}
+
 export async function runHealthChecks(): Promise<HealthCheck[]> {
-  const [dockerChecks, queueWorker, redis, minio, xcBank, novnc] = await Promise.all([
+  const [dockerChecks, queueWorker, redis, minio, xcBank, novnc, laneHealths] = await Promise.all([
     dockerServiceChecks(),
     safeCheck("queue-worker", "Queue worker", "cd services/control-panel && npm run worker", checkQueueWorkerHealth),
     safeCheck("redis", "Redis (app-level)", "docker compose up -d redis", () => checkRedisHealth()),
@@ -102,6 +126,7 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
     safeCheck("novnc", "noVNC/Chrome (127.0.0.1:6080)", "docker compose up -d browser-worker-chrome", () =>
       urlReachable(NOVNC_URL),
     ),
+    getAllLaneHealth(),
   ]);
 
   const minioAnnotated: HealthCheck =
@@ -120,5 +145,6 @@ export async function runHealthChecks(): Promise<HealthCheck[]> {
     minioAnnotated,
     xcBank,
     novnc,
+    ...laneHealths.map(laneHealthCheck),
   ];
 }

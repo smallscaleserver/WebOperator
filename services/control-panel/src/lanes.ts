@@ -24,6 +24,14 @@ export interface LaneConfig {
   // Where recordingsHostDir is bind-mounted inside that lane's own
   // worker container -- passed as WORKFLOWS_DIR/RECORDINGS_DIR.
   recordingsContainerDir: string;
+  // The long-running browser container itself (distinct from
+  // workerService above, which has no `command:` and only exists
+  // transiently via `docker compose run --rm`). Chromium's CDP port
+  // is opened *inside* this container, not workerService -- see
+  // lane-health.ts for why health checks target this name.
+  browserWorkerService: string;
+  // Host-reachable noVNC URL for this lane's browser container.
+  novncUrl: string;
 }
 
 export const LANES: Record<string, LaneConfig> = {
@@ -36,11 +44,15 @@ export const LANES: Record<string, LaneConfig> = {
     workerService: "worker",
     recordingsHostDir: path.join(REPO_ROOT, "data", "recordings", "shared"),
     recordingsContainerDir: "/app/recordings",
+    browserWorkerService: "browser-worker-chrome",
+    novncUrl: "http://127.0.0.1:6080/",
   },
   "scb-business-anywhere-1": {
     workerService: "worker-scb-business-anywhere-1",
     recordingsHostDir: path.join(REPO_ROOT, "data", "lanes", "scb-business-anywhere-1", "recordings"),
     recordingsContainerDir: "/app/recordings",
+    browserWorkerService: "browser-worker-scb-business-anywhere-1",
+    novncUrl: "http://127.0.0.1:6090/",
   },
 };
 

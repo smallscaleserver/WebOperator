@@ -20,8 +20,10 @@ import {
   deleteRecording,
   isValidRecordingName,
   type CompiledRecordingStep,
+  restartLane,
   REPO_ROOT,
 } from "./exec.js";
+import { getLaneHealth } from "./lane-health.js";
 import {
   getScbMonitorScheduleInfo,
   pauseScbMonitor,
@@ -78,7 +80,13 @@ app.use(
 );
 
 app.get("/api/status", async (_req, res) => {
-  const status = { chrome: "unknown", firefox: "unknown", scbLane1: "unknown" };
+  const status: {
+    chrome: string;
+    firefox: string;
+    scbLane1: string;
+    chromeHealth?: Awaited<ReturnType<typeof getLaneHealth>>;
+    scbLane1Health?: Awaited<ReturnType<typeof getLaneHealth>>;
+  } = { chrome: "unknown", firefox: "unknown", scbLane1: "unknown" };
   try {
     const stdout = await composePs();
     const entries = parseComposePs(stdout);
@@ -93,6 +101,21 @@ app.get("/api/status", async (_req, res) => {
     }
   } catch (err) {
     console.error("status check failed:", err);
+  }
+  // Additive only -- chrome/firefox/scbLane1 above stay exactly as
+  // before (container-level, drives all existing Start/Stop/Take-
+  // control/worker-action button gating unchanged). These two new
+  // fields carry the real CDP-reachability signal (see lane-health.ts)
+  // so the frontend can recolor the dot without touching that gating.
+  try {
+    const [chromeHealth, scbLane1Health] = await Promise.all([
+      getLaneHealth("shared"),
+      getLaneHealth("scb-business-anywhere-1"),
+    ]);
+    status.chromeHealth = chromeHealth;
+    status.scbLane1Health = scbLane1Health;
+  } catch (err) {
+    console.error("lane health check failed:", err);
   }
   res.json(status);
 });
@@ -526,6 +549,21 @@ function requireLaneOr404(req: Request, res: Response): string | null {
   }
   return laneId;
 }
+
+// Explicit human-triggered lane restart (see docs/BOT_LANE_ISOLATION.md
+// §3) -- closes the loop on the lane-health check below: a lane that
+// flips to "unhealthy" (container Up, CDP dead) has one clear, specific
+// fix button here, rather than only a hint command on /health.
+app.post("/api/lanes/:laneId/restart", async (req, res) => {
+  const laneId = requireLaneOr404(req, res);
+  if (!laneId) return;
+  try {
+    const result = await restartLane(laneId);
+    res.json({ ok: result.ok, stdout: result.stdout, stderr: result.stderr, error: result.error });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
 
 app.post("/api/lanes/:laneId/recordings/start", async (req, res) => {
   const laneId = requireLaneOr404(req, res);

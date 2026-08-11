@@ -328,6 +328,19 @@ function requireLane(laneId: string): LaneConfig {
   return lane;
 }
 
+// Explicit, human-triggered only -- never called automatically (see
+// docs/BOT_LANE_ISOLATION.md §3: "Explicit Restart Lane, never silent
+// auto-heal", the same "never starts/stops anything itself" rule
+// health.ts already follows). `stop` then `up -d` rather than a plain
+// `restart`, matching the pattern already proven more reliable this
+// session for recovering a wedged browser-worker container.
+export async function restartLane(laneId: string): Promise<ActionResult> {
+  const lane = requireLane(laneId);
+  const stopResult = await execAndParse(["compose", "stop", lane.browserWorkerService]);
+  if (!stopResult.ok) return stopResult;
+  return execAndParse(["compose", "up", "-d", lane.browserWorkerService]);
+}
+
 export async function runStartRecording(laneId: string, runId: string): Promise<ActionResult> {
   const lane = requireLane(laneId);
   await mkdir(lane.recordingsHostDir, { recursive: true });

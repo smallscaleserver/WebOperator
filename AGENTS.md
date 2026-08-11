@@ -476,15 +476,32 @@ instruction: no silent auto-start. This page only diagnoses.
   response already being polled for the System Health banner to show an
   inline warning when the queue worker is disconnected ("jobs will stay
   waiting") — no second poll, no new state.
+- **Per-lane CDP reachability** (`services/control-panel/src/lane-
+  health.ts`, `docs/BOT_LANE_ISOLATION.md` Migration Step 2) — closes
+  the blind spot the Monitor stability pass below found but explicitly
+  left unfixed: container-`Up`/noVNC-HTTP checks alone can't tell a
+  live browser from a dead one inside a still-running container. Since
+  `CDP_URL` stays loopback-only (never a published port), the check
+  runs as `docker compose exec -T <browserWorkerService> curl ...
+  http://localhost:9222/json/version` directly against the long-running
+  `browser-worker-<lane>` container (where Chromium's own debug port
+  actually opens), not the ephemeral `worker` service. Surfaced as new
+  per-lane `/health` rows and two **additive** `/api/status` fields
+  (`chromeHealth`/`scbLane1Health` — existing button-gating fields
+  untouched). `POST /api/lanes/:laneId/restart` + a Restart button,
+  never automatic. Verified exactly per the doc's required proof:
+  `pkill -f chromium` inside the container while `docker compose ps`
+  kept saying `Up` — correctly caught on both lanes.
 
 **Monitor stability pass** (auto-stop, page-reset, window-size
 observability) — triggered by a real incident: XC Bank Monitor ran
 unattended for ~38 hours and Chromium inside `browser-worker-chrome`
 silently crashed (Xvfb/x11vnc/noVNC stayed up, so `docker compose ps`
 and even `/api/health`'s noVNC check both still reported healthy — CDP
-reachability is not checked anywhere, a known blind spot, not fixed
-this round). Three related concerns, same priority order they were
-fixed in:
+reachability was not checked anywhere at the time, a known blind spot,
+not fixed that round; closed in a later round, see "Per-lane CDP
+reachability" above). Three related concerns, same priority order they
+were fixed in:
 - **Auto-stop** (highest priority — a real ban risk if ever pointed at
   a real site and left running): `MonitorState` gained `autoStopAt`
   (ISO timestamp)/`autoStopped`/`autoStopMinutes`, set via a new
@@ -902,6 +919,7 @@ services/control-panel/src/lanes.ts  Lane registry (workerService/recordingsHost
 services/control-panel/src/replay-engine.ts  Runs a saved recording segment-by-segment across any lane, pausing for Telegram /confirm on risky-keyword steps (renamed from scb-replay.ts)
 services/control-panel/public/recorder-ui.js  Reusable record->review->save->run UI component, mounted via <div id="recorder-root" data-lane-base="/api/lanes/<laneId>"> -- used unchanged by "/" and the SCB live page
 services/control-panel/src/health.ts  Read-only diagnostics for every dependency (Docker services, queue worker, Redis, MinIO, XC Bank, noVNC) -- GET /api/health, never starts/stops anything
+services/control-panel/src/lane-health.ts  Real per-lane CDP-reachability health (docker compose exec + curl against each lane's own browser container) -- closes the container-Up-but-browser-dead blind spot
 services/control-panel/public/health.html+.js  /health diagnostics page -- polls GET /api/health, renders green/yellow/red rows with fix commands as plain text
 services/control-panel/public/xc-bank-monitor-live.html+.js  XC Bank live/current-operation view -- noVNC iframe (or latest-screenshot fallback) + polling data panel, distinct from the history/detail page
 services/browser-worker/      Dockerfile + entrypoint.sh: Xvfb + Fluxbox + browser + x11vnc + noVNC

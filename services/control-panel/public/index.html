@@ -69,12 +69,19 @@
 
 <section>
   <h2>Browsers</h2>
+  <p class="hint">
+    A red/amber dot with "CDP unreachable"/"degraded" next to it means
+    the container is up but the browser process inside it isn't — a real
+    blind spot <code>docker compose ps</code> alone can't see (see
+    <code>docs/BOT_LANE_ISOLATION.md</code>). Restart fixes it.
+  </p>
   <div class="row">
     <span class="dot" id="dot-chrome"></span>
     <strong>Chrome</strong>
     <span id="label-chrome">checking…</span>
     <button id="start-chrome">Start</button>
     <button id="stop-chrome">Stop</button>
+    <button id="restart-chrome">Restart</button>
     <button id="take-chrome">Take control</button>
   </div>
   <iframe id="iframe-chrome" src="about:blank"></iframe>
@@ -103,6 +110,7 @@
     <span id="label-scb-lane1">checking…</span>
     <button id="start-scb-lane1">Start</button>
     <button id="stop-scb-lane1">Stop</button>
+    <button id="restart-scb-lane1">Restart</button>
     <a href="/monitors/scb-business-anywhere/live">Live &rarr;</a>
   </div>
   <p class="hint">No login/OTP automation exists for this lane yet — manual takeover via its own noVNC only.</p>

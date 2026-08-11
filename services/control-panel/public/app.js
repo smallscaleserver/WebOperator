@@ -18,15 +18,35 @@ async function callAction(name) {
   await pollStatus();
 }
 
-function setBrowserUi(browser, state) {
+// `state` (container-level: "running"/"stopped"/"unknown") drives every
+// button's enable/disable exactly as before -- unchanged, zero regression
+// risk. `health` (optional, the new real CDP-reachability signal from
+// lane-health.ts) only overrides the dot's *visual* class/label when the
+// container is "running" but the browser process inside it isn't
+// actually healthy -- the container-Up-but-browser-dead blind spot
+// docs/BOT_LANE_ISOLATION.md closes. See its "status" values: "healthy"
+// (green, unchanged), "degraded" (amber -- reuses the existing
+// .dot.paused class from the Monitors section), "unhealthy" (red --
+// reuses .dot.error), "stopped" (not shown here, state already covers it).
+function laneHealthSuffix(state, health) {
+  if (state !== "running" || !health) return { cssState: state, suffix: "" };
+  if (health.status === "unhealthy") return { cssState: "error", suffix: " — CDP unreachable!" };
+  if (health.status === "degraded") return { cssState: "paused", suffix: " — degraded" };
+  return { cssState: state, suffix: "" };
+}
+
+function setBrowserUi(browser, state, health) {
   const dot = document.getElementById(`dot-${browser}`);
   const label = document.getElementById(`label-${browser}`);
-  dot.className = `dot ${state}`;
-  label.textContent = state;
+  const { cssState, suffix } = laneHealthSuffix(state, health);
+  dot.className = `dot ${cssState}`;
+  label.textContent = `${state}${suffix}`;
 
   document.getElementById(`start-${browser}`).disabled = state === "running";
   document.getElementById(`stop-${browser}`).disabled = state !== "running";
   document.getElementById(`take-${browser}`).disabled = state !== "running";
+  const restartBtn = document.getElementById(`restart-${browser}`);
+  if (restartBtn) restartBtn.disabled = state !== "running";
 
   if (state !== "running") {
     const iframe = document.getElementById(`iframe-${browser}`);
@@ -35,22 +55,25 @@ function setBrowserUi(browser, state) {
   }
 }
 
-function setLaneUi(laneKey, state) {
+function setLaneUi(laneKey, state, health) {
   const dot = document.getElementById(`dot-${laneKey}`);
   const label = document.getElementById(`label-${laneKey}`);
-  dot.className = `dot ${state}`;
-  label.textContent = state;
+  const { cssState, suffix } = laneHealthSuffix(state, health);
+  dot.className = `dot ${cssState}`;
+  label.textContent = `${state}${suffix}`;
   document.getElementById(`start-${laneKey}`).disabled = state === "running";
   document.getElementById(`stop-${laneKey}`).disabled = state !== "running";
+  const restartBtn = document.getElementById(`restart-${laneKey}`);
+  if (restartBtn) restartBtn.disabled = state !== "running";
 }
 
 async function pollStatus() {
   try {
     const res = await fetch("/api/status");
     const status = await res.json();
-    setBrowserUi("chrome", status.chrome);
+    setBrowserUi("chrome", status.chrome, status.chromeHealth);
     setBrowserUi("firefox", status.firefox);
-    setLaneUi("scb-lane1", status.scbLane1);
+    setLaneUi("scb-lane1", status.scbLane1, status.scbLane1Health);
 
     document.querySelectorAll(".worker-action").forEach((btn) => {
       const requires = btn.dataset.requires || "chrome";
@@ -61,12 +84,29 @@ async function pollStatus() {
   }
 }
 
+async function restartLane(laneId, buttonId) {
+  const btn = document.getElementById(buttonId);
+  if (btn) btn.disabled = true;
+  output.textContent = `Restarting lane "${laneId}"...`;
+  try {
+    const res = await fetch(`/api/lanes/${encodeURIComponent(laneId)}/restart`, { method: "POST" });
+    const data = await res.json();
+    output.textContent = `restart ${laneId}: ${data.ok ? "OK" : "FAILED"}\n\n${data.error || ""}`;
+  } catch (err) {
+    output.textContent = `restart ${laneId}: request failed — ${err}`;
+  }
+  await pollStatus();
+}
+
 document.getElementById("start-chrome").addEventListener("click", () => callAction("startChrome"));
 document.getElementById("stop-chrome").addEventListener("click", () => callAction("stopChrome"));
 document.getElementById("start-firefox").addEventListener("click", () => callAction("startFirefox"));
 document.getElementById("stop-firefox").addEventListener("click", () => callAction("stopFirefox"));
 document.getElementById("start-scb-lane1").addEventListener("click", () => callAction("startScbLane1"));
 document.getElementById("stop-scb-lane1").addEventListener("click", () => callAction("stopScbLane1"));
+
+document.getElementById("restart-chrome")?.addEventListener("click", () => restartLane("shared", "restart-chrome"));
+document.getElementById("restart-scb-lane1")?.addEventListener("click", () => restartLane("scb-business-anywhere-1", "restart-scb-lane1"));
 
 document.getElementById("take-chrome").addEventListener("click", () => {
   const iframe = document.getElementById("iframe-chrome");
