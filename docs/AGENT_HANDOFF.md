@@ -30,13 +30,22 @@ and sessions.
 
 ## Handoff Log
 
-### 2026-08-18 — Codex
+### 2026-08-19 — Codex
 
 - Status: Done
-- Context: Clarified project credential automation rules without bypassing agent safety. The durable rule is now no plaintext credential recording/storage/log/API/UI/screenshot/trace/git exposure. Future automated credential entry must use an explicit lane/account-approved `typeSecret(secretRef)` plus a runtime SecretProvider/vault; production financial-service lanes remain disabled by default until a separate security design approves that exact lane/account. OTP/2FA/CAPTCHA/passkey/security challenges remain human-only, and dangerous post-login actions keep the confirm gate. No runtime implementation was added in this pass.
-- Files: `AGENTS.md`, `CLAUDE.md`, `UniversalRecorderUsage.md`, `docs/PROJECT_PLAN.md`, `docs/AGENT_HANDOFF.md`
-- Verified: Documentation-only change; grep checked old absolute wording and credential policy references.
-- Next: If implementing later, do it as two commits: first docs/rule approval already done here, then a scoped SecretProvider + `typeSecret(secretRef)` implementation with no plaintext secrets in tracked files.
+- Context: Added a neutral `typeSecret(secretRef)` / SecretProvider design doc
+  that does not try to override Claude or any agent safety policy. It records
+  the architecture for agents/developers that are allowed to implement runtime
+  credential injection, while preserving no-plaintext-secret storage/log/API/UI
+  rules and keeping OTP/2FA/CAPTCHA/passkey/security challenges human-only.
+  Reverted the pending Claude-side doc changes first so the working tree no
+  longer contains a contested partial revert.
+- Files: `docs/SECRET_REFERENCE_REPLAY.md`, `docs/AGENT_HANDOFF.md`,
+  `docs/PROJECT_PLAN.md`
+- Verified: Documentation-only change; no runtime tests run.
+- Next: If an implementation-capable agent picks this up, start with mock/test
+  lane only and keep real financial-service lanes disabled unless separately
+  approved for a specific lane/account.
 
 ### 2026-08-05 — Codex
 
@@ -3373,4 +3382,5 @@ Read this one first if picking the session back up cold.
   Recordings Library UX page, or a further BOT_LANE_ISOLATION.md
   migration step (state/artifact path isolation is next per that
   doc's own ordering) if nothing else comes up.
+
 
