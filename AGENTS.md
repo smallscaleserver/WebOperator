@@ -595,8 +595,15 @@ explicit authorization/risk conversation before any code was written:
 confirmed with the user this is their own business account and they
 accept the real ToS/ban/security risk of automating a live bank
 (materially different from XC Bank, which was built specifically to
-sidestep that question). **No login/OTP automation exists for this
-site — deliberately.** What exists so far is isolation-only:
+sidestep that question). **No OTP/2FA/CAPTCHA/passkey/security-challenge automation exists for this
+site — deliberately.** Credential plaintext must never be recorded, persisted,
+logged, exposed through APIs/screenshots/traces/UI output/chat/git, or embedded in
+workflow/recording JSON. Runtime credential injection may be designed only as an
+explicit owner-authorized lane/account capability using `typeSecret(secretRef)` +
+a SecretProvider/vault; action JSON may contain only the `secretRef`, never the
+secret value. Production financial-service authentication must stay disabled by
+default and requires a separate explicit security design before enabling for a
+specific lane/account; challenges remain human-only. What exists so far is isolation-only:
 - `docker-compose.yml`: `browser-worker-scb-business-anywhere-1` +
   `worker-scb-business-anywhere-1` — a genuinely separate Chromium
   container/profile from `browser-worker-chrome`, own noVNC port
@@ -617,7 +624,7 @@ site — deliberately.** What exists so far is isolation-only:
   (`GET /monitors/scb-business-anywhere/live`) — noVNC of this lane
   only, a static "Lane info" panel (no monitor/check logic exists yet,
   explicitly says so), and a persistent banner: OTP/2FA/security
-  prompts are human-only, the bot must never submit one. A "Lanes"
+  prompts are human-only, the bot must never submit an OTP/2FA/CAPTCHA/passkey/security challenge. A "Lanes"
   section on `/` (`index.html`/`app.js`) mirrors the existing
   Browsers section's Start/Stop pattern (`actions.ts`'s
   `startScbLane1`/`stopScbLane1`, same fixed-allowlist mechanism, not
@@ -642,22 +649,23 @@ site — deliberately.** What exists so far is isolation-only:
   project-wide (`docs/PROJECT_PLAN.md`'s decision log), just restated
   for higher stakes.
 - **"Assisted Manual Login" view** (`scb-business-anywhere-live.html`/
-  `.js`) — the user asked, then was told directly, that having the bot
-  type the username/password itself (even with a human only watching)
-  is *worse* for detection risk than a human typing it themselves
-  (mouse/keyboard/timing patterns differ, and it would mean a real
-  password has to pass through the bot/logs at some point, which this
-  project refuses to do). The page embeds this lane's own noVNC
-  directly (`?autoconnect=true` so the user doesn't need to open a
-  separate tab or click noVNC's own "Connect" button — they still type
-  this lane's own local noVNC access password, `VNC_PASSWORD`, once;
-  that's a dev-only environment password, not the bank credential) so
-  the user types username/password/OTP themselves, directly in the
-  embedded screen. A right-hand 6-step checklist tracks progress
-  (steps 2-5, the actual typing, are purely client-side markers — the
-  bot has no way to know login state and doesn't try to check). Only
-  two bot actions exist, both narrow and named for exactly what they
-  do:
+  `.js`) — the page embeds this lane's own noVNC directly
+  (`?autoconnect=true` so the user doesn't need to open a separate tab
+  or click noVNC's own "Connect" button — they still type this lane's
+  own local noVNC access password, `VNC_PASSWORD`, once; that's a
+  dev-only environment password, not the bank credential). Current UX
+  lets the user type username/password/OTP themselves in the embedded
+  screen. If credential entry is ever automated for this lane, it must
+  follow the Credential Automation Policy above: explicit lane/account
+  approval, `typeSecret(secretRef)`, runtime-only SecretProvider
+  resolution, and no plaintext value in recordings/source/logs/API/UI.
+  Detection/ToS risk remains real and must be accepted separately for
+  the exact lane/account. OTP/2FA/CAPTCHA/passkey/security challenges
+  remain human-only even if a future credential-injection path is
+  approved. A right-hand 6-step checklist tracks progress (steps 2-5,
+  the actual typing, are purely client-side markers — the bot has no
+  way to know login state and doesn't try to check). Only two bot
+  actions exist, both narrow and named for exactly what they do:
   - **Open Login Page** (`POST /api/lanes/scb-business-anywhere-1/open-login`
     → `runScbOpenLoginPage()` in `exec.ts` → the new
     `scb-business-anywhere-open-login.json` workflow, run through this
@@ -898,13 +906,40 @@ site — deliberately.** What exists so far is isolation-only:
   real funds) specifically so the risky-keyword confirm gate has
   something safe to test against before ever pointing at anything
   real. Mock username/password aren't real secrets — any non-empty
-  value works. **The real-account boundary is unchanged**: this mock
-  exists so record→analyze→run could be *tested* safely, not as a
-  loophole — automating login/OTP on the real SCB site remains
-  forbidden, full stop.
+  value works. **The real-account boundary is governed by the Credential Automation Policy above**: this mock
+  exists so record→analyze→run can be tested safely, not as a loophole.
+  OTP/2FA/CAPTCHA/passkey/security challenges on the real SCB site remain
+  human-only; login credential injection is a separate security-design item
+  and must never store plaintext in recordings/source/logs/API/UI.
 
 Full checklist + decision log: [`docs/PROJECT_PLAN.md`](./docs/PROJECT_PLAN.md).
 Cross-agent handoffs: [`docs/AGENT_HANDOFF.md`](./docs/AGENT_HANDOFF.md).
+
+## Credential Automation Policy
+
+This project distinguishes **recording secrets** from **using an approved runtime secret reference**:
+
+- Credential values must never be recorded, persisted, committed, logged, exposed through APIs, screenshots, traces, recordings, UI output, or chat.
+- Recorder output must keep credential-shaped input as `REDACTED_FIELD_SENTINEL` by default, or as a `typeSecret(secretRef)` placeholder after explicit review.
+- `typeSecret` actions may contain only `selector`/target metadata and `secretRef`; action JSON must never contain a plaintext `value` for a secret.
+- A SecretProvider/vault may resolve `secretRef` only at runtime for an explicitly authorized lane/account. The plaintext exists only briefly in process memory for browser typing and must never be returned by an API or rendered in UI.
+- Production financial-service credential injection is disabled by default and requires a separate explicit owner/admin approval plus a documented security design for that exact lane/account before implementation.
+- OTP, 2FA, CAPTCHA, passkey, and other security challenges remain human-only: do not automate, bypass, store, replay, or solve them.
+- Dangerous post-login actions (transfer/payment/beneficiary changes) keep the existing confirm gate; secret injection must not weaken it.
+
+Acceptable recording/replay shape:
+
+```json
+{ "type": "typeSecret", "params": { "selector": "#password", "secretRef": "lane.account.login.password" } }
+```
+
+Forbidden shape:
+
+```json
+{ "type": "typeSecret", "params": { "selector": "#password", "value": "plaintext-password" } }
+```
+
+Do not use `claude --dangerously-skip-permissions` to change this policy. That flag only affects tool-permission prompts, not project safety rules.
 
 ## Repo layout
 
@@ -949,7 +984,7 @@ data/monitor-state/           XC Bank Monitor's dev-only JSON state (gitignored,
   screenshots/video/downloads. See decision log in `docs/PROJECT_PLAN.md`.
 - Both Chrome and Firefox must stay supported — this is not a Chrome-only
   tool.
-- Never store plaintext credentials in source or `.env`. The `data/profiles/`
+- Never store plaintext credentials in source, `.env`, recordings, logs, API responses, UI output, screenshots, traces, or git. Credential-shaped recorder input must stay redacted (`REDACTED_FIELD_SENTINEL`) unless explicitly mapped to `typeSecret(secretRef)` for an approved lane/account; the secret value itself is resolved only at runtime by a SecretProvider and never returned by APIs. The `data/profiles/`
   bind mount is an explicitly-acknowledged dev-only shortcut until the
   encrypted Session Vault (Phase 2/3) exists — don't treat it as production
   storage.
@@ -974,3 +1009,4 @@ so the next session — in either tool — knows what's actually done.
 If another agent or human needs context, add a short entry to
 `docs/AGENT_HANDOFF.md` with status, files touched, verification, and the next
 recommended action. Never include secrets or browser-profile data there.
+

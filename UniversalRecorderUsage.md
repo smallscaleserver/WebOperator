@@ -309,6 +309,23 @@ review step ก่อนเซฟ
 
 ---
 
+## Credential/Secret Policy Update
+
+The universal recorder still never captures plaintext credentials. A credential field is redacted by default (`REDACTED_FIELD_SENTINEL`). A future/approved replay path may use `typeSecret(secretRef)`, where the saved script contains only the selector and secret reference, never the secret value.
+
+Allowed shape:
+
+```json
+{ "type": "typeSecret", "params": { "selector": "#password", "secretRef": "lane.account.login.password" } }
+```
+
+Forbidden shape:
+
+```json
+{ "type": "typeSecret", "params": { "selector": "#password", "value": "plaintext-password" } }
+```
+
+For production financial-service lanes, credential injection is disabled by default and needs explicit owner/admin approval plus a documented lane/account security design. OTP/2FA/CAPTCHA/passkey/security challenges remain manual-only.
 ## 9. Script เก็บไว้ที่ไหน
 
 ไฟล์ JSON หนึ่งไฟล์ต่อหนึ่งสคริปต์ แยกตาม lane:
@@ -432,3 +449,4 @@ Browser container อาจค้าง — ลองกดปุ่ม **Restar
 `/` (หรือยิง `POST /api/lanes/:laneId/restart`) ก่อน ถ้ายังไม่หาย ดู
 `docs/BOT_LANE_ISOLATION.md`'s "Lane health/CDP reachability" กับ
 `docs/PROJECT_PLAN.md`'s decision log สำหรับ root cause ที่เคยเจอ
+

@@ -30,6 +30,14 @@ and sessions.
 
 ## Handoff Log
 
+### 2026-08-18 — Codex
+
+- Status: Done
+- Context: Clarified project credential automation rules without bypassing agent safety. The durable rule is now no plaintext credential recording/storage/log/API/UI/screenshot/trace/git exposure. Future automated credential entry must use an explicit lane/account-approved `typeSecret(secretRef)` plus a runtime SecretProvider/vault; production financial-service lanes remain disabled by default until a separate security design approves that exact lane/account. OTP/2FA/CAPTCHA/passkey/security challenges remain human-only, and dangerous post-login actions keep the confirm gate. No runtime implementation was added in this pass.
+- Files: `AGENTS.md`, `CLAUDE.md`, `UniversalRecorderUsage.md`, `docs/PROJECT_PLAN.md`, `docs/AGENT_HANDOFF.md`
+- Verified: Documentation-only change; grep checked old absolute wording and credential policy references.
+- Next: If implementing later, do it as two commits: first docs/rule approval already done here, then a scoped SecretProvider + `typeSecret(secretRef)` implementation with no plaintext secrets in tracked files.
+
 ### 2026-08-05 — Codex
 
 - Status: Done
@@ -3365,3 +3373,4 @@ Read this one first if picking the session back up cold.
   Recordings Library UX page, or a further BOT_LANE_ISOLATION.md
   migration step (state/artifact path isolation is next per that
   doc's own ordering) if nothing else comes up.
+
