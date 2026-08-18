@@ -42,6 +42,28 @@ image/container ค้างหรืออยากล้างทุกอย�
 เต็ม — ยังไม่รวม Gmail/Phase 3 ซึ่งเป็น dev scaffold แยกต่างหาก ดู
 [AGENTS.md](./AGENTS.md))
 
+
+### AuthBridge mock-first data flow
+
+The current AuthBridge integration keeps WebOperator as the controller and queue/concurrency owner. AuthBridge is a helper service only; it does not enqueue WebOperator jobs and does not command the Control Panel.
+
+```text
+WebOperator Control Panel
+  -> BullMQ queue
+  -> WebOperator Worker
+  -> AuthBridge API
+  -> CDP
+  -> Browser Lane
+  -> job result back to WebOperator Jobs table
+```
+
+Current boundaries:
+
+- WebOperator sends only `credentialRef: scb.mock.demo` for the mock login flow.
+- Plaintext passwords must not enter WebOperator UI, API routes, jobs, logs, or docs.
+- There is no AuthBridge callback/webhook into WebOperator yet.
+- AuthBridge must not enqueue BullMQ work or bypass WebOperator lane scheduling.
+- This flow is mock-first only: no real SCB login and no OTP/2FA/CAPTCHA/passkey automation.
 #### สิ่งที่ต้องมีก่อน (Prerequisites)
 
 - **Docker Desktop** ติดตั้งแล้วและ **เปิดอยู่** (Docker daemon ต้อง

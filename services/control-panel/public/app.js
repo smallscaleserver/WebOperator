@@ -189,6 +189,8 @@ function escapeHtml(str) {
 }
 
 function shortResult(job) {
+  const authBridgeSummary = formatAuthBridgeSummary(job);
+  if (authBridgeSummary) return authBridgeSummary;
   if (job.state === "failed") return job.failedReason || "(failed)";
   if (job.result) {
     const text = job.result.ok ? job.result.stdout : job.result.error || job.result.stderr;
@@ -202,6 +204,44 @@ function shortResult(job) {
   return "";
 }
 
+function parseAuthBridgeStdout(job) {
+  if (!job.name.startsWith("auth-bridge-") || !job.result || !job.result.stdout) return null;
+  const stdout = String(job.result.stdout).trim();
+  if (!stdout) return null;
+  try {
+    return JSON.parse(stdout);
+  } catch (_err) {
+    return null;
+  }
+}
+
+function formatAuthBridgeSummary(job) {
+  const payload = parseAuthBridgeStdout(job);
+  if (!payload) return null;
+  const label = job.name === "auth-bridge-login-mock" ? "AuthBridge login" : "AuthBridge state";
+  const state = payload.state || (payload.ok ? "ok" : "unknown");
+  return `${label}: ${state}`;
+}
+
+function renderAuthBridgeDetail(job) {
+  const payload = parseAuthBridgeStdout(job);
+  if (!payload) return null;
+  const credentialRef = job.name === "auth-bridge-login-mock" ? "scb.mock.demo" : payload.credentialRef;
+  const steps = Array.isArray(payload.steps) ? payload.steps : [];
+  const stepText = steps
+    .map((step) => step.name || step.message || step.status)
+    .filter(Boolean)
+    .join(" -> ");
+  const rows = [
+    `<div><strong>AuthBridge result</strong> <span class="badge manual">mock only</span></div>`,
+    payload.state ? `<div><strong>state:</strong> ${escapeHtml(String(payload.state))}</div>` : "",
+    credentialRef ? `<div><strong>credentialRef:</strong> ${escapeHtml(String(credentialRef))}</div>` : "",
+    payload.message ? `<div><strong>message:</strong> ${escapeHtml(String(payload.message))}</div>` : "",
+    payload.error ? `<div><strong>error:</strong> ${escapeHtml(String(payload.error))}</div>` : "",
+    stepText ? `<div><strong>steps:</strong> ${escapeHtml(stepText)}</div>` : "",
+  ].filter(Boolean);
+  return rows.length ? `<div class="auth-bridge-result">${rows.join("")}</div>` : null;
+}
 function renderJobTiming(job) {
   if (job.processedOn === null) return "";
   const started = new Date(job.processedOn).toLocaleTimeString();
@@ -210,6 +250,8 @@ function renderJobTiming(job) {
 }
 
 function renderSteps(job) {
+  const authBridgeDetail = renderAuthBridgeDetail(job);
+  if (authBridgeDetail) return authBridgeDetail;
   const steps = job.result && job.result.steps ? job.result.steps : [];
   if (steps.length === 0) return "<em>(no step detail)</em>";
   return steps

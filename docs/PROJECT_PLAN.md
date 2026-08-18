@@ -321,3 +321,13 @@ docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-com
 ```
 
 Do not use `docker compose down` unless intentionally stopping the whole stack.
+
+## AuthBridge controller/helper boundary
+
+The current AuthBridge integration is intentionally one-directional from WebOperator into AuthBridge:
+
+```text
+WebOperator Control Panel -> BullMQ -> WebOperator Worker -> AuthBridge API -> CDP -> Browser Lane -> Jobs table
+```
+
+WebOperator remains the queue owner, concurrency owner, lane scheduler, and UI owner. AuthBridge remains a helper service that performs auth-state/login actions through CDP only when the WebOperator worker calls it. There is no callback/webhook from AuthBridge to WebOperator, and AuthBridge must not enqueue WebOperator BullMQ jobs or command the Control Panel directly. The mock login path sends only `credentialRef: scb.mock.demo`; plaintext passwords must not enter WebOperator, and real SCB login plus OTP/2FA/CAPTCHA/passkey automation stay out of this flow.
