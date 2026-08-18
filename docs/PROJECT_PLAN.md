@@ -300,3 +300,24 @@ something real, and — if it ever becomes worth the effort — a way to
 keep a Firefox page alive across worker connections (would need a small
 always-connected keep-alive client; not pursued now).
 
+
+## AuthBridge mock overlay operation note
+
+The AuthBridge mock-first integration added in `ff99453 Add mock AuthBridge queue integration` is operated from WebOperator with the AuthBridge repo checked out beside it at `D:\WebOperatorAuthBridge`.
+
+Start the overlay from `D:\WebOperator` with:
+
+```powershell
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up -d --build scb-mock browser-worker-scb-business-anywhere-1 auth-bridge redis minio
+```
+
+Run the Control Panel API and queue worker as separate host processes from `services/control-panel` using `npm start` and `npm run worker`. The SCB live page at `http://localhost:4000/monitors/scb-business-anywhere/live` exposes the AuthBridge mock test buttons. The flow is strictly mock-only: WebOperator sends `credentialRef: scb.mock.demo`, never plaintext passwords, never `/secrets/set`, never real SCB login, and never OTP/2FA/CAPTCHA/passkey automation.
+
+Cleanup AuthBridge alone with:
+
+```powershell
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml stop auth-bridge
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml rm -f auth-bridge
+```
+
+Do not use `docker compose down` unless intentionally stopping the whole stack.

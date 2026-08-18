@@ -3384,3 +3384,13 @@ Read this one first if picking the session back up cold.
   doc's own ordering) if nothing else comes up.
 
 
+
+### 2026-08-19 — Codex — AuthBridge overlay docs added
+
+- Added docs for the mock-first AuthBridge overlay/runtime test after `ff99453 Add mock AuthBridge queue integration` was pushed and runtime-verified.
+- AuthBridge repo location is documented as `D:\WebOperatorAuthBridge`; WebOperator starts it with `docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up -d --build scb-mock browser-worker-scb-business-anywhere-1 auth-bridge redis minio`.
+- Control Panel operation is documented as two host processes from `services/control-panel`: `npm start` for API/UI and `npm run worker` for the BullMQ consumer.
+- UI entry point is `http://localhost:4000/monitors/scb-business-anywhere/live`, section **AuthBridge mock test**, buttons **Queue AuthBridge State** and **Queue Mock Login**.
+- Safety boundaries are explicit: mock login uses only `credentialRef: scb.mock.demo`; WebOperator must not receive/store/log plaintext passwords; do not run `/secrets/set` from WebOperator; do not use this flow for real SCB login; do not automate OTP/2FA/CAPTCHA/passkey.
+- Cleanup guidance is AuthBridge-only: `docker compose ... stop auth-bridge` then `docker compose ... rm -f auth-bridge`; avoid `docker compose down` unless intentionally stopping the entire stack.
+- Docs-only change; no runtime test needed for this docs commit.

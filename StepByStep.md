@@ -9,6 +9,67 @@
 [`UniversalRecorderUsage.md`](./UniversalRecorderUsage.md) แทน — คู่มือ
 นี้ครอบคลุมแค่การเปิดระบบพื้นฐาน/ทดสอบ XC Bank เท่านั้น.
 
+## AuthBridge mock overlay runtime test
+
+Use this flow to verify the mock-first AuthBridge integration added in
+`ff99453 Add mock AuthBridge queue integration`. The AuthBridge source
+repo is expected beside this repo at `D:\WebOperatorAuthBridge`.
+
+This flow is mock-only:
+
+- WebOperator sends only `credentialRef: scb.mock.demo` to AuthBridge.
+- WebOperator must not receive, store, or log plaintext passwords.
+- Do not run `/secrets/set` from WebOperator.
+- Do not use this flow for real SCB login.
+- Do not automate OTP, 2FA, CAPTCHA, or passkey steps.
+
+From `D:\WebOperator`, start the WebOperator stack with the AuthBridge
+overlay:
+
+```powershell
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up -d --build scb-mock browser-worker-scb-business-anywhere-1 auth-bridge redis minio
+```
+
+Start the Control Panel API and queue worker in separate terminals:
+
+```powershell
+cd services/control-panel
+npm start
+```
+
+```powershell
+cd services/control-panel
+npm run worker
+```
+
+Open the SCB live page:
+
+```text
+http://localhost:4000/monitors/scb-business-anywhere/live
+```
+
+Use the **AuthBridge mock test** section:
+
+- **Queue AuthBridge State** enqueues a BullMQ job that calls
+  AuthBridge `/auth/state`; on the mock login page it should report
+  `needs_username`.
+- **Queue Mock Login** enqueues a BullMQ job that calls AuthBridge
+  `/auth/login` with `credentialRef: scb.mock.demo`; against
+  `scb-mock` it should finish as `authenticated`.
+
+The browser UI never calls AuthBridge directly. It calls the Control
+Panel route, which enqueues BullMQ work, and the worker calls
+AuthBridge.
+
+Cleanup AuthBridge only when you are done with the overlay test:
+
+```powershell
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml stop auth-bridge
+docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml rm -f auth-bridge
+```
+
+Avoid `docker compose down` unless you intentionally want to stop the
+entire WebOperator stack.
 ## 0. สิ่งที่ต้องมีก่อน
 
 - เปิด **Docker Desktop** ให้พร้อมใช้งาน
