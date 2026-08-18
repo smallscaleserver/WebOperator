@@ -80,6 +80,13 @@ const SCB_MONITOR_SET_AUTOSTOP_JOB_NAME = "scb-business-anywhere-1-monitor-set-a
 // tick's actual check, so consecutive real requests land 70_000-105_000ms
 // apart (87_500 - 17_500 to 87_500 + 17_500) -- i.e. roughly 1:10-1:45.
 const SCB_MONITOR_INTERVAL_MS = Number(process.env.SCB_MONITOR_INTERVAL_MS ?? 87_500);
+const AUTH_BRIDGE_BASE_URL = process.env.AUTH_BRIDGE_BASE_URL ?? "http://127.0.0.1:4300";
+const AUTH_BRIDGE_LANE_ID = "scb-business-anywhere-1";
+const AUTH_BRIDGE_SITE_ID = "scb-business-anywhere";
+const AUTH_BRIDGE_CDP_URL = process.env.AUTH_BRIDGE_CDP_URL ?? "http://localhost:9222";
+const AUTH_BRIDGE_MOCK_CREDENTIAL_REF = "scb.mock.demo";
+const AUTH_BRIDGE_STATE_JOB_NAME = "auth-bridge-state";
+const AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME = "auth-bridge-login-mock";
 const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 17_500);
 // Telegram-triggered commands (see telegram-commands.ts) -- routed
 // through this same queue (not run directly from the polling loop) so
@@ -254,6 +261,21 @@ export function startWorker(): Worker {
           stderr: state.lastError ?? "",
           steps: [],
         };
+      }
+      if (job.name === AUTH_BRIDGE_STATE_JOB_NAME) {
+        return callAuthBridge("/auth/state", {
+          laneId: AUTH_BRIDGE_LANE_ID,
+          cdpUrl: AUTH_BRIDGE_CDP_URL,
+          siteId: AUTH_BRIDGE_SITE_ID,
+        });
+      }
+      if (job.name === AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME) {
+        return callAuthBridge("/auth/login", {
+          laneId: AUTH_BRIDGE_LANE_ID,
+          cdpUrl: AUTH_BRIDGE_CDP_URL,
+          siteId: AUTH_BRIDGE_SITE_ID,
+          credentialRef: AUTH_BRIDGE_MOCK_CREDENTIAL_REF,
+        });
       }
       if (job.name === SCB_TELEGRAM_SCREENSHOT_JOB_NAME) {
         const result = await runScbAnalyzePage();
@@ -439,6 +461,52 @@ export async function startMonitorSchedule(autoStopMinutes?: number): Promise<vo
 // a real browser session is a bigger feature than this dev tool needs.
 export async function stopMonitorSchedule(): Promise<void> {
   await queue.removeJobScheduler(MONITOR_SCHEDULER_ID);
+}
+
+export async function enqueueAuthBridgeState(): Promise<string> {
+  const job = await queue.add(AUTH_BRIDGE_STATE_JOB_NAME, {}, { ...JOB_OPTS, attempts: 1 });
+  return job.id ?? "";
+}
+
+export async function enqueueAuthBridgeLoginMock(): Promise<string> {
+  const job = await queue.add(
+    AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME,
+    { credentialRef: AUTH_BRIDGE_MOCK_CREDENTIAL_REF },
+    { ...JOB_OPTS, attempts: 1 },
+  );
+  return job.id ?? "";
+}
+
+export async function checkAuthBridgeHealth(
+  timeoutMs = 1500,
+): Promise<{ ok: boolean; readyForLogin?: boolean; error?: string }> {
+  try {
+    const response = await fetch(`${AUTH_BRIDGE_BASE_URL}/health`, { signal: AbortSignal.timeout(timeoutMs) });
+    const data = (await response.json()) as { ok?: boolean; readyForLogin?: boolean };
+    return { ok: response.ok && data.ok === true, readyForLogin: data.readyForLogin };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err) };
+  }
+}
+
+async function callAuthBridge(pathname: "/auth/state" | "/auth/login", body: Record<string, string>): Promise<ActionResult> {
+  try {
+    const response = await fetch(`${AUTH_BRIDGE_BASE_URL}${pathname}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body),
+      signal: AbortSignal.timeout(30_000),
+    });
+    const data = await response.json();
+    return {
+      ok: response.ok && data?.error === undefined && data?.state !== "failed",
+      stdout: JSON.stringify(data),
+      stderr: response.ok ? "" : `AuthBridge ${pathname} failed with HTTP ${response.status}`,
+      steps: [],
+    };
+  } catch (err) {
+    return { ok: false, stdout: "", stderr: err instanceof Error ? err.message : String(err), steps: [] };
+  }
 }
 
 // --- SCB Business Anywhere lane monitor -- mirrors everything above ---

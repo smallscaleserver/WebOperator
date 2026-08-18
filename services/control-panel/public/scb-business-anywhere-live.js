@@ -39,6 +39,8 @@ function setStatusUi(state) {
   document.getElementById("start-btn").disabled = running;
   document.getElementById("stop-btn").disabled = !running;
   document.getElementById("open-login-btn").disabled = !running;
+  document.getElementById("auth-bridge-state-btn").disabled = !running;
+  document.getElementById("auth-bridge-login-mock-btn").disabled = !running;
 
   if (running) {
     showLiveIframe();
@@ -47,11 +49,45 @@ function setStatusUi(state) {
   }
 }
 
+function setAuthBridgeUi(health) {
+  const dot = document.getElementById("auth-bridge-dot");
+  const label = document.getElementById("auth-bridge-label");
+  const ok = health && health.ok === true;
+  dot.className = `dot ${ok ? "running" : "stopped"}`;
+  label.textContent = ok
+    ? `ready${health.readyForLogin === false ? " (login config incomplete)" : ""}`
+    : `unavailable${health?.error ? ` — ${health.error}` : ""}`;
+}
+
+async function queueAuthBridgeAction(path, buttonId) {
+  showError(null);
+  const btn = document.getElementById(buttonId);
+  const originalText = btn.textContent;
+  btn.disabled = true;
+  btn.textContent = "Queueing…";
+  try {
+    const res = await fetch(path, { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) {
+      showError(data.error || "Failed to queue AuthBridge action");
+    } else {
+      document.getElementById("auth-bridge-last-job").textContent =
+        `Last AuthBridge job: ${data.jobId}${data.credentialRef ? ` (${data.credentialRef})` : ""}`;
+    }
+  } catch (err) {
+    showError(`Request failed: ${err}`);
+  }
+  btn.disabled = false;
+  btn.textContent = originalText;
+  await fetchStatus();
+}
+
 async function fetchStatus() {
   try {
     const res = await fetch("/api/status");
     const status = await res.json();
     setStatusUi(status.scbLane1);
+    setAuthBridgeUi(status.authBridgeHealth);
   } catch (err) {
     console.error("lane status poll failed", err);
   }
@@ -83,6 +119,12 @@ function markStepDone(stepId) {
 document.getElementById("start-btn").addEventListener("click", () => callAction("startScbLane1"));
 document.getElementById("start-btn-2").addEventListener("click", () => callAction("startScbLane1"));
 document.getElementById("stop-btn").addEventListener("click", () => callAction("stopScbLane1"));
+document.getElementById("auth-bridge-state-btn").addEventListener("click", () =>
+  queueAuthBridgeAction("/api/lanes/scb-business-anywhere-1/auth-bridge/state", "auth-bridge-state-btn"),
+);
+document.getElementById("auth-bridge-login-mock-btn").addEventListener("click", () =>
+  queueAuthBridgeAction("/api/lanes/scb-business-anywhere-1/auth-bridge/login-mock", "auth-bridge-login-mock-btn"),
+);
 
 document.getElementById("open-login-btn").addEventListener("click", async () => {
   showError(null);

@@ -36,6 +36,9 @@ import {
   startRecordingSchedule,
   stopRecordingSchedule,
   getRecordingScheduleInfo,
+  enqueueAuthBridgeState,
+  enqueueAuthBridgeLoginMock,
+  checkAuthBridgeHealth,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
 import { getReplayState } from "./replay-engine.js";
@@ -86,6 +89,7 @@ app.get("/api/status", async (_req, res) => {
     scbLane1: string;
     chromeHealth?: Awaited<ReturnType<typeof getLaneHealth>>;
     scbLane1Health?: Awaited<ReturnType<typeof getLaneHealth>>;
+    authBridgeHealth?: Awaited<ReturnType<typeof checkAuthBridgeHealth>>;
   } = { chrome: "unknown", firefox: "unknown", scbLane1: "unknown" };
   try {
     const stdout = await composePs();
@@ -117,6 +121,7 @@ app.get("/api/status", async (_req, res) => {
   } catch (err) {
     console.error("lane health check failed:", err);
   }
+  status.authBridgeHealth = await checkAuthBridgeHealth();
   res.json(status);
 });
 
@@ -460,6 +465,24 @@ app.post("/api/lanes/scb-business-anywhere-1/select-company", express.json(), as
       await setScbTargetCompany(companyName);
     }
     res.json(result);
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/state", async (_req, res) => {
+  try {
+    const jobId = await enqueueAuthBridgeState();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/login-mock", async (_req, res) => {
+  try {
+    const jobId = await enqueueAuthBridgeLoginMock();
+    res.json({ ok: true, jobId, credentialRef: "scb.mock.demo" });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }

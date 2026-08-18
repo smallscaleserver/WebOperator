@@ -96,6 +96,21 @@
 
   <div class="live-right">
     <section>
+      <h2>AuthBridge mock test</h2>
+      <p class="hint">
+        Mock-first only. These buttons enqueue BullMQ jobs that call AuthBridge with credentialRef
+        <code>scb.mock.demo</code>; this UI never accepts or sends plaintext passwords.
+      </p>
+      <div class="row">
+        <span class="dot" id="auth-bridge-dot"></span>
+        <span id="auth-bridge-label">checking…</span>
+        <button id="auth-bridge-state-btn">Queue AuthBridge State</button>
+        <button id="auth-bridge-login-mock-btn">Queue Mock Login</button>
+      </div>
+      <p class="hint" id="auth-bridge-last-job">Last AuthBridge job: —</p>
+    </section>
+
+    <section>
       <h2>Assisted manual login checklist</h2>
       <ol class="checklist" id="checklist">
         <li id="step-1">Open login page
