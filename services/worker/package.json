@@ -16,7 +16,8 @@
     "record-actions": "tsx src/record-actions.ts",
     "firefox-demo": "tsx src/run-firefox-demo.ts",
     "gmail:authorize": "tsx src/gmail/authorize.ts",
-    "gmail:list": "tsx src/gmail/list-messages.ts"
+    "gmail:list": "tsx src/gmail/list-messages.ts",
+    "scb-mock-reset": "tsx src/scb-mock-reset.ts"
   },
   "dependencies": {
     "google-auth-library": "^10.5.0",

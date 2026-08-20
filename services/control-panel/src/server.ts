@@ -38,6 +38,7 @@ import {
   getRecordingScheduleInfo,
   enqueueAuthBridgeState,
   enqueueAuthBridgeLoginMock,
+  enqueueAuthBridgeResetMockSession,
   checkAuthBridgeHealth,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
@@ -483,6 +484,15 @@ app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/login-mock", async (_re
   try {
     const jobId = await enqueueAuthBridgeLoginMock();
     res.json({ ok: true, jobId, credentialRef: "scb.mock.demo" });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/reset-mock-session", async (_req, res) => {
+  try {
+    const jobId = await enqueueAuthBridgeResetMockSession();
+    res.json({ ok: true, jobId, mockOnly: true });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });
   }

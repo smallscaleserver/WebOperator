@@ -41,6 +41,7 @@ function setStatusUi(state) {
   document.getElementById("open-login-btn").disabled = !running;
   document.getElementById("auth-bridge-state-btn").disabled = !running;
   document.getElementById("auth-bridge-login-mock-btn").disabled = !running;
+  document.getElementById("auth-bridge-reset-mock-btn").disabled = !running;
 
   if (running) {
     showLiveIframe();
@@ -124,6 +125,12 @@ document.getElementById("auth-bridge-state-btn").addEventListener("click", () =>
 );
 document.getElementById("auth-bridge-login-mock-btn").addEventListener("click", () =>
   queueAuthBridgeAction("/api/lanes/scb-business-anywhere-1/auth-bridge/login-mock", "auth-bridge-login-mock-btn"),
+);
+document.getElementById("auth-bridge-reset-mock-btn").addEventListener("click", () =>
+  queueAuthBridgeAction(
+    "/api/lanes/scb-business-anywhere-1/auth-bridge/reset-mock-session",
+    "auth-bridge-reset-mock-btn",
+  ),
 );
 
 document.getElementById("open-login-btn").addEventListener("click", async () => {

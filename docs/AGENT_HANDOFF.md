@@ -3448,3 +3448,9 @@ Read this one first if picking the session back up cold.
 - The worker now calls `/auth/state` before `/auth/login` and refuses mock login unless the current URL is `http://scb-mock:3000/*`.
 - The job still sends only `credentialRef: scb.mock.demo`; if the lane is on `about:blank`, a real/non-mock URL, or state parsing fails, it returns `mock_login_refused_not_scb_mock` before sending any credentialRef to AuthBridge `/auth/login`.
 - Scope stays mock-first only: no AuthBridge changes, no real SCB login, no secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.
+
+### 2026-08-21 — Codex — AuthBridge mock reset button
+
+- Added a mock-only Reset Mock Session path in WebOperator so the SCB mock AuthBridge flow can loop `state -> login -> reset -> state -> login` from the live page.
+- The browser JS calls only the Control Panel route; the queued worker runs the existing lane worker against `scb-mock` `/logout-clean` and returns to `/login`.
+- Scope stays mock-only: no AuthBridge change, no real SCB login, no credentials/secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.

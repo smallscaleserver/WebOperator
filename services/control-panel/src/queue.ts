@@ -4,6 +4,7 @@ import {
   runAction,
   runWorkflow,
   runScbAnalyzePage,
+  runScbMockReset,
   parseLanePageAnalysis,
   runStartRecording,
   parseRecordingResult,
@@ -87,6 +88,7 @@ const AUTH_BRIDGE_CDP_URL = process.env.AUTH_BRIDGE_CDP_URL ?? "http://localhost
 const AUTH_BRIDGE_MOCK_CREDENTIAL_REF = "scb.mock.demo";
 const AUTH_BRIDGE_STATE_JOB_NAME = "auth-bridge-state";
 const AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME = "auth-bridge-login-mock";
+const AUTH_BRIDGE_RESET_MOCK_JOB_NAME = "auth-bridge-reset-mock-session";
 const SCB_MONITOR_JITTER_MS = Number(process.env.SCB_MONITOR_JITTER_MS ?? 17_500);
 // Telegram-triggered commands (see telegram-commands.ts) -- routed
 // through this same queue (not run directly from the polling loop) so
@@ -271,6 +273,9 @@ export function startWorker(): Worker {
       }
       if (job.name === AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME) {
         return callAuthBridgeLoginMock();
+      }
+      if (job.name === AUTH_BRIDGE_RESET_MOCK_JOB_NAME) {
+        return runScbMockReset();
       }
       if (job.name === SCB_TELEGRAM_SCREENSHOT_JOB_NAME) {
         const result = await runScbAnalyzePage();
@@ -469,6 +474,11 @@ export async function enqueueAuthBridgeLoginMock(): Promise<string> {
     { credentialRef: AUTH_BRIDGE_MOCK_CREDENTIAL_REF },
     { ...JOB_OPTS, attempts: 1 },
   );
+  return job.id ?? "";
+}
+
+export async function enqueueAuthBridgeResetMockSession(): Promise<string> {
+  const job = await queue.add(AUTH_BRIDGE_RESET_MOCK_JOB_NAME, {}, { ...JOB_OPTS, attempts: 1 });
   return job.id ?? "";
 }
 

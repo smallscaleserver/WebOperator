@@ -271,6 +271,19 @@ export async function runScbCheckBalance(targetCompany?: string | null): Promise
   return execAndParse(args);
 }
 
+export async function runScbMockReset(): Promise<ActionResult> {
+  return execAndParse([
+    "compose",
+    "run",
+    "--rm",
+    "--no-deps",
+    SCB_LANE_SERVICE,
+    "npx",
+    "tsx",
+    "src/scb-mock-reset.ts",
+  ]);
+}
+
 export interface ScbTransaction {
   date: string;
   time: string;
