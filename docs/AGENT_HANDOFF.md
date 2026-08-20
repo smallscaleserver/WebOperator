@@ -3460,3 +3460,9 @@ Read this one first if picking the session back up cold.
 - Added a Control Panel proxy route for AuthBridge `/events`; browser JS polls only WebOperator and never calls AuthBridge directly.
 - The live SCB AuthBridge mock test section now shows the latest 20 safe events and a readable offline message when AuthBridge events are unavailable.
 - Event payloads are sanitized to safe metadata only: id/type/time/lane/site/message/state. No secrets, usernames, passwords, or CDP URLs are forwarded.
+
+### 2026-08-21 — Codex — AuthBridge summary card
+
+- Added an AuthBridge summary card to the SCB live page using only WebOperator routes: `/api/status`, `/api/jobs`, and the AuthBridge events proxy.
+- The card shows health, latest auth state, latest login result, latest reset result, latest event timestamp, and last readable error without requiring the Jobs table or long event list.
+- Browser JS still never calls AuthBridge directly, and the UI derives only safe metadata/no secret fields.

@@ -109,6 +109,17 @@
         <button id="auth-bridge-reset-mock-btn">Reset Mock Session</button>
       </div>
       <p class="hint" id="auth-bridge-last-job">Last AuthBridge job: —</p>
+      <div class="panel auth-bridge-summary-card">
+        <h3>AuthBridge summary</h3>
+        <dl>
+          <dt>Health</dt><dd id="auth-bridge-summary-health">checking...</dd>
+          <dt>Latest auth state</dt><dd id="auth-bridge-summary-state">not run yet</dd>
+          <dt>Latest login result</dt><dd id="auth-bridge-summary-login">not run yet</dd>
+          <dt>Latest reset result</dt><dd id="auth-bridge-summary-reset">not run yet</dd>
+          <dt>Latest event</dt><dd id="auth-bridge-summary-event">none</dd>
+          <dt>Last error</dt><dd id="auth-bridge-summary-error">none</dd>
+        </dl>
+      </div>
       <div class="panel auth-bridge-events-panel">
         <h3>AuthBridge events</h3>
         <p class="hint" id="auth-bridge-events-status">Waiting for events…</p>

@@ -341,3 +341,7 @@ WebOperator remains the queue owner, concurrency owner, lane scheduler, and UI o
 ## AuthBridge events UI proxy
 
 WebOperator now proxies AuthBridge `/events` through `GET /api/lanes/scb-business-anywhere-1/auth-bridge/events`. The browser live page polls only this Control Panel route; it never calls AuthBridge directly. The proxy fetches `http://127.0.0.1:4300/events`, clamps the UI limit to 20, and sanitizes event payloads to safe metadata (`id`, `type`, `createdAt`, `laneId`, `siteId`, `message`, and `details.state`) so secrets, usernames, passwords, and CDP URLs are not forwarded to the browser. If AuthBridge is offline, the route returns readable JSON and the live page keeps the existing buttons usable.
+
+## AuthBridge summary card
+
+The SCB live page now includes an AuthBridge summary card derived only from WebOperator-owned routes (`/api/status`, `/api/jobs`, and the Control Panel AuthBridge events proxy). Browser JavaScript still never calls AuthBridge directly. The card surfaces health, latest auth state, latest login result, latest reset result, latest event timestamp, and the last readable error while keeping the full event list and existing buttons intact. It reuses sanitized events and parsed job output; no credentials, usernames, passwords, CDP URLs, or port details are rendered intentionally.

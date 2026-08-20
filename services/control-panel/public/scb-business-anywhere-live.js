@@ -58,12 +58,94 @@ function setAuthBridgeUi(health) {
   label.textContent = ok
     ? `ready${health.readyForLogin === false ? " (login config incomplete)" : ""}`
     : `unavailable${health?.error ? ` â€” ${health.error}` : ""}`;
-}
 
+
+  authBridgeHealthLabel = label.textContent;
+  if (!ok && health?.error) authBridgeLastError = health.error;
+  renderAuthBridgeSummary();
+}
 
 let authBridgeEventsAfter = 0;
 let authBridgeEvents = [];
+let authBridgeHealthLabel = "checking...";
+let authBridgeLatestState = "not run yet";
+let authBridgeLatestLogin = "not run yet";
+let authBridgeLatestReset = "not run yet";
+let authBridgeLatestEvent = "none";
+let authBridgeLastError = "none";
 
+
+function setSummaryText(id, value) {
+  const el = document.getElementById(id);
+  if (el) el.textContent = value;
+}
+
+function renderAuthBridgeSummary() {
+  setSummaryText("auth-bridge-summary-health", authBridgeHealthLabel);
+  setSummaryText("auth-bridge-summary-state", authBridgeLatestState);
+  setSummaryText("auth-bridge-summary-login", authBridgeLatestLogin);
+  setSummaryText("auth-bridge-summary-reset", authBridgeLatestReset);
+  setSummaryText("auth-bridge-summary-event", authBridgeLatestEvent);
+  setSummaryText("auth-bridge-summary-error", authBridgeLastError);
+}
+
+function applyAuthBridgeEventSummary(event) {
+  const state = event.details?.state;
+  if (event.type === "auth_state_finished") {
+    authBridgeLatestState = state || event.message || "unknown";
+  }
+  if (event.type === "auth_login_finished") {
+    authBridgeLatestLogin = state || event.message || "authenticated";
+  }
+  if (event.type === "auth_login_failed" || event.type === "auth_login_rejected") {
+    authBridgeLatestLogin = state || "failed";
+    authBridgeLastError = event.message || event.type;
+  }
+  if (event.createdAt) {
+    authBridgeLatestEvent = `${event.type} at ${new Date(event.createdAt).toLocaleTimeString()}`;
+  }
+}
+
+function parseJobStdout(job) {
+  try {
+    return job.result?.stdout ? JSON.parse(job.result.stdout) : null;
+  } catch {
+    return null;
+  }
+}
+
+function applyAuthBridgeJobSummary(job) {
+  if (job.name === "auth-bridge-state") {
+    const payload = parseJobStdout(job);
+    authBridgeLatestState = payload?.state || (job.result?.ok ? "ok" : "unknown");
+    if (!job.result?.ok) authBridgeLastError = job.result?.stderr || job.failedReason || "state failed";
+  }
+  if (job.name === "auth-bridge-login-mock") {
+    const payload = parseJobStdout(job);
+    authBridgeLatestLogin = payload?.state || (job.result?.ok ? "authenticated" : "failed");
+    if (!job.result?.ok) authBridgeLastError = payload?.message || job.result?.stderr || job.failedReason || "login failed";
+  }
+  if (job.name === "auth-bridge-reset-mock-session") {
+    authBridgeLatestReset = job.result?.ok ? "returned to login" : "failed";
+    if (!job.result?.ok) authBridgeLastError = job.result?.stderr || job.failedReason || "reset failed";
+  }
+}
+
+async function fetchAuthBridgeJobSummary() {
+  try {
+    const res = await fetch("/api/jobs");
+    const data = await res.json();
+    (data.jobs || [])
+      .filter((job) => job.name && job.name.startsWith("auth-bridge-"))
+      .slice(0, 20)
+      .reverse()
+      .forEach(applyAuthBridgeJobSummary);
+    renderAuthBridgeSummary();
+  } catch (err) {
+    authBridgeLastError = `Jobs unavailable: ${err}`;
+    renderAuthBridgeSummary();
+  }
+}
 function renderAuthBridgeEvents() {
   const list = document.getElementById("auth-bridge-events-list");
   if (authBridgeEvents.length === 0) {
@@ -91,9 +173,11 @@ async function fetchAuthBridgeEvents() {
       return;
     }
     authBridgeEventsAfter = data.nextAfter ?? authBridgeEventsAfter;
+    (data.items || []).forEach(applyAuthBridgeEventSummary);
     authBridgeEvents = authBridgeEvents.concat(data.items || []).slice(-20);
     status.textContent = authBridgeEvents.length ? `Showing ${authBridgeEvents.length} latest safe event(s)` : "Waiting for events…";
     renderAuthBridgeEvents();
+    renderAuthBridgeSummary();
   } catch (err) {
     status.textContent = `AuthBridge events unavailable: ${err}`;
   }
@@ -535,7 +619,9 @@ document.getElementById("reference-reset-btn").addEventListener("click", () => {
 
 fetchStatus();
 fetchAuthBridgeEvents();
+fetchAuthBridgeJobSummary();
 fetchMonitorStatus();
 setInterval(fetchStatus, 3000);
 setInterval(fetchAuthBridgeEvents, 3000);
+setInterval(fetchAuthBridgeJobSummary, 3000);
 setInterval(fetchMonitorStatus, 3000);
