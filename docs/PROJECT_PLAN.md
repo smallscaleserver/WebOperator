@@ -332,3 +332,7 @@ WebOperator Control Panel -> BullMQ -> WebOperator Worker -> AuthBridge API -> C
 ```
 
 WebOperator remains the queue owner, concurrency owner, lane scheduler, and UI owner. AuthBridge remains a helper service that performs auth-state/login actions through CDP only when the WebOperator worker calls it. There is no callback/webhook from AuthBridge to WebOperator, and AuthBridge must not enqueue WebOperator BullMQ jobs or command the Control Panel directly. The mock login path sends only `credentialRef: scb.mock.demo`; plaintext passwords must not enter WebOperator, and real SCB login plus OTP/2FA/CAPTCHA/passkey automation stay out of this flow.
+
+## AuthBridge mock login preflight hardening
+
+`auth-bridge-login-mock` now performs a WebOperator-side preflight before sending `credentialRef: scb.mock.demo` to AuthBridge. The worker first calls AuthBridge `/auth/state` for the current lane and refuses the mock login unless the reported browser URL is under `http://scb-mock:3000/`. This keeps the existing `scb-business-anywhere-1` wiring from becoming an accidental path to real-lane auto-login if a future change points the lane at a non-mock page. AuthBridge remains a helper service; it does not enqueue WebOperator jobs or command the Control Panel.

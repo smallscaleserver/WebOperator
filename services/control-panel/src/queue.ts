@@ -270,12 +270,7 @@ export function startWorker(): Worker {
         });
       }
       if (job.name === AUTH_BRIDGE_LOGIN_MOCK_JOB_NAME) {
-        return callAuthBridge("/auth/login", {
-          laneId: AUTH_BRIDGE_LANE_ID,
-          cdpUrl: AUTH_BRIDGE_CDP_URL,
-          siteId: AUTH_BRIDGE_SITE_ID,
-          credentialRef: AUTH_BRIDGE_MOCK_CREDENTIAL_REF,
-        });
+        return callAuthBridgeLoginMock();
       }
       if (job.name === SCB_TELEGRAM_SCREENSHOT_JOB_NAME) {
         const result = await runScbAnalyzePage();
@@ -489,6 +484,69 @@ export async function checkAuthBridgeHealth(
   }
 }
 
+
+async function callAuthBridgeLoginMock(): Promise<ActionResult> {
+  if (AUTH_BRIDGE_MOCK_CREDENTIAL_REF !== "scb.mock.demo") {
+    return {
+      ok: false,
+      stdout: "",
+      stderr: "Mock login refused: credentialRef is not scb.mock.demo",
+      steps: [],
+    };
+  }
+
+  const state = await callAuthBridge("/auth/state", {
+    laneId: AUTH_BRIDGE_LANE_ID,
+    cdpUrl: AUTH_BRIDGE_CDP_URL,
+    siteId: AUTH_BRIDGE_SITE_ID,
+  });
+  const statePayload = parseAuthBridgeJson(state.stdout);
+  if (!statePayload || !isScbMockUrl(statePayload.url)) {
+    return {
+      ok: false,
+      stdout: JSON.stringify({
+        ok: false,
+        state: statePayload?.state ?? "refused",
+        url: statePayload?.url,
+        title: statePayload?.title,
+        error: "mock_login_refused_not_scb_mock",
+        message: "Mock login refused: current lane page is not scb-mock",
+      }),
+      stderr: state.stderr || "Mock login refused: current lane page is not scb-mock",
+      steps: [],
+    };
+  }
+
+  return callAuthBridge("/auth/login", {
+    laneId: AUTH_BRIDGE_LANE_ID,
+    cdpUrl: AUTH_BRIDGE_CDP_URL,
+    siteId: AUTH_BRIDGE_SITE_ID,
+    credentialRef: AUTH_BRIDGE_MOCK_CREDENTIAL_REF,
+  });
+}
+
+function parseAuthBridgeJson(stdout: string): { state?: string; url?: string; title?: string } | null {
+  try {
+    const value = JSON.parse(stdout) as { state?: unknown; url?: unknown; title?: unknown };
+    return {
+      state: typeof value.state === "string" ? value.state : undefined,
+      url: typeof value.url === "string" ? value.url : undefined,
+      title: typeof value.title === "string" ? value.title : undefined,
+    };
+  } catch (_err) {
+    return null;
+  }
+}
+
+function isScbMockUrl(url: string | undefined): boolean {
+  if (!url) return false;
+  try {
+    const parsed = new URL(url);
+    return parsed.protocol === "http:" && parsed.hostname === "scb-mock" && parsed.port === "3000";
+  } catch (_err) {
+    return false;
+  }
+}
 async function callAuthBridge(pathname: "/auth/state" | "/auth/login", body: Record<string, string>): Promise<ActionResult> {
   try {
     const response = await fetch(`${AUTH_BRIDGE_BASE_URL}${pathname}`, {

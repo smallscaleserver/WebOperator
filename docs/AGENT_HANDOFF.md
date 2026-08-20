@@ -3441,3 +3441,10 @@ Read this one first if picking the session back up cold.
   gets a real credential under the `scb.mock.demo` ref, since nothing
   in the wiring itself prevents that ref from being reused against this
   same real-lane CDP endpoint later.
+
+### 2026-08-20 — Codex — AuthBridge mock-login URL guard
+
+- Hardened `auth-bridge-login-mock` in WebOperator after Claude flagged that the job still uses the `scb-business-anywhere-1` browser lane.
+- The worker now calls `/auth/state` before `/auth/login` and refuses mock login unless the current URL is `http://scb-mock:3000/*`.
+- The job still sends only `credentialRef: scb.mock.demo`; if the lane is on `about:blank`, a real/non-mock URL, or state parsing fails, it returns `mock_login_refused_not_scb_mock` before sending any credentialRef to AuthBridge `/auth/login`.
+- Scope stays mock-first only: no AuthBridge changes, no real SCB login, no secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.
