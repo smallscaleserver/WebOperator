@@ -495,6 +495,51 @@ export async function checkAuthBridgeHealth(
 }
 
 
+
+export interface AuthBridgeEventItem {
+  id: number;
+  type: string;
+  createdAt: string;
+  laneId: string;
+  siteId: string;
+  message: string;
+  details?: { state?: string };
+}
+
+export async function fetchAuthBridgeEvents(
+  after = 0,
+  limit = 20,
+  timeoutMs = 1500,
+): Promise<{ ok: true; items: AuthBridgeEventItem[]; nextAfter: number } | { ok: false; error: string; items: []; nextAfter: number }> {
+  try {
+    const params = new URLSearchParams({ after: String(after), limit: String(limit) });
+    const response = await fetch(`${AUTH_BRIDGE_BASE_URL}/events?${params}`, { signal: AbortSignal.timeout(timeoutMs) });
+    if (!response.ok) {
+      return { ok: false, error: `AuthBridge events failed with HTTP ${response.status}`, items: [], nextAfter: after };
+    }
+    const data = (await response.json()) as { items?: unknown[]; nextAfter?: unknown };
+    const items = (Array.isArray(data.items) ? data.items : []).map(sanitizeAuthBridgeEvent).filter((item): item is AuthBridgeEventItem => item !== null);
+    return { ok: true, items, nextAfter: typeof data.nextAfter === "number" ? data.nextAfter : after };
+  } catch (err) {
+    return { ok: false, error: err instanceof Error ? err.message : String(err), items: [], nextAfter: after };
+  }
+}
+
+function sanitizeAuthBridgeEvent(value: unknown): AuthBridgeEventItem | null {
+  if (!value || typeof value !== "object") return null;
+  const event = value as Record<string, unknown>;
+  const details = event.details && typeof event.details === "object" ? (event.details as Record<string, unknown>) : undefined;
+  if (typeof event.id !== "number" || typeof event.type !== "string" || typeof event.createdAt !== "string") return null;
+  return {
+    id: event.id,
+    type: event.type,
+    createdAt: event.createdAt,
+    laneId: typeof event.laneId === "string" ? event.laneId : "",
+    siteId: typeof event.siteId === "string" ? event.siteId : "",
+    message: typeof event.message === "string" ? event.message : "",
+    details: details && typeof details.state === "string" ? { state: details.state } : undefined,
+  };
+}
 async function callAuthBridgeLoginMock(): Promise<ActionResult> {
   if (AUTH_BRIDGE_MOCK_CREDENTIAL_REF !== "scb.mock.demo") {
     return {

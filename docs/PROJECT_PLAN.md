@@ -337,3 +337,7 @@ WebOperator remains the queue owner, concurrency owner, lane scheduler, and UI o
 ## AuthBridge mock login preflight hardening
 
 `auth-bridge-login-mock` now performs a WebOperator-side preflight before sending `credentialRef: scb.mock.demo` to AuthBridge. The worker first calls AuthBridge `/auth/state` for the current lane and refuses the mock login unless the reported browser URL is under `http://scb-mock:3000/`. This keeps the existing `scb-business-anywhere-1` wiring from becoming an accidental path to real-lane auto-login if a future change points the lane at a non-mock page. AuthBridge remains a helper service; it does not enqueue WebOperator jobs or command the Control Panel.
+
+## AuthBridge events UI proxy
+
+WebOperator now proxies AuthBridge `/events` through `GET /api/lanes/scb-business-anywhere-1/auth-bridge/events`. The browser live page polls only this Control Panel route; it never calls AuthBridge directly. The proxy fetches `http://127.0.0.1:4300/events`, clamps the UI limit to 20, and sanitizes event payloads to safe metadata (`id`, `type`, `createdAt`, `laneId`, `siteId`, `message`, and `details.state`) so secrets, usernames, passwords, and CDP URLs are not forwarded to the browser. If AuthBridge is offline, the route returns readable JSON and the live page keeps the existing buttons usable.

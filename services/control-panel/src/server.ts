@@ -40,6 +40,7 @@ import {
   enqueueAuthBridgeLoginMock,
   enqueueAuthBridgeResetMockSession,
   checkAuthBridgeHealth,
+  fetchAuthBridgeEvents,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
 import { getReplayState } from "./replay-engine.js";
@@ -489,6 +490,15 @@ app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/login-mock", async (_re
   }
 });
 
+
+app.get("/api/lanes/scb-business-anywhere-1/auth-bridge/events", async (req, res) => {
+  const after = typeof req.query.after === "string" ? Number(req.query.after) : 0;
+  const limit = typeof req.query.limit === "string" ? Number(req.query.limit) : 20;
+  const safeAfter = Number.isFinite(after) && after >= 0 ? Math.floor(after) : 0;
+  const safeLimit = Number.isFinite(limit) ? Math.min(Math.max(Math.floor(limit), 1), 20) : 20;
+  const result = await fetchAuthBridgeEvents(safeAfter, safeLimit);
+  res.status(result.ok ? 200 : 503).json(result);
+});
 app.post("/api/lanes/scb-business-anywhere-1/auth-bridge/reset-mock-session", async (_req, res) => {
   try {
     const jobId = await enqueueAuthBridgeResetMockSession();

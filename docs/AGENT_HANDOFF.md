@@ -3454,3 +3454,9 @@ Read this one first if picking the session back up cold.
 - Added a mock-only Reset Mock Session path in WebOperator so the SCB mock AuthBridge flow can loop `state -> login -> reset -> state -> login` from the live page.
 - The browser JS calls only the Control Panel route; the queued worker runs the existing lane worker against `scb-mock` `/logout-clean` and returns to `/login`.
 - Scope stays mock-only: no AuthBridge change, no real SCB login, no credentials/secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.
+
+### 2026-08-21 — Codex — AuthBridge events UI proxy
+
+- Added a Control Panel proxy route for AuthBridge `/events`; browser JS polls only WebOperator and never calls AuthBridge directly.
+- The live SCB AuthBridge mock test section now shows the latest 20 safe events and a readable offline message when AuthBridge events are unavailable.
+- Event payloads are sanitized to safe metadata only: id/type/time/lane/site/message/state. No secrets, usernames, passwords, or CDP URLs are forwarded.

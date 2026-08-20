@@ -60,6 +60,44 @@ function setAuthBridgeUi(health) {
     : `unavailable${health?.error ? ` â€” ${health.error}` : ""}`;
 }
 
+
+let authBridgeEventsAfter = 0;
+let authBridgeEvents = [];
+
+function renderAuthBridgeEvents() {
+  const list = document.getElementById("auth-bridge-events-list");
+  if (authBridgeEvents.length === 0) {
+    list.innerHTML = "<li>(no events yet)</li>";
+    return;
+  }
+  list.innerHTML = authBridgeEvents
+    .slice(-20)
+    .reverse()
+    .map((event) => {
+      const time = event.createdAt ? new Date(event.createdAt).toLocaleTimeString() : "?";
+      const state = event.details?.state ? ` (${event.details.state})` : "";
+      return `<li><strong>${escapeHtml(event.type)}</strong>${escapeHtml(state)} <span class="hint">${escapeHtml(time)} — ${escapeHtml(event.message || "")}</span></li>`;
+    })
+    .join("");
+}
+
+async function fetchAuthBridgeEvents() {
+  const status = document.getElementById("auth-bridge-events-status");
+  try {
+    const res = await fetch(`/api/lanes/scb-business-anywhere-1/auth-bridge/events?after=${authBridgeEventsAfter}&limit=20`);
+    const data = await res.json();
+    if (!data.ok) {
+      status.textContent = `AuthBridge events unavailable: ${data.error || "unknown error"}`;
+      return;
+    }
+    authBridgeEventsAfter = data.nextAfter ?? authBridgeEventsAfter;
+    authBridgeEvents = authBridgeEvents.concat(data.items || []).slice(-20);
+    status.textContent = authBridgeEvents.length ? `Showing ${authBridgeEvents.length} latest safe event(s)` : "Waiting for events…";
+    renderAuthBridgeEvents();
+  } catch (err) {
+    status.textContent = `AuthBridge events unavailable: ${err}`;
+  }
+}
 async function queueAuthBridgeAction(path, buttonId) {
   showError(null);
   const btn = document.getElementById(buttonId);
@@ -81,6 +119,7 @@ async function queueAuthBridgeAction(path, buttonId) {
   btn.disabled = false;
   btn.textContent = originalText;
   await fetchStatus();
+  await fetchAuthBridgeEvents();
 }
 
 async function fetchStatus() {
@@ -495,6 +534,8 @@ document.getElementById("reference-reset-btn").addEventListener("click", () => {
 // comment for why (this used to be duplicated inline here).
 
 fetchStatus();
+fetchAuthBridgeEvents();
 fetchMonitorStatus();
 setInterval(fetchStatus, 3000);
+setInterval(fetchAuthBridgeEvents, 3000);
 setInterval(fetchMonitorStatus, 3000);
