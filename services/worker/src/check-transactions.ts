@@ -17,6 +17,52 @@ const TARGET_COMPANY = process.env.TARGET_COMPANY_B64
   ? Buffer.from(process.env.TARGET_COMPANY_B64, "base64").toString("utf-8")
   : "";
 
+// EN/TH label aliases -- the real site (and now services/scb-mock, see
+// its own TRANSLATIONS object) can render either language depending on
+// the account's own language setting, so every landmark/label this
+// parser looks for is matched against both variants, never English
+// only. Keep the Thai strings here byte-identical to
+// services/scb-mock/src/server.ts's TRANSLATIONS.th -- they're
+// duplicated (not imported) since this ships as a standalone worker
+// script, same reasoning as CREDENTIAL_HINT_KEYWORDS's own duplication
+// in record-actions.ts.
+const LABELS = {
+  username: ["Username", "ชื่อผู้ใช้งาน"],
+  accountSummary: ["Account Summary", "สรุปบัญชี"],
+  viewDetails: ["View Details", "ดูรายละเอียด"],
+  latestTransactions: ["Latest Transactions", "รายการล่าสุด"],
+  refresh: ["Refresh", "รีเฟรช"],
+  availableBalance: ["Available Balance", "ยอดเงินที่ใช้ได้"],
+  ledgerBalance: ["Ledger Balance", "ยอดเงินตามบัญชี"],
+  lastUpdated: ["Last Updated", "อัปเดตล่าสุด"],
+  addNote: ["Add a Note", "เพิ่มบันทึกช่วยจำ"],
+  transactionDescription: ["Transaction Description", "รายละเอียดรายการ"],
+  channel: ["Channel", "ช่องทาง"],
+  chequeNo: ["Cheque No.", "เลขที่เช็ค"],
+  terminalNo: ["Terminal No.", "หมายเลขเครื่อง"],
+  tellerNo: ["Teller No.", "รหัสพนักงาน"],
+  branchCode: ["Branch Code", "รหัสสาขา"],
+} as const satisfies Record<string, readonly [string, string]>;
+
+function escapeRegExp(s: string): string {
+  return s.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+// A Playwright getByText() locator that matches either language variant,
+// exact-text (anchored), same as passing { exact: true } for a plain
+// string -- getByText() accepts a RegExp for exactly this case.
+function bilingualText(key: keyof typeof LABELS): RegExp {
+  const [en, th] = LABELS[key];
+  return new RegExp(`^(?:${escapeRegExp(en)}|${escapeRegExp(th)})$`);
+}
+
+// Same alternation, for building body-text regexes below (not anchored --
+// used mid-pattern).
+function bilingualAlt(key: keyof typeof LABELS): string {
+  const [en, th] = LABELS[key];
+  return `(?:${escapeRegExp(en)}|${escapeRegExp(th)})`;
+}
+
 interface Transaction {
   date: string;
   time: string;
@@ -52,11 +98,11 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // until timeout with an unclear error. A thrown "SESSION_EXPIRED:"
   // prefix lets scb-monitor.ts recognize this specific case and send
   // a clear "please log in again" alert instead of a generic failure.
-  const loginUsernameField = page.getByText("ชื่อผู้ใช้งาน", { exact: true }).first();
+  const loginUsernameField = page.getByText(bilingualText("username")).first();
   if (await loginUsernameField.isVisible({ timeout: 3000 }).catch(() => false)) {
     throw new Error("SESSION_EXPIRED: back on the login page -- a human needs to log in again via noVNC");
   }
-  const accountSummaryLink = page.getByText("Account Summary", { exact: true }).first();
+  const accountSummaryLink = page.getByText(bilingualText("accountSummary")).first();
   if (!(await accountSummaryLink.isVisible({ timeout: 5000 }).catch(() => false))) {
     throw new Error(
       "SESSION_EXPIRED: expected nav (Account Summary) not found -- likely logged out (or blocked by an unexpected popup -- check the screenshot), a human needs to log in again via noVNC",
@@ -86,7 +132,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // page) has rendered yet, silently skipping the click and leaving
   // the check stuck on the overview with zero transactions extracted.
   // isVisible({timeout}) polls/retries instead.
-  const viewDetails = page.getByText("View Details", { exact: true }).first();
+  const viewDetails = page.getByText(bilingualText("viewDetails")).first();
   if (await viewDetails.isVisible({ timeout: 6000 }).catch(() => false)) {
     await viewDetails.click();
     await page.waitForTimeout(1500);
@@ -96,7 +142,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // short wait sometimes captured the page before this table
   // finished its own fetch) -- wait for its own heading specifically
   // rather than a longer blind timeout.
-  await page.getByText("Latest Transactions", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+  await page.getByText(bilingualText("latestTransactions")).first().waitFor({ timeout: 10_000 }).catch(() => {});
 
   // The balance/transactions widget shows a cached snapshot as of
   // whatever "Last Updated: <date>, <time>" it displays -- it does NOT
@@ -105,7 +151,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // new transaction they could see had posted). Click the widget's own
   // "Refresh" link every check so the data actually reflects "now",
   // not whenever a human last happened to click it (or never).
-  const refreshLink = page.getByText("Refresh", { exact: true }).first();
+  const refreshLink = page.getByText(bilingualText("refresh")).first();
   const refreshLinkVisible = await refreshLink.isVisible({ timeout: 3000 }).catch(() => false);
   if (refreshLinkVisible) {
     await refreshLink.click();
@@ -126,20 +172,20 @@ async function runCheck(page: Page): Promise<CheckResult> {
     if (TARGET_COMPANY) {
       await selectCompany(page, TARGET_COMPANY);
     }
-    await page.getByText("Account Summary", { exact: true }).first().click().catch(() => {});
+    await page.getByText(bilingualText("accountSummary")).first().click().catch(() => {});
     await page.waitForTimeout(1500);
-    const viewDetailsAgain = page.getByText("View Details", { exact: true }).first();
+    const viewDetailsAgain = page.getByText(bilingualText("viewDetails")).first();
     if (await viewDetailsAgain.isVisible({ timeout: 6000 }).catch(() => false)) {
       await viewDetailsAgain.click();
       await page.waitForTimeout(1500);
     }
-    await page.getByText("Latest Transactions", { exact: true }).first().waitFor({ timeout: 10_000 }).catch(() => {});
+    await page.getByText(bilingualText("latestTransactions")).first().waitFor({ timeout: 10_000 }).catch(() => {});
   }
 
   const text = await page.evaluate(() => (document.body ? document.body.innerText : ""));
 
-  const availableMatch = text.match(/Available Balance\s*\n+\s*([\d,]+\.\d{2})\s*THB/);
-  const ledgerMatch = text.match(/Ledger Balance\s*\n+\s*([\d,]+\.\d{2})\s*THB/);
+  const availableMatch = text.match(new RegExp(`${bilingualAlt("availableBalance")}\\s*\\n+\\s*([\\d,]+\\.\\d{2})\\s*THB`));
+  const ledgerMatch = text.match(new RegExp(`${bilingualAlt("ledgerBalance")}\\s*\\n+\\s*([\\d,]+\\.\\d{2})\\s*THB`));
   // The widget's own "Last Updated: <date>, <time>  Refresh" text --
   // captured as a success signal, not just for display: if this stays
   // identical across consecutive checks (each ~70-105s apart), the
@@ -147,10 +193,15 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // moved, click missed, bank-side throttling, etc.) even though no
   // error was thrown. scb-monitor.ts compares this against the prior
   // check's value to catch exactly that silent-stale case.
-  const lastUpdatedMatch = text.match(/Last Updated:\s*(\d{1,2}\s+\w+\s+\d{4},\s*\d{2}:\d{2})/);
+  const lastUpdatedMatch = text.match(
+    new RegExp(`${bilingualAlt("lastUpdated")}:\\s*(\\d{1,2}\\s+\\w+\\s+\\d{4},\\s*\\d{2}:\\d{2})`),
+  );
 
   // Row shape observed: "DD/MM/YYYY\n\nHH:MM\n\n<TrCode>\n\n<Description>\n\nAdd a Note\n\n[-]amount THB"
-  const rowPattern = /(\d{2}\/\d{2}\/\d{4})\s*\n+\s*(\d{2}:\d{2})\s*\n+\s*(\S+)\s*\n+\s*([^\n]+?)\s*\n+\s*Add a Note\s*\n+\s*(-?[\d,]+\.\d{2})\s*THB/g;
+  const rowPattern = new RegExp(
+    `(\\d{2}/\\d{2}/\\d{4})\\s*\\n+\\s*(\\d{2}:\\d{2})\\s*\\n+\\s*(\\S+)\\s*\\n+\\s*([^\\n]+?)\\s*\\n+\\s*${bilingualAlt("addNote")}\\s*\\n+\\s*(-?[\\d,]+\\.\\d{2})\\s*THB`,
+    "g",
+  );
   const rows: { date: string; time: string; trCode: string; description: string; amount: number; amountRaw: string }[] = [];
   let match: RegExpExecArray | null;
   while ((match = rowPattern.exec(text)) !== null) {
@@ -173,7 +224,12 @@ async function runCheck(page: Page): Promise<CheckResult> {
   // per-label regex technique already used for the balance figures
   // above) rather than a raw diff, so the result is clean structured
   // data instead of a text dump.
-  const DETAIL_LABELS = ["Transaction Description", "Channel", "Cheque No.", "Terminal No.", "Teller No.", "Branch Code"];
+  // Keys into LABELS -- matched against either language variant, but
+  // always emitted below using the canonical English label text (the
+  // first element of each LABELS pair) so scb-monitor.ts/Telegram
+  // formatting downstream never needs to care which language the page
+  // was actually showing.
+  const DETAIL_LABEL_KEYS = ["transactionDescription", "channel", "chequeNo", "terminalNo", "tellerNo", "branchCode"] as const;
   const transactions: Transaction[] = [];
   for (const row of rows) {
     let detail = "";
@@ -182,7 +238,7 @@ async function runCheck(page: Page): Promise<CheckResult> {
       // isn't already showing (a same-session repeat check could
       // otherwise re-collapse a row a prior check had expanded).
       const alreadyExpanded = await page
-        .getByText("Transaction Description", { exact: true })
+        .getByText(bilingualText("transactionDescription"))
         .first()
         .isVisible()
         .catch(() => false);
@@ -195,10 +251,10 @@ async function runCheck(page: Page): Promise<CheckResult> {
       }
       const after = await page.evaluate(() => (document.body ? document.body.innerText : ""));
       const parts: string[] = [];
-      for (const label of DETAIL_LABELS) {
-        const escaped = label.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-        const m = after.match(new RegExp(`${escaped}\\s*\\n+\\s*([^\\n]+)`));
-        if (m && m[1].trim()) parts.push(`${label}: ${m[1].trim()}`);
+      for (const key of DETAIL_LABEL_KEYS) {
+        const [canonicalLabel] = LABELS[key];
+        const m = after.match(new RegExp(`${bilingualAlt(key)}\\s*\\n+\\s*([^\\n]+)`));
+        if (m && m[1].trim()) parts.push(`${canonicalLabel}: ${m[1].trim()}`);
       }
       detail = parts.join(", ");
     } catch {

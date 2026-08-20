@@ -54,6 +54,38 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     termsAndConditions: "Terms and Conditions",
     securityTips: "Security Tips",
     privacyNotice: "Privacy Notice",
+    // Dashboard/transactions -- kept in sync with the LABELS map in
+    // services/worker/src/check-transactions.ts (both variants of each
+    // label are matched there regardless of which one the page shows).
+    accountSummary: "Account Summary",
+    viewDetails: "View Details",
+    latestTransactions: "Latest Transactions",
+    availableBalance: "Available Balance",
+    ledgerBalance: "Ledger Balance",
+    lastUpdated: "Last Updated",
+    refresh: "Refresh",
+    addNote: "Add a Note",
+    transactionDate: "Transaction Date",
+    transactionDescription: "Transaction Description",
+    channel: "Channel",
+    chequeNo: "Cheque No.",
+    terminalNo: "Terminal No.",
+    tellerNo: "Teller No.",
+    branchCode: "Branch Code",
+    // Nav/misc -- not parsed by check-transactions.ts, translated for
+    // visual completeness only.
+    mainPage: "Main Page",
+    paymentsAndTransfers: "Payments and Transfers",
+    transfers: "Transfers",
+    billPayments: "Bill Payments",
+    payroll: "Payroll",
+    recipientProfiles: "Recipient Profiles",
+    reports: "Reports",
+    accountDetails: "Account Details",
+    welcome: "Welcome",
+    lastLoggedIn: "Last Logged in",
+    logout: "Logout",
+    logoutClean: "Logout clean",
   },
   th: {
     username: "ชื่อผู้ใช้งาน",
@@ -67,6 +99,33 @@ const TRANSLATIONS: Record<Lang, Record<string, string>> = {
     termsAndConditions: "ข้อกำหนดและเงื่อนไข",
     securityTips: "เคล็ดลับความปลอดภัย",
     privacyNotice: "นโยบายความเป็นส่วนตัว",
+    accountSummary: "สรุปบัญชี",
+    viewDetails: "ดูรายละเอียด",
+    latestTransactions: "รายการล่าสุด",
+    availableBalance: "ยอดเงินที่ใช้ได้",
+    ledgerBalance: "ยอดเงินตามบัญชี",
+    lastUpdated: "อัปเดตล่าสุด",
+    refresh: "รีเฟรช",
+    addNote: "เพิ่มบันทึกช่วยจำ",
+    transactionDate: "วันที่ทำรายการ",
+    transactionDescription: "รายละเอียดรายการ",
+    channel: "ช่องทาง",
+    chequeNo: "เลขที่เช็ค",
+    terminalNo: "หมายเลขเครื่อง",
+    tellerNo: "รหัสพนักงาน",
+    branchCode: "รหัสสาขา",
+    mainPage: "หน้าหลัก",
+    paymentsAndTransfers: "การชำระเงินและโอนเงิน",
+    transfers: "โอนเงิน",
+    billPayments: "ชำระค่าสินค้า/บริการ",
+    payroll: "เงินเดือน",
+    recipientProfiles: "โปรไฟล์ผู้รับเงิน",
+    reports: "รายงาน",
+    accountDetails: "รายละเอียดบัญชี",
+    welcome: "ยินดีต้อนรับ",
+    lastLoggedIn: "เข้าสู่ระบบล่าสุด",
+    logout: "ออกจากระบบ",
+    logoutClean: "ออกจากระบบ (ล้างข้อมูล)",
   },
 };
 
@@ -110,9 +169,9 @@ function authFooterHtml(lang: Lang): string {
 
 // Purple theme roughly matching the real site's look -- not pixel-
 // perfect, close enough that a screenshot is recognizable at a glance.
-function page(title: string, body: string, wide = false): string {
+function page(title: string, body: string, lang: Lang = "th"): string {
   return `<!doctype html>
-<html lang="en">
+<html lang="${lang}">
 <head>
 <meta charset="utf-8" />
 <title>${title} — SCB Business Anywhere (mock)</title>
@@ -168,7 +227,6 @@ function page(title: string, body: string, wide = false): string {
   .auth-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; font-size: 0.75rem; color: #888; }
   .auth-footer a { color: #888; text-decoration: underline; margin-right: 1rem; }
   .auth-footer-copy { margin-top: 0.5rem; }
-  ${wide ? "" : ""}
 </style>
 </head>
 <body>
@@ -256,6 +314,7 @@ function loginPage(session: Session | undefined, error: string | undefined, lang
         </div>
       </div>
     </div>`,
+    lang,
   );
 }
 
@@ -283,6 +342,7 @@ function passwordPage(session: Session, error: string | undefined, lang: Lang): 
         </div>
       </div>
     </div>`,
+    lang,
   );
 }
 
@@ -303,24 +363,25 @@ function allTransactions(session: Session): Transaction[] {
   return [...session.extraTransactions, ...generateBaselineTransactions(session.id, session.company)];
 }
 
-function txRow(t: Transaction, index: number): string {
+function txRow(t: Transaction, index: number, lang: Lang): string {
+  const tt = TRANSLATIONS[lang];
   const isCredit = t.amount >= 0;
   const amountText = `${formatThb(t.amount)} THB`;
   return `<div class="tx-row">
     <div class="tx-datetime">${t.date}<br>${t.time}</div>
     <div class="tx-code">${t.trCode}</div>
-    <div class="tx-desc">${t.description}<br><a href="#" class="add-note" onclick="return false;">Add a Note</a></div>
+    <div class="tx-desc">${t.description}<br><a href="#" class="add-note" onclick="return false;">${tt.addNote}</a></div>
     <div class="tx-amount ${isCredit ? "credit" : "debit"}" onclick="toggleDetail(${index})">${amountText}</div>
     <div>&#9662;</div>
   </div>
   <div class="tx-detail" id="tx-detail-${index}">
-    <div><strong>Transaction Date</strong><br>${t.date} ${t.time}</div>
-    <div><strong>Transaction Description</strong><br>Transfer Deposit, Withdrawal Nobook</div>
-    <div><strong>Channel</strong><br>${t.channel}</div>
-    <div><strong>Cheque No.</strong><br>${t.chequeNo}</div>
-    <div><strong>Terminal No.</strong><br>${t.terminalNo}</div>
-    <div><strong>Teller No.</strong><br>${t.tellerNo}</div>
-    <div><strong>Branch Code</strong><br>${t.branchCode}</div>
+    <div><strong>${tt.transactionDate}</strong><br>${t.date} ${t.time}</div>
+    <div><strong>${tt.transactionDescription}</strong><br>Transfer Deposit, Withdrawal Nobook</div>
+    <div><strong>${tt.channel}</strong><br>${t.channel}</div>
+    <div><strong>${tt.chequeNo}</strong><br>${t.chequeNo}</div>
+    <div><strong>${tt.terminalNo}</strong><br>${t.terminalNo}</div>
+    <div><strong>${tt.tellerNo}</strong><br>${t.tellerNo}</div>
+    <div><strong>${tt.branchCode}</strong><br>${t.branchCode}</div>
   </div>`;
 }
 
@@ -331,13 +392,14 @@ function accountSummaryPage(session: Session): string {
     (c) => `<button onclick="selectCompany('${c.replace(/'/g, "\\'")}')">${c}</button>`,
   ).join("");
   const lang = session.language;
+  const t = TRANSLATIONS[lang];
 
   return page(
     "Account Summary",
     `${announcementBanner()}
     <div class="topbar">
-      <span>Last Logged in: ${formatLastUpdated(new Date().toISOString())} | <a href="/account-summary?language=en" style="color:${lang === "en" ? "#fff" : "#bbb"};text-decoration:none;">EN</a> / <a href="/account-summary?language=th" style="color:${lang === "th" ? "#fff" : "#bbb"};text-decoration:none;">ไทย</a></span>
-      <span>Welcome ${session.username}</span>
+      <span>${t.lastLoggedIn}: ${formatLastUpdated(new Date().toISOString())} | <a href="/account-summary?language=en" style="color:${lang === "en" ? "#fff" : "#bbb"};text-decoration:none;">EN</a> / <a href="/account-summary?language=th" style="color:${lang === "th" ? "#fff" : "#bbb"};text-decoration:none;">ไทย</a></span>
+      <span>${t.welcome} ${session.username}</span>
     </div>
     <div class="company-switcher">
       <span class="current" onclick="toggleCompanyMenu()"><span class="company-name">${session.company}</span> <span aria-hidden="true">&#9662;</span></span>
@@ -345,17 +407,17 @@ function accountSummaryPage(session: Session): string {
     </div>
     <div class="app-shell">
       <nav class="side">
-        <a href="/account-summary">Main Page</a>
-        <a href="/account-summary" class="active">Account Summary</a>
-        <a href="#" onclick="return false;">Payments and Transfers</a>
-        <a href="/transfer" style="padding-left:1.75rem;">Transfers</a>
-        <a href="#" onclick="return false;" style="padding-left:1.75rem;">Bill Payments</a>
-        <a href="#" onclick="return false;" style="padding-left:1.75rem;">Payroll</a>
-        <a href="#" onclick="return false;">Recipient Profiles</a>
-        <a href="#" onclick="return false;">Reports</a>
+        <a href="/account-summary">${t.mainPage}</a>
+        <a href="/account-summary" class="active">${t.accountSummary}</a>
+        <a href="#" onclick="return false;">${t.paymentsAndTransfers}</a>
+        <a href="/transfer" style="padding-left:1.75rem;">${t.transfers}</a>
+        <a href="#" onclick="return false;" style="padding-left:1.75rem;">${t.billPayments}</a>
+        <a href="#" onclick="return false;" style="padding-left:1.75rem;">${t.payroll}</a>
+        <a href="#" onclick="return false;">${t.recipientProfiles}</a>
+        <a href="#" onclick="return false;">${t.reports}</a>
       </nav>
       <main>
-        <h1>Account Details</h1>
+        <h1>${t.accountDetails}</h1>
         <div class="account-card">
           <div class="balance-row">
             <div>
@@ -363,27 +425,27 @@ function accountSummaryPage(session: Session): string {
               <div class="hint">434-215406-4 &middot; Savings Account</div>
             </div>
             <div style="text-align:right;">
-              <div class="hint">Available Balance</div>
+              <div class="hint">${t.availableBalance}</div>
               <div class="balance-figure">${formatThb(available)} THB</div>
             </div>
           </div>
           <div class="balance-row" style="margin-top:0.5rem;">
-            <div class="hint">Last Updated: ${formatLastUpdated(session.lastRefreshedAt)} <a href="/account-summary?refresh=1">Refresh</a></div>
+            <div class="hint">${t.lastUpdated}: ${formatLastUpdated(session.lastRefreshedAt)} <a href="/account-summary?refresh=1">${t.refresh}</a></div>
             <div style="text-align:right;">
-              <div class="hint">Ledger Balance</div>
+              <div class="hint">${t.ledgerBalance}</div>
               <div class="balance-figure">${formatThb(ledger)} THB</div>
             </div>
           </div>
         </div>
 
-        <h2 style="margin-top:1.5rem;">Latest Transactions</h2>
+        <h2 style="margin-top:1.5rem;">${t.latestTransactions}</h2>
         <div class="account-card" style="margin-top:0.5rem;">
-          ${transactions.map((t, i) => txRow(t, i)).join("\n")}
+          ${transactions.map((tx, i) => txRow(tx, i, lang)).join("\n")}
         </div>
 
         <div style="margin-top:1.5rem;">
-          <form method="post" action="/logout" style="display:inline-block;"><button type="submit">Logout</button></form>
-          <form method="post" action="/logout-clean" style="display:inline-block;"><button type="submit">Logout clean</button></form>
+          <form method="post" action="/logout" style="display:inline-block;"><button type="submit">${t.logout}</button></form>
+          <form method="post" action="/logout-clean" style="display:inline-block;"><button type="submit">${t.logoutClean}</button></form>
           <form method="post" action="/dev/session-timeout-overlay" style="display:inline-block;"><button type="submit" style="background:#9a6700;">Simulate session timeout (dev)</button></form>
         </div>
       </main>
@@ -412,32 +474,36 @@ function accountSummaryPage(session: Session): string {
       }
     </script>
     ${session.showTimeoutOverlay ? timeoutOverlayHtml() : ""}`,
+    session.language,
   );
 }
 
 function transferFormPage(session: Session, error?: string): string {
+  const lang = session.language;
+  const t = TRANSLATIONS[lang];
   return page(
     "Transfer",
     `${announcementBanner()}
     <div class="topbar">
-      <span>Last Logged in: ${formatLastUpdated(new Date().toISOString())} | EN</span>
-      <span>Welcome ${session.username}</span>
+      <span>${t.lastLoggedIn}: ${formatLastUpdated(new Date().toISOString())} | <a href="/transfer?language=en" style="color:${lang === "en" ? "#fff" : "#bbb"};text-decoration:none;">EN</a> / <a href="/transfer?language=th" style="color:${lang === "th" ? "#fff" : "#bbb"};text-decoration:none;">ไทย</a></span>
+      <span>${t.welcome} ${session.username}</span>
     </div>
     <div class="app-shell">
       <nav class="side">
-        <a href="/account-summary">Main Page</a>
-        <a href="/account-summary">Account Summary</a>
-        <a href="#" onclick="return false;">Payments and Transfers</a>
-        <a href="/transfer" class="active" style="padding-left:1.75rem;">Transfers</a>
-        <a href="#" onclick="return false;" style="padding-left:1.75rem;">Bill Payments</a>
-        <a href="#" onclick="return false;" style="padding-left:1.75rem;">Payroll</a>
+        <a href="/account-summary">${t.mainPage}</a>
+        <a href="/account-summary">${t.accountSummary}</a>
+        <a href="#" onclick="return false;">${t.paymentsAndTransfers}</a>
+        <a href="/transfer" class="active" style="padding-left:1.75rem;">${t.transfers}</a>
+        <a href="#" onclick="return false;" style="padding-left:1.75rem;">${t.billPayments}</a>
+        <a href="#" onclick="return false;" style="padding-left:1.75rem;">${t.payroll}</a>
       </nav>
       <main>
-        <h1>Transfer</h1>
+        <h1>${t.transfers}</h1>
         <p class="hint">Mock only -- submitting this form never moves real money, no matter what.</p>
         ${error ? `<p class="error">${error}</p>` : ""}
         <div class="account-card" style="max-width:480px;">
           <form method="post" action="/transfer">
+            <input type="hidden" name="language" value="${lang}" />
             <label for="fromAccount">From Account</label>
             <input id="fromAccount" name="fromAccount" value="434-215406-4 (${session.company})" readonly />
             <label for="toAccount">To Account</label>
@@ -453,17 +519,20 @@ function transferFormPage(session: Session, error?: string): string {
       </main>
     </div>
     ${session.showTimeoutOverlay ? timeoutOverlayHtml() : ""}`,
+    lang,
   );
 }
 
 function transferConfirmPage(session: Session): string {
   const pending = session.pendingTransfer;
+  const lang = session.language;
+  const t = TRANSLATIONS[lang];
   return page(
     "Confirm Transfer",
     `${announcementBanner()}
     <div class="topbar">
-      <span>Last Logged in: ${formatLastUpdated(new Date().toISOString())} | EN</span>
-      <span>Welcome ${session.username}</span>
+      <span>${t.lastLoggedIn}: ${formatLastUpdated(new Date().toISOString())}</span>
+      <span>${t.welcome} ${session.username}</span>
     </div>
     <div class="app-shell">
       <main>
@@ -486,10 +555,11 @@ function transferConfirmPage(session: Session): string {
       </main>
     </div>
     ${session.showTimeoutOverlay ? timeoutOverlayHtml() : ""}`,
+    lang,
   );
 }
 
-function transferSuccessPage(): string {
+function transferSuccessPage(lang: Lang): string {
   return page(
     "Transfer Submitted",
     `${announcementBanner()}
@@ -500,6 +570,7 @@ function transferSuccessPage(): string {
         <a class="btn" href="/account-summary">Back to Account Summary</a>
       </div>
     </div>`,
+    lang,
   );
 }
 
@@ -585,6 +656,7 @@ app.get("/transfer", (req, res) => {
     res.redirect("/login");
     return;
   }
+  session.language = resolveLanguage(req.query.language, session);
   res.send(transferFormPage(session));
 });
 
@@ -594,6 +666,7 @@ app.post("/transfer", (req, res) => {
     res.redirect("/login");
     return;
   }
+  if (isLang(req.body.language)) session.language = req.body.language;
   const toAccount = String(req.body.toAccount ?? "").trim();
   const amount = Number(req.body.amount);
   const memo = String(req.body.memo ?? "").trim();
@@ -622,7 +695,7 @@ app.post("/transfer/confirm", (req, res) => {
     );
     session.pendingTransfer = null;
   }
-  res.send(transferSuccessPage());
+  res.send(transferSuccessPage(session.language));
 });
 
 app.post("/transfer/cancel", (req, res) => {

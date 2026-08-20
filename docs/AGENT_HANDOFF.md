@@ -3442,27 +3442,73 @@ Read this one first if picking the session back up cold.
   in the wiring itself prevents that ref from being reused against this
   same real-lane CDP endpoint later.
 
-### 2026-08-20 � Codex � AuthBridge mock-login URL guard
+### 2026-08-20 � Codex � AuthBridge mock-login URL guard
 
 - Hardened `auth-bridge-login-mock` in WebOperator after Claude flagged that the job still uses the `scb-business-anywhere-1` browser lane.
 - The worker now calls `/auth/state` before `/auth/login` and refuses mock login unless the current URL is `http://scb-mock:3000/*`.
 - The job still sends only `credentialRef: scb.mock.demo`; if the lane is on `about:blank`, a real/non-mock URL, or state parsing fails, it returns `mock_login_refused_not_scb_mock` before sending any credentialRef to AuthBridge `/auth/login`.
 - Scope stays mock-first only: no AuthBridge changes, no real SCB login, no secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.
 
-### 2026-08-21 � Codex � AuthBridge mock reset button
+### 2026-08-21 � Codex � AuthBridge mock reset button
 
 - Added a mock-only Reset Mock Session path in WebOperator so the SCB mock AuthBridge flow can loop `state -> login -> reset -> state -> login` from the live page.
 - The browser JS calls only the Control Panel route; the queued worker runs the existing lane worker against `scb-mock` `/logout-clean` and returns to `/login`.
 - Scope stays mock-only: no AuthBridge change, no real SCB login, no credentials/secrets, no OTP/2FA/CAPTCHA/passkey, and no transfer/payment behavior.
 
-### 2026-08-21 � Codex � AuthBridge events UI proxy
+### 2026-08-21 � Codex � AuthBridge events UI proxy
 
 - Added a Control Panel proxy route for AuthBridge `/events`; browser JS polls only WebOperator and never calls AuthBridge directly.
 - The live SCB AuthBridge mock test section now shows the latest 20 safe events and a readable offline message when AuthBridge events are unavailable.
 - Event payloads are sanitized to safe metadata only: id/type/time/lane/site/message/state. No secrets, usernames, passwords, or CDP URLs are forwarded.
 
-### 2026-08-21 � Codex � AuthBridge summary card
+### 2026-08-21 � Codex � AuthBridge summary card
 
 - Added an AuthBridge summary card to the SCB live page using only WebOperator routes: `/api/status`, `/api/jobs`, and the AuthBridge events proxy.
 - The card shows health, latest auth state, latest login result, latest reset result, latest event timestamp, and last readable error without requiring the Jobs table or long event list.
 - Browser JS still never calls AuthBridge directly, and the UI derives only safe metadata/no secret fields.
+
+### 2026-08-21 — Claude — SCB mock dashboard EN/TH fidelity + bilingual check-transactions.ts parser
+
+- Status: Done.
+- Context: Follow-up to the earlier login/password EN/TH pass — extended
+  bilingual support to the account-summary dashboard (balance figures,
+  transaction table, transaction-detail fields) and to `/transfer`, and
+  made `services/worker/src/check-transactions.ts`'s parser accept
+  either language instead of matching English-only landmarks. Same
+  scope discipline as last time: `services/scb-mock` + this one worker
+  parser file only, nothing else touched, no changes to the real SCB
+  site, AuthBridge, or credential/secret handling, browser JS still
+  never calls AuthBridge directly (unaffected either way — this round
+  didn't touch that card).
+- Files: `services/scb-mock/src/server.ts` (15 new dashboard
+  translation keys + nav/topbar strings, `<html lang>` now reflects
+  the real language, `/transfer` routes gained the same
+  resolve/persist-language treatment `/login`/`/password`/
+  `/account-summary` already had), `services/worker/src/
+  check-transactions.ts` (new `LABELS` map + `bilingualText()`/
+  `bilingualAlt()` helpers, every `getByText()` landmark and body-text
+  regex now matches either language; `detail` output always uses the
+  canonical English label regardless of which language was detected,
+  so `scb-monitor.ts`/Telegram formatting needed zero changes),
+  `docs/PROJECT_PLAN.md` decision log.
+- Verified, all against the real rebuilt `scb-mock` + the real worker
+  script (not a stub): account-summary confirmed rendering all 12
+  required EN strings and all 12 TH strings via direct `curl`
+  inspection; logged the shared lane's browser into the mock once in
+  each language (native button text: "Next"/"Sign In" vs.
+  "ถัดไป"/"เข้าสู่ระบบ") and ran the real `check-transactions.ts`
+  against each session — both completed cleanly with correct
+  `availableBalance`/`ledgerBalance`/5 parsed transactions/
+  `pageLastUpdatedText`. The pre-existing, deliberately-preserved
+  "Terminal No. shows the literal Teller No. text when blank" quirk
+  reproduced correctly in *both* languages, a good sign the bilingual
+  matching is genuinely consistent rather than coincidentally passing.
+  AuthBridge's own mock-login job and its separate Reset Mock Session
+  job were both re-run for real after these changes — mock-login still
+  completes `state: "authenticated"`, reset still completes with the
+  correct `SCB_MOCK_RESET` marker — neither was touched, both still
+  pass. `npx tsc --noEmit` clean in both projects. Grepped the tracked
+  diff for anything password-shaped — none found.
+- Next: nothing pending from this task. The `AUTH_BRIDGE_LANE_ID`
+  hardcoded-to-the-real-lane note from the previous entry still stands
+  (not re-checked this round, not part of this task's scope).
