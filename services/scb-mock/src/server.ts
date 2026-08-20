@@ -31,6 +31,83 @@ const app = express();
 app.use(cookieParser());
 app.use(express.urlencoded({ extended: false }));
 
+// Visual/language fidelity pass only -- services/scb-mock scope, dev/test
+// fixture, never touches the real site or any credential handling. "th"
+// stays the default everywhere (no ?language= param) so the exact-text
+// "ชื่อผู้ใช้งาน" landmark check-transactions.ts's SESSION_EXPIRED
+// detector depends on, plus any existing recordings/AuthBridge flows,
+// keep working completely unchanged. See docs/PROJECT_PLAN.md decision
+// log for why this file only translates the specific strings asked for,
+// not the whole app.
+type Lang = "en" | "th";
+
+const TRANSLATIONS: Record<Lang, Record<string, string>> = {
+  en: {
+    username: "Username",
+    next: "Next",
+    password: "Password",
+    signIn: "Sign In",
+    userGuides: "User Guides",
+    howToCreateTransactions: "How to Create Transactions",
+    howToGeneratePaymentAdvices: "How to Generate Payment Advices",
+    allUserGuides: "All User Guides",
+    termsAndConditions: "Terms and Conditions",
+    securityTips: "Security Tips",
+    privacyNotice: "Privacy Notice",
+  },
+  th: {
+    username: "ชื่อผู้ใช้งาน",
+    next: "ถัดไป",
+    password: "รหัสผ่าน",
+    signIn: "เข้าสู่ระบบ",
+    userGuides: "คู่มือการใช้งาน",
+    howToCreateTransactions: "วิธีสร้างรายการ",
+    howToGeneratePaymentAdvices: "วิธีสร้างใบแจ้งการชำระเงิน",
+    allUserGuides: "คู่มือทั้งหมด",
+    termsAndConditions: "ข้อกำหนดและเงื่อนไข",
+    securityTips: "เคล็ดลับความปลอดภัย",
+    privacyNotice: "นโยบายความเป็นส่วนตัว",
+  },
+};
+
+function isLang(value: unknown): value is Lang {
+  return value === "en" || value === "th";
+}
+
+// Query param wins (explicit navigation like /login?language=en), then
+// the session's own last-known language (continuity across login ->
+// password -> account-summary without needing the param on every hop),
+// then "th" (the original, unmodified default).
+function resolveLanguage(query: unknown, session?: Session): Lang {
+  if (isLang(query)) return query;
+  if (session && isLang(session.language)) return session.language;
+  return "th";
+}
+
+function langToggleHtml(lang: Lang, path: string): string {
+  const other = lang === "en" ? "th" : "en";
+  return `<div class="auth-lang">
+    <a href="${path}?language=en" class="${lang === "en" ? "lang-active" : ""}">EN</a>
+    &nbsp;|&nbsp;
+    <a href="${path}?language=th" class="${lang === "th" ? "lang-active" : ""}">ไทย</a>
+  </div>`;
+}
+
+// Cosmetic footer matching the real public site's own "legal links +
+// version/copyright" strip at the bottom of the login/password pages --
+// every link is a dead onclick (same pattern already used for User
+// Guides), never a real page, since this is a login page and nothing
+// here should look clickable-into-real-content.
+function authFooterHtml(lang: Lang): string {
+  const t = TRANSLATIONS[lang];
+  return `<div class="auth-footer">
+    <a href="#" onclick="return false;">${t.termsAndConditions}</a>
+    <a href="#" onclick="return false;">${t.securityTips}</a>
+    <a href="#" onclick="return false;">${t.privacyNotice}</a>
+    <div class="auth-footer-copy">&copy; ${new Date().getUTCFullYear()} SCB Business Anywhere (mock) &middot; v1.0.0-mock &middot; dev/test fixture only</div>
+  </div>`;
+}
+
 // Purple theme roughly matching the real site's look -- not pixel-
 // perfect, close enough that a screenshot is recognizable at a glance.
 function page(title: string, body: string, wide = false): string {
@@ -84,8 +161,13 @@ function page(title: string, body: string, wide = false): string {
   .auth-right { flex: 1 1 55%; background: #fff; display: flex; align-items: center; justify-content: center; }
   .auth-right-inner { width: 100%; max-width: 380px; padding: 2rem; }
   .auth-lang { text-align: right; color: #666; font-size: 0.85rem; margin-bottom: 2rem; }
+  .auth-lang a { color: #666; text-decoration: none; }
+  .auth-lang a.lang-active { color: #5b3fc0; font-weight: bold; text-decoration: underline; }
   .user-guides { background: #eef0ff; border: 1px solid #d9dcff; border-radius: 8px; padding: 1rem 1.2rem; margin-top: 1.5rem; font-size: 0.85rem; }
   .user-guides a { color: #5b3fc0; display: block; margin-top: 0.4rem; text-decoration: underline; }
+  .auth-footer { margin-top: 2rem; padding-top: 1rem; border-top: 1px solid #eee; font-size: 0.75rem; color: #888; }
+  .auth-footer a { color: #888; text-decoration: underline; margin-right: 1rem; }
+  .auth-footer-copy { margin-top: 0.5rem; }
   ${wide ? "" : ""}
 </style>
 </head>
@@ -145,53 +227,59 @@ function escapeAttr(s: string): string {
   return s.replace(/&/g, "&amp;").replace(/"/g, "&quot;").replace(/</g, "&lt;");
 }
 
-function loginPage(session: Session | undefined, error?: string): string {
+function loginPage(session: Session | undefined, error: string | undefined, lang: Lang): string {
   const { username, password } = readUserPassMock();
+  const t = TRANSLATIONS[lang];
   return page(
     "Log in",
     `<div class="auth-split">
       ${authLeftPanel()}
       <div class="auth-right">
         <div class="auth-right-inner">
-          <div class="auth-lang">EN</div>
+          ${langToggleHtml(lang, "/login")}
           <h1>SCB Business Anywhere</h1>
           ${error ? `<p class="error">${error}</p>` : ""}
           <form method="post" action="/login">
-            <label for="username">ชื่อผู้ใช้งาน</label>
+            <input type="hidden" name="language" value="${lang}" />
+            <label for="username">${t.username}</label>
             <input id="username" name="username" autofocus />
-            <button type="submit" style="margin-top:1.25rem;">Next</button>
+            <button type="submit" style="margin-top:1.25rem;">${t.next}</button>
           </form>
           <div class="user-guides">
-            <strong>User Guides</strong>
-            <a href="#" onclick="return false;">How to Create Transactions</a>
-            <a href="#" onclick="return false;">How to Generate Payment Advices</a>
-            <a href="#" onclick="return false;">All User Guides</a>
+            <strong>${t.userGuides}</strong>
+            <a href="#" onclick="return false;">${t.howToCreateTransactions}</a>
+            <a href="#" onclick="return false;">${t.howToGeneratePaymentAdvices}</a>
+            <a href="#" onclick="return false;">${t.allUserGuides}</a>
           </div>
           <p class="hint" style="margin-top:1.5rem;">Mock only, nothing checked against anything real. From <code>.userpassmock</code>: username <strong>${escapeAttr(username)}</strong>, password <strong>${escapeAttr(password)}</strong></p>
+          ${authFooterHtml(lang)}
         </div>
       </div>
     </div>`,
   );
 }
 
-function passwordPage(session: Session, error?: string): string {
+function passwordPage(session: Session, error: string | undefined, lang: Lang): string {
   const { username, password } = readUserPassMock();
+  const t = TRANSLATIONS[lang];
   return page(
     "Password",
     `<div class="auth-split">
       ${authLeftPanel()}
       <div class="auth-right">
         <div class="auth-right-inner">
-          <div class="auth-lang">EN</div>
+          ${langToggleHtml(lang, "/password")}
           <h1>SCB Business Anywhere</h1>
           <p class="hint">Signing in as ${session.username}</p>
           ${error ? `<p class="error">${error}</p>` : ""}
           <form method="post" action="/password">
-            <label for="password">Password</label>
+            <input type="hidden" name="language" value="${lang}" />
+            <label for="password">${t.password}</label>
             <input id="password" name="password" type="password" autofocus />
-            <button type="submit" style="margin-top:1.25rem;">Sign In</button>
+            <button type="submit" style="margin-top:1.25rem;">${t.signIn}</button>
           </form>
           <p class="hint" style="margin-top:1.5rem;">Mock only, nothing checked against anything real. From <code>.userpassmock</code>: username <strong>${escapeAttr(username)}</strong>, password <strong>${escapeAttr(password)}</strong></p>
+          ${authFooterHtml(lang)}
         </div>
       </div>
     </div>`,
@@ -242,12 +330,13 @@ function accountSummaryPage(session: Session): string {
   const companyMenu = MOCK_COMPANIES.map(
     (c) => `<button onclick="selectCompany('${c.replace(/'/g, "\\'")}')">${c}</button>`,
   ).join("");
+  const lang = session.language;
 
   return page(
     "Account Summary",
     `${announcementBanner()}
     <div class="topbar">
-      <span>Last Logged in: ${formatLastUpdated(new Date().toISOString())} | EN</span>
+      <span>Last Logged in: ${formatLastUpdated(new Date().toISOString())} | <a href="/account-summary?language=en" style="color:${lang === "en" ? "#fff" : "#bbb"};text-decoration:none;">EN</a> / <a href="/account-summary?language=th" style="color:${lang === "th" ? "#fff" : "#bbb"};text-decoration:none;">ไทย</a></span>
       <span>Welcome ${session.username}</span>
     </div>
     <div class="company-switcher">
@@ -428,19 +517,22 @@ app.get("/login", (req, res) => {
     res.redirect("/password");
     return;
   }
-  res.send(loginPage(session));
+  const lang = resolveLanguage(req.query.language, session);
+  res.send(loginPage(session, undefined, lang));
 });
 
 app.post("/login", (req, res) => {
+  const lang = isLang(req.body.language) ? req.body.language : "th";
   const username = String(req.body.username ?? "").trim();
   if (!username) {
-    res.send(loginPage(undefined, "Username is required."));
+    res.send(loginPage(undefined, "Username is required.", lang));
     return;
   }
   const session = createSession();
   session.username = username;
+  session.language = lang;
   res.cookie(COOKIE_NAME, session.id, { httpOnly: true });
-  res.redirect("/password");
+  res.redirect(`/password?language=${lang}`);
 });
 
 app.get("/password", (req, res) => {
@@ -449,7 +541,9 @@ app.get("/password", (req, res) => {
     res.redirect("/login");
     return;
   }
-  res.send(passwordPage(session));
+  const lang = resolveLanguage(req.query.language, session);
+  session.language = lang;
+  res.send(passwordPage(session, undefined, lang));
 });
 
 app.post("/password", (req, res) => {
@@ -458,14 +552,16 @@ app.post("/password", (req, res) => {
     res.redirect("/login");
     return;
   }
+  const lang = isLang(req.body.language) ? req.body.language : session.language;
+  session.language = lang;
   const password = String(req.body.password ?? "");
   if (!password) {
-    res.send(passwordPage(session, "Password is required."));
+    res.send(passwordPage(session, "Password is required.", lang));
     return;
   }
   session.authenticated = true;
   session.forcedLoggedOut = false;
-  res.redirect("/account-summary");
+  res.redirect(`/account-summary?language=${lang}`);
 });
 
 app.get("/account-summary", (req, res) => {
@@ -479,6 +575,7 @@ app.get("/account-summary", (req, res) => {
     res.redirect("/account-summary");
     return;
   }
+  session.language = resolveLanguage(req.query.language, session);
   res.send(accountSummaryPage(session));
 });
 

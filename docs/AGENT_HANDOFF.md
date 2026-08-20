@@ -3385,7 +3385,7 @@ Read this one first if picking the session back up cold.
 
 
 
-### 2026-08-19 � Codex � AuthBridge overlay docs added
+### 2026-08-19 � Codex � AuthBridge overlay docs added
 
 - Added docs for the mock-first AuthBridge overlay/runtime test after `ff99453 Add mock AuthBridge queue integration` was pushed and runtime-verified.
 - AuthBridge repo location is documented as `D:\WebOperatorAuthBridge`; WebOperator starts it with `docker compose -f docker-compose.yml -f ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up -d --build scb-mock browser-worker-scb-business-anywhere-1 auth-bridge redis minio`.
@@ -3394,3 +3394,50 @@ Read this one first if picking the session back up cold.
 - Safety boundaries are explicit: mock login uses only `credentialRef: scb.mock.demo`; WebOperator must not receive/store/log plaintext passwords; do not run `/secrets/set` from WebOperator; do not use this flow for real SCB login; do not automate OTP/2FA/CAPTCHA/passkey.
 - Cleanup guidance is AuthBridge-only: `docker compose ... stop auth-bridge` then `docker compose ... rm -f auth-bridge`; avoid `docker compose down` unless intentionally stopping the entire stack.
 - Docs-only change; no runtime test needed for this docs commit.
+
+### 2026-08-20 — Claude — SCB mock visual/language fidelity pass (EN/TH)
+
+- Status: Done.
+- Context: `services/scb-mock` gained a language toggle (EN/ไทย) covering
+  the specific string pairs requested (Username/Next/Password/Sign In/
+  User Guides + its 2 links/All User Guides/Terms and Conditions/
+  Security Tips/Privacy Notice) plus a cosmetic footer, closer to the
+  real public SCB Business Anywhere login page's look. Resolution order:
+  `?language=` query (wins) → `session.language` (continuity across
+  login → password → account-summary) → `"th"` (unchanged default) —
+  picked "th" as the default specifically so every existing caller that
+  never passes `?language=` (recordings, `check-transactions.ts`'s
+  `SESSION_EXPIRED` exact-text `"ชื่อผู้ใช้งาน"` detector, AuthBridge's
+  own mock-login flow) sees byte-identical behavior to before this
+  change. Scope was explicitly `services/scb-mock` only — no changes to
+  the real SCB site, AuthBridge, or any credential/secret handling,
+  per the task's own explicit constraints.
+- Files: `services/scb-mock/src/server.ts`, `services/scb-mock/src/
+  sessions.ts` (new `language` field on `Session`), `docs/PROJECT_PLAN.md`
+  decision log.
+- Verified, all against the real rebuilt+restarted `scb-mock` container:
+  `/login?language=en` and `?language=th` (and the bare default) all
+  render the correct strings; a full `POST /login` → `/password` →
+  `POST /password` → `/account-summary` round trip confirmed the chosen
+  language survives all three hops via `session.language`, including a
+  later `/account-summary` request with no query param at all still
+  showing the earlier-chosen language; toggling on `/account-summary`
+  itself works and persists. `#username`/`#password`/`form
+  action="/login"`/`form action="/password"` confirmed byte-identical
+  via direct `curl` inspection. Regression: `record-actions.ts`'s
+  credential guard still correctly REFUSED against the (default-Thai)
+  `/password` page. **AuthBridge's own mock-login job** (`POST /api/
+  lanes/scb-business-anywhere-1/auth-bridge/login-mock`) run for real
+  against the updated mock, completed `state: "authenticated"` through
+  all 5 of its own steps — its selector/state-detection logic (never
+  touched) still works against the changed pages. Grepped the job
+  payload and tracked diff for anything password-shaped — none found.
+  `npx tsc --noEmit` clean in `services/scb-mock`.
+- Next: nothing pending from this task. Separately (not part of this
+  task, flagged for whoever owns AuthBridge): `AUTH_BRIDGE_LANE_ID` in
+  `services/control-panel/src/queue.ts` is hardcoded to
+  `"scb-business-anywhere-1"` (the real, isolated bank lane) even for
+  the "mock" login job — worth confirming the AuthBridge vault never
+  gets a real credential under the `scb.mock.demo` ref, since nothing
+  in the wiring itself prevents that ref from being reused against this
+  same real-lane CDP endpoint later.

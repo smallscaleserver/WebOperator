@@ -42,6 +42,14 @@ export interface Session {
   // form flow, not a single-request shortcut, so record->analyze->run
   // has an actual "form -> confirm -> submit" sequence to capture.
   pendingTransfer: { toAccount: string; amount: number; memo: string } | null;
+  // Visual/language fidelity only -- never affects auth/session logic.
+  // Defaults to "th" so the unmodified default path (no ?language=
+  // param) keeps showing the exact same Thai labels this mock always
+  // has, which check-transactions.ts's SESSION_EXPIRED detector
+  // (exact-text match on "ชื่อผู้ใช้งาน") and any existing recordings
+  // depend on. Set from ?language= on /login, /password, or
+  // /account-summary and carried forward from then on.
+  language: "en" | "th";
 }
 
 // Pure in-memory -- no database, no file on disk, nothing anywhere near
@@ -61,6 +69,7 @@ export function createSession(): Session {
     forcedLoggedOut: false,
     showTimeoutOverlay: false,
     pendingTransfer: null,
+    language: "th",
   };
   sessions.set(id, session);
   return session;
