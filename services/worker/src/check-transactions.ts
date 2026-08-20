@@ -184,8 +184,15 @@ async function runCheck(page: Page): Promise<CheckResult> {
 
   const text = await page.evaluate(() => (document.body ? document.body.innerText : ""));
 
-  const availableMatch = text.match(new RegExp(`${bilingualAlt("availableBalance")}\\s*\\n+\\s*([\\d,]+\\.\\d{2})\\s*THB`));
-  const ledgerMatch = text.match(new RegExp(`${bilingualAlt("ledgerBalance")}\\s*\\n+\\s*([\\d,]+\\.\\d{2})\\s*THB`));
+  // -? -- found live during EN/TH verification: a negative balance (a
+  // real, reachable state, same as any transaction amount) wasn't
+  // matched at all before this, silently returning null instead of the
+  // real figure. Pre-existing gap, not introduced by the bilingual
+  // change; the transaction-row regex below already handled negative
+  // amounts correctly (`-?[\d,]+\.\d{2}`), the balance regexes just
+  // never had the same `-?` prefix.
+  const availableMatch = text.match(new RegExp(`${bilingualAlt("availableBalance")}\\s*\\n+\\s*(-?[\\d,]+\\.\\d{2})\\s*THB`));
+  const ledgerMatch = text.match(new RegExp(`${bilingualAlt("ledgerBalance")}\\s*\\n+\\s*(-?[\\d,]+\\.\\d{2})\\s*THB`));
   // The widget's own "Last Updated: <date>, <time>  Refresh" text --
   // captured as a success signal, not just for display: if this stays
   // identical across consecutive checks (each ~70-105s apart), the

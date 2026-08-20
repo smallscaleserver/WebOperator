@@ -603,7 +603,15 @@ app.post("/login", (req, res) => {
   session.username = username;
   session.language = lang;
   res.cookie(COOKIE_NAME, session.id, { httpOnly: true });
-  res.redirect(`/password?language=${lang}`);
+  // Bare URL, no ?language= -- session.language (just set above) already
+  // carries it forward; GET /password falls back to the session when
+  // the query param is absent (see resolveLanguage()). Found live that
+  // adding ?language= here changed this redirect's URL shape in a way
+  // that broke an external caller's own strict URL check (AuthBridge's
+  // mock-login flow) -- the query param was never actually required for
+  // correctness, so removing it restores the original bare URL with no
+  // loss of continuity.
+  res.redirect("/password");
 });
 
 app.get("/password", (req, res) => {
@@ -632,7 +640,9 @@ app.post("/password", (req, res) => {
   }
   session.authenticated = true;
   session.forcedLoggedOut = false;
-  res.redirect(`/account-summary?language=${lang}`);
+  // Same reasoning as the /login -> /password redirect above -- bare
+  // URL, session.language already carries it forward.
+  res.redirect("/account-summary");
 });
 
 app.get("/account-summary", (req, res) => {

@@ -3512,3 +3512,68 @@ Read this one first if picking the session back up cold.
 - Next: nothing pending from this task. The `AUTH_BRIDGE_LANE_ID`
   hardcoded-to-the-real-lane note from the previous entry still stands
   (not re-checked this round, not part of this task's scope).
+
+### 2026-08-21 (later) — Claude — Closing-verification round: 1 real bug found+fixed, 2 AuthBridge issues found (not fixed, out of scope)
+
+- Status: Done.
+- Context: User asked to re-confirm the previous entry's "closed"
+  status with a live rerun of all 5 checklist items, not just trust
+  the earlier pass. Doing so surfaced a real bug in this task's own
+  scope (fixed) plus two AuthBridge-side issues (diagnosed, explicitly
+  not fixed — AuthBridge is off-limits per this task's own constraints).
+  Full detail in `docs/PROJECT_PLAN.md`'s decision log; summary here.
+- Files: `services/scb-mock/src/server.ts` (removed a redundant
+  `?language=` on 2 internal redirects), `services/worker/src/
+  check-transactions.ts` (`-?` added to both balance regexes),
+  `docs/PROJECT_PLAN.md` decision log.
+- Verified:
+  1. **EN login → check-transactions: pass** (after the fix — first
+     attempt this round returned `availableBalance: null` on a
+     genuinely negative balance, a real pre-existing gap unrelated to
+     bilingual support, fixed and reconfirmed: `-147.03` parsed
+     correctly).
+  2. **TH login → check-transactions: pass**, including the same
+     negative-balance case in Thai (`-78.33`), and the same
+     Terminal-No./Teller-No. bleed-through quirk reproduced
+     consistently in Thai this time too.
+  3. **AuthBridge mock login: did not reach a clean pass this round.**
+     Root-caused two distinct AuthBridge-side issues via live testing
+     (not guessed): (a) AuthBridge's own `detect-after-password` check
+     returns `"unknown"` instead of `"authenticated"` when the landing
+     account-summary page is genuinely Thai (the unchanged original
+     default) — points at an English-only assumption inside
+     AuthBridge's own state detector, only now exposed because
+     account-summary correctly reflects language per this task's own
+     goal (it was 100% hardcoded English before). (b) AuthBridge
+     (`D:\WebOperatorAuthBridge`'s compose overlay) uses `network_mode:
+     "service:browser-worker-scb-business-anywhere-1"` — recreating
+     that browser container for *any* reason (including this project's
+     own `POST /api/lanes/:laneId/restart`) silently orphans
+     AuthBridge's network namespace until AuthBridge itself is also
+     recreated via the overlay command; reproduced this twice live,
+     confirmed via Docker's own "no such container" error on a plain
+     `docker restart`. Neither is caused by this task's diff and
+     neither was fixed, per the explicit "don't touch AuthBridge"
+     constraint — see the decision log entry for exactly what a fix
+     would look like for (a) (mirror `check-transactions.ts`'s own
+     `LABELS` bilingual pattern) and for (b) (a lifecycle/health-check
+     coupling issue to design around, not a one-off flake).
+  4. **Reset Mock Session: pass** (via AuthBridge's own endpoint,
+     multiple times this round, unaffected by any of the above).
+  5. **Secret grep: pass**, both this round's diff and the additional
+     test usernames/passwords typed during verification (all clearly
+     fake, e.g. `closeouttest`/`closeoutpass`) — none appear in any
+     tracked file.
+  `npx tsc --noEmit` clean in both projects.
+- State left behind: SCB lane browser is healthy (verified via
+  `chromeHealth`-style `scbLane1Health.cdpReachable: true`) after this
+  round's restarts. AuthBridge itself was deliberately **not**
+  recreated a third time (to stop compounding container churn) — its
+  live health at the end of this round is `{"ok":false,"error":"fetch
+  failed"}`; one `docker compose -f docker-compose.yml -f
+  ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up
+  -d auth-bridge` away from healthy whenever it's next needed.
+- Next: whoever owns `D:\WebOperatorAuthBridge` should see finding 3(a)
+  (bilingual `detect-after-password`) and 3(b) (network_mode coupling
+  to the SCB lane's browser container) above. Nothing else pending
+  from this task's own scope.
