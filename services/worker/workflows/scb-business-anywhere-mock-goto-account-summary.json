@@ -1,0 +1,7 @@
+{
+  "name": "scb-business-anywhere-mock-goto-account-summary",
+  "siteId": "scb-business-anywhere",
+  "steps": [
+    { "type": "navigate", "params": { "url": "http://scb-mock:3000/account-summary" } }
+  ]
+}

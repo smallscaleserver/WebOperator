@@ -41,8 +41,10 @@ import {
   enqueueAuthBridgeResetMockSession,
   checkAuthBridgeHealth,
   fetchAuthBridgeEvents,
+  enqueueScbMockMonitorCheckOnce,
 } from "./queue.js";
 import { loadState as loadScbMonitorState, setTargetCompany as setScbTargetCompany } from "./scb-monitor.js";
+import { loadState as loadScbMockMonitorState } from "./scb-mock-monitor.js";
 import { getReplayState } from "./replay-engine.js";
 import { getLane } from "./lanes.js";
 import {
@@ -568,6 +570,33 @@ app.post("/api/lanes/scb-business-anywhere-1/monitor/pause", async (_req, res) =
 app.post("/api/lanes/scb-business-anywhere-1/monitor/resume", async (_req, res) => {
   try {
     const jobId = await resumeScbMonitor();
+    res.json({ ok: true, jobId });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+// SCB mock balance/transaction monitor -- deliberately separate route
+// namespace and state file from the real-account monitor above, even
+// though both run through the same isolated lane. Mock-first only:
+// reads whatever check-transactions.ts (EN/TH bilingual) currently
+// sees on that lane's browser, which is scb-mock content once
+// AuthBridge's own "Queue Mock Login" has run (see docs/AGENT_HANDOFF.md).
+// check-once only this round, no scheduler -- browser JS here only
+// ever calls these two WebOperator routes, never AuthBridge/the
+// worker/scb-mock directly.
+app.get("/api/monitors/scb-business-anywhere", async (_req, res) => {
+  try {
+    const state = await loadScbMockMonitorState();
+    res.json({ ok: true, ...state });
+  } catch (err) {
+    res.status(500).json({ ok: false, error: (err as Error).message });
+  }
+});
+
+app.post("/api/monitors/scb-business-anywhere/check-once", async (_req, res) => {
+  try {
+    const jobId = await enqueueScbMockMonitorCheckOnce();
     res.json({ ok: true, jobId });
   } catch (err) {
     res.status(500).json({ ok: false, error: (err as Error).message });

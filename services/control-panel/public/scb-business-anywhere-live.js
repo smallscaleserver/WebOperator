@@ -158,7 +158,7 @@ function renderAuthBridgeEvents() {
     .map((event) => {
       const time = event.createdAt ? new Date(event.createdAt).toLocaleTimeString() : "?";
       const state = event.details?.state ? ` (${event.details.state})` : "";
-      return `<li><strong>${escapeHtml(event.type)}</strong>${escapeHtml(state)} <span class="hint">${escapeHtml(time)} � ${escapeHtml(event.message || "")}</span></li>`;
+      return `<li><strong>${escapeHtml(event.type)}</strong>${escapeHtml(state)} <span class="hint">${escapeHtml(time)} � ${escapeHtml(event.message || "")}</span></li>`;
     })
     .join("");
 }
@@ -175,7 +175,7 @@ async function fetchAuthBridgeEvents() {
     authBridgeEventsAfter = data.nextAfter ?? authBridgeEventsAfter;
     (data.items || []).forEach(applyAuthBridgeEventSummary);
     authBridgeEvents = authBridgeEvents.concat(data.items || []).slice(-20);
-    status.textContent = authBridgeEvents.length ? `Showing ${authBridgeEvents.length} latest safe event(s)` : "Waiting for events�";
+    status.textContent = authBridgeEvents.length ? `Showing ${authBridgeEvents.length} latest safe event(s)` : "Waiting for events…";
     renderAuthBridgeEvents();
     renderAuthBridgeSummary();
   } catch (err) {
@@ -415,6 +415,88 @@ function setMonitorStatusUi(data) {
   }
 }
 
+// --- Balance monitor (mock) -- deliberately separate from the
+// real-account monitor above: own state file, own routes, own UI
+// section, never sends Telegram (see scb-mock-monitor.ts for why).
+// Browser JS here only ever calls WebOperator's own two routes below,
+// never AuthBridge/the worker/scb-mock directly.
+
+function formatMockTransaction(t) {
+  const sign = t.amount < 0 ? "-" : "+";
+  const detail = t.detail ? `<br><span class="hint">${escapeHtml(t.detail)}</span>` : "";
+  return `<div class="hint">${escapeHtml(t.date)} ${escapeHtml(t.time)} — ${escapeHtml(t.description)} — ${sign}${Math.abs(t.amount).toFixed(2)} THB${detail}</div>`;
+}
+
+function setMockMonitorUi(data) {
+  const error = data.lastError || data.error || null;
+
+  const errorEl = document.getElementById("mock-monitor-last-error");
+  if (error) {
+    errorEl.textContent = `Last error: ${error}`;
+    errorEl.style.display = "block";
+  } else {
+    errorEl.style.display = "none";
+  }
+
+  document.getElementById("mock-monitor-last-checked").textContent = `Last checked: ${data.lastCheckedAt || "never"}`;
+  document.getElementById("mock-monitor-page-last-updated").textContent =
+    `Page's own "Last Updated": ${data.pageLastUpdatedText || "—"}`;
+  document.getElementById("mock-monitor-available-balance").textContent =
+    data.availableBalance !== null && data.availableBalance !== undefined ? `${Number(data.availableBalance).toFixed(2)} THB` : "—";
+  document.getElementById("mock-monitor-ledger-balance").textContent =
+    data.ledgerBalance !== null && data.ledgerBalance !== undefined ? `${Number(data.ledgerBalance).toFixed(2)} THB` : "—";
+
+  const txEl = document.getElementById("mock-monitor-transactions");
+  if (!data.latestTransactions || data.latestTransactions.length === 0) {
+    txEl.innerHTML = "<em>(no data yet)</em>";
+  } else {
+    txEl.innerHTML = data.latestTransactions.map(formatMockTransaction).join("");
+  }
+
+  const notifEl = document.getElementById("mock-monitor-notifications");
+  if (!data.notifications || data.notifications.length === 0) {
+    notifEl.innerHTML = "<em>(none yet)</em>";
+  } else {
+    notifEl.innerHTML = data.notifications
+      .slice()
+      .reverse()
+      .map((n) => {
+        const time = n.at ? new Date(n.at).toLocaleTimeString() : "?";
+        const icon = n.type === "balance_changed" ? "💰" : "🔔";
+        return `<div class="hint">${icon} ${escapeHtml(time)} — ${escapeHtml(n.message)}</div>`;
+      })
+      .join("");
+  }
+}
+
+async function fetchMockMonitorStatus() {
+  try {
+    const res = await fetch("/api/monitors/scb-business-anywhere");
+    const data = await res.json();
+    setMockMonitorUi(data.ok ? data : { error: data.error });
+  } catch (err) {
+    console.error("SCB mock monitor status poll failed", err);
+  }
+}
+
+document.getElementById("mock-monitor-check-once-btn").addEventListener("click", async () => {
+  const btn = document.getElementById("mock-monitor-check-once-btn");
+  btn.disabled = true;
+  btn.textContent = "Checking…";
+  try {
+    const res = await fetch("/api/monitors/scb-business-anywhere/check-once", { method: "POST" });
+    const data = await res.json();
+    if (!data.ok) {
+      setMockMonitorUi({ error: data.error || "Request failed" });
+    }
+  } catch (err) {
+    setMockMonitorUi({ error: `Request failed: ${err}` });
+  }
+  btn.disabled = false;
+  btn.textContent = "Check Balance Once";
+  await fetchMockMonitorStatus();
+});
+
 async function fetchMonitorStatus() {
   try {
     const res = await fetch("/api/lanes/scb-business-anywhere-1/monitor");
@@ -621,7 +703,9 @@ fetchStatus();
 fetchAuthBridgeEvents();
 fetchAuthBridgeJobSummary();
 fetchMonitorStatus();
+fetchMockMonitorStatus();
 setInterval(fetchStatus, 3000);
 setInterval(fetchAuthBridgeEvents, 3000);
 setInterval(fetchAuthBridgeJobSummary, 3000);
 setInterval(fetchMonitorStatus, 3000);
+setInterval(fetchMockMonitorStatus, 3000);

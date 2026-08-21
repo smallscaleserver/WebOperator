@@ -20,6 +20,7 @@ import {
   setAutoStopConfig as scbSetAutoStopConfig,
   SCB_MONITOR_JOB_NAME,
 } from "./scb-monitor.js";
+import { checkOnce as scbMockCheckOnce, SCB_MOCK_MONITOR_JOB_NAME } from "./scb-mock-monitor.js";
 import { runRecordingReplay } from "./replay-engine.js";
 import { sendTelegramMessage, sendTelegramPhoto } from "./telegram.js";
 
@@ -260,6 +261,15 @@ export function startWorker(): Worker {
         return {
           ok: state.lastError === null,
           stdout: state.lastError ? "" : `SCB balance check ok — last checked ${state.lastCheckedAt}`,
+          stderr: state.lastError ?? "",
+          steps: [],
+        };
+      }
+      if (job.name === SCB_MOCK_MONITOR_JOB_NAME) {
+        const state = await scbMockCheckOnce();
+        return {
+          ok: state.lastError === null,
+          stdout: state.lastError ? "" : `SCB mock balance check ok — last checked ${state.lastCheckedAt}`,
           stderr: state.lastError ?? "",
           steps: [],
         };
@@ -643,6 +653,11 @@ async function enqueueScbSetAutoStop(autoStopAt: string | null, autoStopMinutes:
 
 export async function enqueueScbMonitorCheckOnce(): Promise<string> {
   const job = await queue.add(SCB_MONITOR_JOB_NAME, {}, JOB_OPTS);
+  return job.id ?? "";
+}
+
+export async function enqueueScbMockMonitorCheckOnce(): Promise<string> {
+  const job = await queue.add(SCB_MOCK_MONITOR_JOB_NAME, {}, JOB_OPTS);
   return job.id ?? "";
 }
 

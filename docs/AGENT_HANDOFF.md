@@ -3807,3 +3807,40 @@ Chromium crash (two independent causes)
   queue.ts, server.ts routes, the live-page UI) -- not done yet this
   round, left for the next pass so this infra fix can land on its own
   first.
+
+### 2026-08-22 (later) -- Claude -- SCB balance-check/notify monitor
+(mock-first) landed
+
+- Status: committed and pushed. All six feature files reviewed
+  individually before staging (diff --stat / diff --name-only /
+  full-diff read of every file) -- confirmed no AuthBridge repo
+  changes, no credential/secret values, no transfer/payment/
+  beneficiary code, nothing outside the balance-monitor feature.
+- Files: `services/control-panel/src/scb-mock-monitor.ts` (new),
+  `queue.ts` (job wiring), `server.ts` (two new routes),
+  `public/scb-business-anywhere-live.html`/`.js` (new "Balance monitor
+  (mock)" card), `services/worker/workflows/scb-business-anywhere-
+  mock-goto-account-summary.json` (new). Full design recap in
+  `docs/PROJECT_PLAN.md`'s "SCB balance-check/notify monitor
+  (mock-first) — landed".
+- Found and fixed in passing: two pre-existing byte-level encoding
+  artifacts in the live.html/.js files (raw Windows-1252 bytes that a
+  prior UTF-8-aware edit had silently turned into `U+FFFD` replacement
+  characters) -- restored to the correct em-dash/ellipsis. Unrelated
+  to the feature, just surfaced in the same diff and was worth fixing
+  rather than committing corrupted text.
+- Verified before commit: `tsc --noEmit` clean in both
+  `services/control-panel` and `services/worker`; `GET /api/monitors/
+  scb-business-anywhere` returns real parsed data; live page serves
+  the new card; keyword scan of recent job payloads and the state file
+  for password/secret/token found only step labels
+  (`type-password`/`needs_password`), never values.
+- Runtime E2E (already covered by the infra-fix entry above, still
+  holds): 5 full Reset -> Login -> Check-Once cycles through the real
+  queue, all clean, container ID stable, AuthBridge ready throughout,
+  real balance/transaction data parsed correctly, notifications
+  deduped.
+- Not done this round (explicitly out of scope, deferred to later per
+  the original feature spec): scheduler/pause/autostop/company-switch
+  for the mock monitor, and rebuilding `browser-worker-chrome`/
+  `browser-worker-firefox` with the same Fluxbox-readiness fix.

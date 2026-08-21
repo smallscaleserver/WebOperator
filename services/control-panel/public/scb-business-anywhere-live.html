@@ -108,7 +108,7 @@
         <button id="auth-bridge-login-mock-btn">Queue Mock Login</button>
         <button id="auth-bridge-reset-mock-btn">Reset Mock Session</button>
       </div>
-      <p class="hint" id="auth-bridge-last-job">Last AuthBridge job: �</p>
+      <p class="hint" id="auth-bridge-last-job">Last AuthBridge job: —</p>
       <div class="panel auth-bridge-summary-card">
         <h3>AuthBridge summary</h3>
         <dl>
@@ -122,9 +122,35 @@
       </div>
       <div class="panel auth-bridge-events-panel">
         <h3>AuthBridge events</h3>
-        <p class="hint" id="auth-bridge-events-status">Waiting for events�</p>
+        <p class="hint" id="auth-bridge-events-status">Waiting for events…</p>
         <ul id="auth-bridge-events-list"><li>(no events yet)</li></ul>
       </div>
+    </section>
+
+    <section>
+      <h2>Balance monitor (mock)</h2>
+      <p class="danger">
+        Mock-first only — reads whatever <code>check-transactions.ts</code>
+        currently sees on this lane's browser, which is <code>scb-mock</code>
+        content once "Queue Mock Login" above has run. Never touches the
+        real SCB site. This card is intentionally separate from the
+        real-account "Balance monitor" section further down this page —
+        do not confuse the two.
+      </p>
+      <div class="row">
+        <button id="mock-monitor-check-once-btn">Check Balance Once</button>
+        <span class="hint" id="mock-monitor-last-checked">Last checked: never</span>
+      </div>
+      <p class="hint" id="mock-monitor-page-last-updated">Page's own "Last Updated": —</p>
+      <p class="error" id="mock-monitor-last-error" style="display:none;"></p>
+      <dl class="analysis-box">
+        <dt>Available Balance</dt><dd id="mock-monitor-available-balance">—</dd>
+        <dt>Ledger Balance</dt><dd id="mock-monitor-ledger-balance">—</dd>
+      </dl>
+      <h3 style="font-size:0.9rem; margin-bottom:0.3rem;">Latest transactions</h3>
+      <div id="mock-monitor-transactions"><em>(no data yet)</em></div>
+      <h3 style="font-size:0.9rem; margin:0.8rem 0 0.3rem;">Notifications (new transactions / balance changes)</h3>
+      <div id="mock-monitor-notifications"><em>(none yet)</em></div>
     </section>
 
     <section>
