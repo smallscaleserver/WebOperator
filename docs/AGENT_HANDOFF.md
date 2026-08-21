@@ -3666,3 +3666,65 @@ Read this one first if picking the session back up cold.
 - Next: lane is stable -- resume the paused SCB balance-monitor
   feature's E2E verification (see the claim entry above), then
   commit/push that feature once it genuinely passes.
+
+### 2026-08-22 -- Claude -- Fix: SCB-lane docker compose run calls now overlay-aware; found a second, separate crash mode
+
+- Status: exec.ts fix committed and verified; balance-monitor feature
+  still NOT committed/pushed (E2E still not fully clean -- see below).
+- Context: resumed the paused balance-monitor E2E per the prior entry.
+  First action (Reset Mock Session -> Queue Mock Login -> auth/state)
+  passed cleanly. Then ran `goto-account-summary` directly via
+  `docker compose run` (the same invocation `exec.ts` uses) and found
+  the SCB lane's browser-worker container got silently recreated --
+  orphaning AuthBridge's network namespace -- on every single such
+  call, not just on manual lane restarts.
+- Root cause: the AuthBridge overlay
+  (`../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml`)
+  adds a `ports:` mapping to `browser-worker-scb-business-anywhere-1`.
+  `exec.ts`'s compose calls never loaded that overlay, so compose saw
+  a different (portless) resolved config for that service on every
+  call and recreated it to match, killing AuthBridge's shared netns
+  each time. This is pre-existing (not introduced by the balance
+  monitor), but the monitor's `checkOnce()` calls two of these
+  functions back to back, so it hit this on effectively every check.
+- Fix (`services/control-panel/src/exec.ts`): detect the overlay file
+  via `existsSync`; when present, prefix every SCB-lane
+  `docker compose run` call (open-login, analyze-page, select-company,
+  check-transactions, mock-reset, mock-goto-account-summary) with
+  `-f docker-compose.yml -f <overlay path>`, and add `--no-deps` to
+  every one of them (previously only mock-reset had it) as a second,
+  independent guard. Falls back to the old bare command when the
+  overlay file isn't present, so nothing changes for a checkout
+  without AuthBridge alongside it. Full root-cause writeup in
+  `docs/PROJECT_PLAN.md`.
+- Verified: with the fix loaded (control-panel server + worker
+  processes restarted to pick it up), the `browser-worker-scb-
+  business-anywhere-1` container ID stayed identical and
+  `authBridgeHealth` stayed `{"ok":true,"readyForLogin":true}` across
+  a `goto-account-summary` run -- before the fix, the same run
+  recreated the container and broke AuthBridge every time.
+- New, separate, NOT fixed finding: immediately after that same run
+  (container correctly *not* recreated this time), Chromium itself
+  died with zero crash trace anywhere (`docker logs`, `/var/log/
+  browser.log`) -- `docker stats` showed ~63MB/6 PIDs, no chromium
+  process, matching the earlier crash-loop's memory signature. This is
+  a *different* failure mode than the already-fixed Fluxbox race: it
+  happened mid-session, right after Chromium had already served CDP
+  successfully (including an AuthBridge login-mock job moments
+  before), not at container startup. This matches the "resource
+  pressure from rapid CDP cycling" hypothesis flagged in the previous
+  entry as still-open -- except this time it fired from a single
+  ordinary job, not rapid manual cycling, so "normal-paced usage
+  doesn't reproduce it" no longer holds as previously stated. Real
+  root cause is still open.
+- Recovery used: `POST /api/lanes/scb-business-anywhere-1/restart`
+  then the documented AuthBridge recreate command -- both lane and
+  AuthBridge back to healthy afterward.
+- Not yet done: root-causing the mid-session Chromium death; balance-
+  monitor E2E is still not verified clean end-to-end because of it.
+- Next: before trusting this lane for unattended/back-to-back checks
+  (which the balance-monitor feature needs), the mid-session crash
+  needs its own root-cause pass -- likely needs the same kind of
+  live, evidence-based debugging as the Fluxbox race (docker stats,
+  manual reproduction, isolating what specifically triggers it).
+  Balance-monitor feature code stays unstaged/uncommitted until then.

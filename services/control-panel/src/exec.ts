@@ -1,4 +1,5 @@
 import { execFile } from "node:child_process";
+import { existsSync } from "node:fs";
 import { promisify } from "node:util";
 import { fileURLToPath } from "node:url";
 import path from "node:path";
@@ -12,6 +13,33 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 // services/control-panel/src -> repo root
 export const REPO_ROOT = path.resolve(__dirname, "../../..");
 const WORKFLOWS_DIR = path.join(REPO_ROOT, "services", "worker", "workflows");
+
+// The separate D:\WebOperatorAuthBridge overlay compose file adds a
+// `ports:` mapping to browser-worker-scb-business-anywhere-1 (so
+// auth-bridge, which joins that container's network namespace via
+// `network_mode: "service:..."`, can be reached). Found live: any
+// `docker compose run` against this lane that resolves its config
+// WITHOUT that overlay sees a different (portless) config for that
+// service and silently recreates it to match -- which orphans
+// auth-bridge's shared network namespace even though nothing
+// meaningful actually changed. Loading the same overlay file here,
+// when present, keeps the resolved config identical to whatever's
+// actually running, so `docker compose run` never has a reason to
+// recreate it. Read once per call (not cached) since compose itself
+// re-resolves config on every invocation anyway, and this is a cheap
+// existsSync -- not a hot path.
+const AUTH_BRIDGE_OVERLAY_PATH = path.resolve(
+  REPO_ROOT,
+  "..",
+  "WebOperatorAuthBridge",
+  "weboperator-compose.overlay.example.yml",
+);
+
+function scbLaneComposePrefix(): string[] {
+  return existsSync(AUTH_BRIDGE_OVERLAY_PATH)
+    ? ["-f", "docker-compose.yml", "-f", AUTH_BRIDGE_OVERLAY_PATH]
+    : [];
+}
 
 export const EXEC_OPTS = { cwd: REPO_ROOT, timeout: 120_000, maxBuffer: 5 * 1024 * 1024 };
 
@@ -224,8 +252,10 @@ const SCB_LANE_SERVICE = "worker-scb-business-anywhere-1";
 export async function runScbOpenLoginPage(): Promise<ActionResult> {
   return execAndParse([
     "compose",
+    ...scbLaneComposePrefix(),
     "run",
     "--rm",
+    "--no-deps",
     "-e",
     "WORKFLOW_NAME=scb-business-anywhere-open-login",
     SCB_LANE_SERVICE,
@@ -236,7 +266,36 @@ export async function runScbOpenLoginPage(): Promise<ActionResult> {
 }
 
 export async function runScbAnalyzePage(): Promise<ActionResult> {
-  return execAndParse(["compose", "run", "--rm", SCB_LANE_SERVICE, "npm", "run", "analyze-page"]);
+  return execAndParse(["compose", ...scbLaneComposePrefix(), "run", "--rm", "--no-deps", SCB_LANE_SERVICE, "npm", "run", "analyze-page"]);
+}
+
+// Mock-monitor-only pre-step (see scb-mock-monitor.ts): AuthBridge's
+// own mock-login job closes/resets the page it was driving once it
+// finishes, so by the time a balance check runs there's nothing open
+// for check-transactions.ts to read -- found live while verifying.
+// This just navigates back to scb-mock's own account-summary URL,
+// relying on the session cookie AuthBridge's login already
+// established (cookies live on the browser context/profile, not the
+// page, so closing/reopening a tab doesn't lose them). If the session
+// genuinely isn't authenticated, scb-mock's own server redirects this
+// straight to /login, which check-transactions.ts already detects and
+// reports as SESSION_EXPIRED -- same safe fallback either way. Never
+// used for the real SCB site (a completely different URL) and never
+// touches check-transactions.ts's own real-lane behavior.
+export async function runScbMockGotoAccountSummary(): Promise<ActionResult> {
+  return execAndParse([
+    "compose",
+    ...scbLaneComposePrefix(),
+    "run",
+    "--rm",
+    "--no-deps",
+    "-e",
+    "WORKFLOW_NAME=scb-business-anywhere-mock-goto-account-summary",
+    SCB_LANE_SERVICE,
+    "npm",
+    "run",
+    "workflow",
+  ]);
 }
 
 export async function runScbSelectCompany(companyName: string): Promise<ActionResult> {
@@ -247,8 +306,10 @@ export async function runScbSelectCompany(companyName: string): Promise<ActionRe
   const companyNameB64 = Buffer.from(companyName, "utf-8").toString("base64");
   return execAndParse([
     "compose",
+    ...scbLaneComposePrefix(),
     "run",
     "--rm",
+    "--no-deps",
     "-e",
     `COMPANY_NAME_B64=${companyNameB64}`,
     SCB_LANE_SERVICE,
@@ -263,7 +324,7 @@ export async function runScbSelectCompany(companyName: string): Promise<ActionRe
 // check -- closes the "re-login resets the active company" gap found
 // empirically, without needing a separate step from the caller.
 export async function runScbCheckBalance(targetCompany?: string | null): Promise<ActionResult> {
-  const args = ["compose", "run", "--rm"];
+  const args = ["compose", ...scbLaneComposePrefix(), "run", "--rm", "--no-deps"];
   if (targetCompany) {
     args.push("-e", `TARGET_COMPANY_B64=${Buffer.from(targetCompany, "utf-8").toString("base64")}`);
   }
@@ -274,6 +335,7 @@ export async function runScbCheckBalance(targetCompany?: string | null): Promise
 export async function runScbMockReset(): Promise<ActionResult> {
   return execAndParse([
     "compose",
+    ...scbLaneComposePrefix(),
     "run",
     "--rm",
     "--no-deps",
