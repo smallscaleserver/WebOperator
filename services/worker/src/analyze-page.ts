@@ -1,4 +1,4 @@
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step } from "./steps.js";
 
 const CDP_URL = process.env.CDP_URL ?? "http://localhost:9222";
@@ -17,22 +17,26 @@ const TEXT_SNIPPET_LIMIT = 2000;
 // blank (about:blank) rather than navigating anywhere.
 async function main(): Promise<void> {
   const browser = await step("connect", () => connectToChromium(CDP_URL));
-  const context = browser.contexts()[0] ?? (await browser.newContext());
-  const page = context.pages()[0] ?? (await context.newPage());
+  try {
+    const context = browser.contexts()[0] ?? (await browser.newContext());
+    const page = context.pages()[0] ?? (await context.newPage());
 
-  const filename = `lane-analysis-${Date.now()}.png`;
-  const result = await step("analyze", async () => {
-    const url = page.url();
-    const title = await page.title();
-    const textSnippet = await page.evaluate(
-      (limit) => (document.body ? document.body.innerText.slice(0, limit) : ""),
-      TEXT_SNIPPET_LIMIT,
-    );
-    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
-    return { url, title, textSnippet, screenshot: filename };
-  });
+    const filename = `lane-analysis-${Date.now()}.png`;
+    const result = await step("analyze", async () => {
+      const url = page.url();
+      const title = await page.title();
+      const textSnippet = await page.evaluate(
+        (limit) => (document.body ? document.body.innerText.slice(0, limit) : ""),
+        TEXT_SNIPPET_LIMIT,
+      );
+      await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
+      return { url, title, textSnippet, screenshot: filename };
+    });
 
-  console.log(`LANE_PAGE_ANALYSIS ${JSON.stringify(result)}`);
+    console.log(`LANE_PAGE_ANALYSIS ${JSON.stringify(result)}`);
+  } finally {
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

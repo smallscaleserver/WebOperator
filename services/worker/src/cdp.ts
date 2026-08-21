@@ -31,3 +31,22 @@ export async function connectToChromium(url: string): Promise<Browser> {
   console.log("Connected to Chromium over CDP.");
   return browser;
 }
+
+// Every script here runs as a one-shot `docker compose run` process:
+// connect, do the job, exit. Found live, reproducibly (18/18 clean runs
+// vs. a crash within 2-3 runs otherwise), that letting the process just
+// exit -- severing the CDP WebSocket abruptly instead of disconnecting
+// through Playwright -- degrades Chromium's own target/session
+// bookkeeping a little further each time; enough repeated abrupt
+// disconnects across separate invocations eventually crashes the whole
+// Chromium process with no trace anywhere (not even a crashpad dump).
+// browser.close() on a connectOverCDP()-obtained Browser only
+// disconnects this client -- confirmed live it does not close the
+// actual Chromium process or affect any existing page/session/cookie
+// state, so calling it here is always safe. Every caller of
+// connectToChromium must call this in a `finally` block before the
+// process exits. See docs/PROJECT_PLAN.md's SCB lane mid-session crash
+// writeup for the full investigation.
+export async function disconnectFromChromium(browser: Browser): Promise<void> {
+  await browser.close().catch(() => {});
+}

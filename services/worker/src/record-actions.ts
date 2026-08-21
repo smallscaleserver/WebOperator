@@ -1,7 +1,7 @@
 import { access, mkdir, rm } from "node:fs/promises";
 import path from "node:path";
 import type { Page } from "playwright-core";
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step } from "./steps.js";
 import { REDACTED_FIELD_SENTINEL } from "./actions/registry.js";
 
@@ -248,6 +248,7 @@ async function main(): Promise<void> {
     throw new Error("RECORDING_RUN_ID env var is required");
   }
   const browser = await step("connect", () => connectToChromium(CDP_URL));
+  try {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = context.pages()[0] ?? (await context.newPage());
 
@@ -316,6 +317,9 @@ async function main(): Promise<void> {
 
   const { steps, redactedCount } = compileSteps(rawEvents);
   console.log(`SCB_RECORDING_RESULT ${JSON.stringify({ steps, redactedCount, eventCount: rawEvents.length })}`);
+  } finally {
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

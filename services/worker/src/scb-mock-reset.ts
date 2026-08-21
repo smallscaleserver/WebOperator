@@ -1,4 +1,4 @@
-﻿import { connectToChromium } from "./cdp.js";
+﻿import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step } from "./steps.js";
 
 const SCB_MOCK_LOGIN_URL = process.env.SCB_MOCK_LOGIN_URL ?? "http://scb-mock:3000/login";
@@ -23,7 +23,7 @@ async function main(): Promise<void> {
     const url = page.url();
     console.log(`SCB_MOCK_RESET ${JSON.stringify({ url, title })}`);
   } finally {
-    await browser.close();
+    await disconnectFromChromium(browser);
   }
 }
 

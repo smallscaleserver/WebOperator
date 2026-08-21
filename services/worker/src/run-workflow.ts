@@ -1,7 +1,7 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step, stepWithRetry, stepBestEffort, type RetryOptions } from "./steps.js";
 import { uploadArtifact } from "./artifacts.js";
 import { ACTION_HANDLERS, type ActionParams } from "./actions/registry.js";
@@ -153,6 +153,7 @@ async function main(): Promise<void> {
   await step("validate", async () => validateWorkflow(workflow));
 
   const browser = await step("connect", () => connectToChromium(CDP_URL));
+  try {
   const context = browser.contexts()[0] ?? (await browser.newContext());
 
   // Close every existing page in the shared context (best-effort -- a
@@ -288,6 +289,9 @@ async function main(): Promise<void> {
   }
 
   console.log(`Workflow "${workflow.name}" completed (${workflow.steps.length} steps).`);
+  } finally {
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

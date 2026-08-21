@@ -3728,3 +3728,82 @@ Read this one first if picking the session back up cold.
   live, evidence-based debugging as the Fluxbox race (docker stats,
   manual reproduction, isolating what specifically triggers it).
   Balance-monitor feature code stays unstaged/uncommitted until then.
+
+### 2026-08-22 -- Claude -- Root-caused and fixed the mid-session
+Chromium crash (two independent causes)
+
+- Status: both fixes committed; balance-monitor feature files
+  themselves (scb-mock-monitor.ts, queue.ts wiring, server.ts routes,
+  the live-page UI) are STILL unstaged/uncommitted -- but the fix
+  finally makes their E2E path verifiable, and it now passes.
+- Method: with the overlay-awareness fix already in place (ruling out
+  netns-orphan as a factor), reproduced the crash via controlled,
+  narrowing isolation tests -- individual AuthBridge jobs, individual
+  workflow runs, tight back-to-back loops, small standalone diagnostic
+  scripts mimicking one specific code path at a time -- checking
+  Chromium's process count/CDP reachability/container ID after every
+  single step until each contributing cause was pinned down and
+  confirmed independently.
+- Cause 1: no worker script ever disconnected from CDP. Every one-shot
+  script (`run-workflow.ts`, `check-transactions.ts`,
+  `analyze-page.ts`, `select-company.ts`, `record-actions.ts`,
+  `restore-session.ts`, `index.ts`, `run-adapter.ts`,
+  `save-session.ts`) connected via `connectToChromium()` then just let
+  the process exit, severing the CDP WebSocket abruptly. Three files
+  even had a comment explicitly justifying this ("Deliberately not
+  calling browser.close()") on the assumption that `browser.close()`
+  after `connectOverCDP()` would kill the real shared Chromium
+  process. Confirmed live, twice, that assumption is wrong for this
+  codebase's usage -- `browser.close()` here only disconnects the
+  client. A tiny diagnostic script without a disconnect crashed
+  Chromium within 2-3 back-to-back runs, reproducibly, twice; the
+  identical script with `browser.close()` in a `finally` block ran
+  18/18 clean.
+- Fix 1: new `disconnectFromChromium(browser)` helper in
+  `services/worker/src/cdp.ts`; every script above now calls it in a
+  `finally` block.
+- Cause 2: independent of cause 1 -- `run-workflow.ts`'s *default*
+  prepare-page behavior (close every existing page, then open a fresh
+  one) is itself a race. Repeating that pattern alone (isolated in its
+  own diagnostic script, disconnect fix already applied) still crashed
+  Chromium within 2-3 runs. Switching to the existing
+  `KEEP_EXISTING_PAGE=1` opt-out (reuse the current page, same pattern
+  check-transactions.ts/analyze-page.ts already use) ran 10/10 clean.
+- Fix 2: `services/control-panel/src/exec.ts`'s
+  `runScbMockGotoAccountSummary()` now passes `-e
+  KEEP_EXISTING_PAGE=1` -- semantically correct anyway, since this
+  workflow always runs against an already-open, already-authenticated
+  lane and never needed a fresh tab.
+- NOT changed: `run-workflow.ts`'s close+reopen default itself, used
+  by every other workflow/lane (including the shared XC Bank monitor).
+  Same latent risk likely applies there under repeated back-to-back
+  use, but fixing the default is a bigger, broader change than this
+  round's SCB-lane-only scope. Flagged for future work, not fixed.
+- Verified end-to-end, for real, through the actual WebOperator API
+  (not just isolated scripts): 5 full cycles of Reset Mock Session ->
+  Queue Mock Login -> Balance Monitor Check Once, back-to-back through
+  the real BullMQ queue (concurrency 1). All 5 completed; container ID
+  of `browser-worker-scb-business-anywhere-1` stayed identical the
+  whole time; CDP stayed reachable; `authBridgeHealth` stayed
+  `{"ok":true,"readyForLogin":true}` throughout; memory stayed flat
+  (~208MB); AuthBridge mock login reached `state: "authenticated"`
+  every time; the balance monitor's own state ended up populated with
+  real parsed balance/transaction data (Thai text intact) and
+  correctly deduplicated notifications; noVNC (127.0.0.1:6090) stayed
+  reachable throughout.
+- Caught and fixed a testing mistake mid-round: an earlier "5 clean
+  cycles" pass looked successful but was actually a false pass -- the
+  queue worker process had failed to start (wrong working directory
+  after a restart) and every job just sat in BullMQ's `waiting` state
+  the whole time, so nothing was actually exercising the browser.
+  Caught by checking `/api/jobs` directly instead of trusting the
+  enqueue response, restarted the worker correctly, and redid the
+  verification for real.
+- Full root-cause writeup: `docs/PROJECT_PLAN.md`, "SCB lane
+  mid-session Chromium crash — root-caused and fixed".
+- Next: the balance-monitor feature's own files are still unstaged.
+  Since its E2E path now genuinely passes, the next step is reviewing
+  and committing/pushing the feature itself (scb-mock-monitor.ts,
+  queue.ts, server.ts routes, the live-page UI) -- not done yet this
+  round, left for the next pass so this infra fix can land on its own
+  first.

@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname } from "node:path";
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step, stepBestEffort } from "./steps.js";
 import { uploadArtifact } from "./artifacts.js";
 
@@ -11,7 +11,7 @@ const MARKER_KEY = "weboperator-marker";
 
 async function main(): Promise<void> {
   const browser = await step("connect", () => connectToChromium(CDP_URL));
-
+  try {
   // Same default context/page as index.ts — the one a human could have
   // manually logged into via noVNC.
   const context = browser.contexts()[0] ?? (await browser.newContext());
@@ -47,7 +47,10 @@ async function main(): Promise<void> {
     uploadArtifact(SESSION_FILE, `sessions/${basename(SESSION_FILE)}`),
   );
 
-  // Deliberately not calling browser.close() — see index.ts.
+  } finally {
+    // See cdp.ts's disconnectFromChromium and run-adapter.ts's comment.
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

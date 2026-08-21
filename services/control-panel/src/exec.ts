@@ -282,6 +282,17 @@ export async function runScbAnalyzePage(): Promise<ActionResult> {
 // reports as SESSION_EXPIRED -- same safe fallback either way. Never
 // used for the real SCB site (a completely different URL) and never
 // touches check-transactions.ts's own real-lane behavior.
+//
+// KEEP_EXISTING_PAGE=1: without it, run-workflow.ts's default
+// "close every existing page, then open one fresh one" prepare-page
+// step is itself a crash trigger, independent of the disconnect fix
+// in cdp.ts -- found live, reproducibly (crashed within 2 back-to-back
+// runs with the close+reopen pattern, 10/10 clean with reuse instead).
+// This workflow runs repeatedly against an already-open, already-
+// authenticated lane, so reusing the existing page (same pattern
+// check-transactions.ts/analyze-page.ts already use) is also the
+// semantically correct choice, not just the safe one. See
+// docs/PROJECT_PLAN.md's SCB lane mid-session crash writeup.
 export async function runScbMockGotoAccountSummary(): Promise<ActionResult> {
   return execAndParse([
     "compose",
@@ -291,6 +302,8 @@ export async function runScbMockGotoAccountSummary(): Promise<ActionResult> {
     "--no-deps",
     "-e",
     "WORKFLOW_NAME=scb-business-anywhere-mock-goto-account-summary",
+    "-e",
+    "KEEP_EXISTING_PAGE=1",
     SCB_LANE_SERVICE,
     "npm",
     "run",

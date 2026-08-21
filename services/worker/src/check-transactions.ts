@@ -1,5 +1,5 @@
 import type { Page } from "playwright-core";
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step } from "./steps.js";
 import { selectCompany } from "./company-switcher.js";
 
@@ -292,27 +292,31 @@ async function runCheck(page: Page): Promise<CheckResult> {
 
 async function main(): Promise<void> {
   const browser = await step("connect", () => connectToChromium(CDP_URL));
-  const context = browser.contexts()[0] ?? (await browser.newContext());
-  const page = context.pages()[0] ?? (await context.newPage());
+  try {
+    const context = browser.contexts()[0] ?? (await browser.newContext());
+    const page = context.pages()[0] ?? (await context.newPage());
 
-  const result = await step("check-transactions", async () => {
-    try {
-      return await runCheck(page);
-    } catch (err) {
-      // Screenshot on *any* failure this step hits, not just the
-      // SESSION_EXPIRED cases -- found empirically that other failure
-      // modes exist too (e.g. a lingering dropdown overlay blocking a
-      // click), and a screenshot is valuable for diagnosing any of
-      // them, not only a suspected-logout scenario. Best-effort: a
-      // failed screenshot still lets the real error through.
-      const filename = `check-failed-${Date.now()}.png`;
-      await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true }).catch(() => {});
-      const message = err instanceof Error ? err.message : String(err);
-      throw new Error(`${message} (screenshot: ${filename})`);
-    }
-  });
+    const result = await step("check-transactions", async () => {
+      try {
+        return await runCheck(page);
+      } catch (err) {
+        // Screenshot on *any* failure this step hits, not just the
+        // SESSION_EXPIRED cases -- found empirically that other failure
+        // modes exist too (e.g. a lingering dropdown overlay blocking a
+        // click), and a screenshot is valuable for diagnosing any of
+        // them, not only a suspected-logout scenario. Best-effort: a
+        // failed screenshot still lets the real error through.
+        const filename = `check-failed-${Date.now()}.png`;
+        await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true }).catch(() => {});
+        const message = err instanceof Error ? err.message : String(err);
+        throw new Error(`${message} (screenshot: ${filename})`);
+      }
+    });
 
-  console.log(`SCB_BALANCE_SUMMARY ${JSON.stringify(result)}`);
+    console.log(`SCB_BALANCE_SUMMARY ${JSON.stringify(result)}`);
+  } finally {
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

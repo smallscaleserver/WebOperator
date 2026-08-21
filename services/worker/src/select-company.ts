@@ -1,4 +1,4 @@
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step } from "./steps.js";
 import { selectCompany } from "./company-switcher.js";
 
@@ -27,21 +27,25 @@ async function main(): Promise<void> {
     throw new Error("COMPANY_NAME_B64 (or COMPANY_NAME) env var is required");
   }
   const browser = await step("connect", () => connectToChromium(CDP_URL));
-  const context = browser.contexts()[0] ?? (await browser.newContext());
-  const page = context.pages()[0] ?? (await context.newPage());
+  try {
+    const context = browser.contexts()[0] ?? (await browser.newContext());
+    const page = context.pages()[0] ?? (await context.newPage());
 
-  const result = await step("select-company", async () => {
-    await selectCompany(page, COMPANY_NAME);
-    const url = page.url();
-    const textSnippet = await page.evaluate(() =>
-      document.body ? document.body.innerText.slice(0, 2000) : "",
-    );
-    const filename = `select-company-${Date.now()}.png`;
-    await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
-    return { url, textSnippet, screenshot: filename };
-  });
+    const result = await step("select-company", async () => {
+      await selectCompany(page, COMPANY_NAME);
+      const url = page.url();
+      const textSnippet = await page.evaluate(() =>
+        document.body ? document.body.innerText.slice(0, 2000) : "",
+      );
+      const filename = `select-company-${Date.now()}.png`;
+      await page.screenshot({ path: `${OUTPUT_DIR}/${filename}`, fullPage: true });
+      return { url, textSnippet, screenshot: filename };
+    });
 
-  console.log(`LANE_PAGE_ANALYSIS ${JSON.stringify(result)}`);
+    console.log(`LANE_PAGE_ANALYSIS ${JSON.stringify(result)}`);
+  } finally {
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 

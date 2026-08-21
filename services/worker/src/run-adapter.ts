@@ -1,6 +1,6 @@
 import { mkdir } from "node:fs/promises";
 import { basename, dirname } from "node:path";
-import { connectToChromium } from "./cdp.js";
+import { connectToChromium, disconnectFromChromium } from "./cdp.js";
 import { step, stepBestEffort } from "./steps.js";
 import { uploadArtifact } from "./artifacts.js";
 import {
@@ -16,7 +16,7 @@ const SESSION_FILE = process.env.SESSION_FILE ?? "/app/sessions/the-internet.jso
 
 async function main(): Promise<void> {
   const browser = await step("connect", () => connectToChromium(CDP_URL));
-
+  try {
   const context = browser.contexts()[0] ?? (await browser.newContext());
   const page = context.pages()[0] ?? (await context.newPage());
 
@@ -57,7 +57,15 @@ async function main(): Promise<void> {
     uploadArtifact(screenshotPath, "screenshots/the-internet-secure.png"),
   );
 
-  // Deliberately not calling browser.close() — see index.ts.
+  } finally {
+    // See cdp.ts's disconnectFromChromium: this only disconnects the
+    // client, confirmed live it does not close the actual Chromium
+    // process. Previously this comment said "deliberately not calling
+    // browser.close()" out of a (disproven) fear it would kill the
+    // shared browser -- skipping it was actually what silently
+    // degraded Chromium across repeated runs until it crashed.
+    await disconnectFromChromium(browser);
+  }
   process.exit(0);
 }
 
