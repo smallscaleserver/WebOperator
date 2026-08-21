@@ -50,6 +50,27 @@ echo "Starting Fluxbox"
 fluxbox >/var/log/fluxbox.log 2>&1 &
 PIDS="$PIDS $!"
 
+# Give Fluxbox a moment to actually register as the window manager
+# (sets the standard EWMH _NET_SUPPORTING_WM_CHECK root property once
+# ready) before launching the browser -- found live, via a real crash
+# loop on the scb-business-anywhere-1 lane, that Chromium's own
+# --start-maximized/--window-position=0,0 flags need a window manager
+# that's actually ready to negotiate window placement; launching
+# Chromium immediately after merely backgrounding Fluxbox (no
+# readiness check existed here before, unlike Xvfb's own xdpyinfo poll
+# just above) is a real race -- Chromium exits silently and immediately
+# if it loses that race, with no crash trace in its own log and no
+# error surfaced anywhere in this script. Confirmed directly: manually
+# launching Chromium against an already-settled Fluxbox worked and
+# stayed up 60+s every time; launching it in the immediate aftermath
+# of `fluxbox &` intermittently didn't.
+for i in $(seq 1 20); do
+  if xprop -root _NET_SUPPORTING_WM_CHECK >/dev/null 2>&1; then
+    break
+  fi
+  sleep 0.5
+done
+
 mkdir -p /data/profile
 
 # Each container run is a fresh host identity (new hostname/PID namespace),

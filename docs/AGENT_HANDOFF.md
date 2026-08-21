@@ -3577,3 +3577,92 @@ Read this one first if picking the session back up cold.
   (bilingual `detect-after-password`) and 3(b) (network_mode coupling
   to the SCB lane's browser container) above. Nothing else pending
   from this task's own scope.
+
+### 2026-08-21 (later) — Claude — Claiming: SCB mock balance-check/notify monitor
+
+- Status: In progress
+- Context: **Claiming** a new mock-first balance-check/notify monitor
+  for `scb-business-anywhere` (deliberately distinct key/state/routes
+  from the real-account monitor, even though both share the same
+  isolated lane) -- reuses `check-transactions.ts` (already EN/TH
+  bilingual) against whatever page AuthBridge's own "Queue Mock Login"
+  puts on that lane's browser. D:\WebOperator only, D:\WebOperatorAuthBridge
+  untouched, mock-first only, no new credential/secret handling, no
+  OTP/2FA/CAPTCHA/passkey automation, no transfer/payment, browser JS
+  never calls AuthBridge/the worker/scb-mock directly -- only
+  WebOperator's own routes/queue.
+- Files (in progress): new `services/control-panel/src/scb-mock-monitor.ts`,
+  `queue.ts` (new `scb-business-anywhere-check-once` job), `server.ts`
+  (new `GET /api/monitors/scb-business-anywhere` +
+  `POST /api/monitors/scb-business-anywhere/check-once`),
+  `public/scb-business-anywhere-live.html` + `.js` (new "Balance
+  monitor (mock)" card).
+- Verified so far: `tsc --noEmit` clean in `services/control-panel` and
+  `services/worker`; the new `GET` route responds with a fresh empty
+  state after a clean restart.
+- Next: full runtime verification (reset -> mock login -> check once ->
+  inject a transaction -> check again -> confirm dedup), EN+TH if
+  practical, secret grep, AuthBridge mock login/reset regression,
+  update `docs/PROJECT_PLAN.md`, mark this entry Done, commit + push.
+- **UPDATE (same day, later): paused, NOT committed/pushed.** Runtime
+  verification above kept failing in a way that wasn't this feature's
+  own code -- the SCB lane's browser was crash-looping (see the new
+  incident entry right below this one). Per explicit instruction, this
+  feature's code stays uncommitted in the working tree until the lane
+  is stable and a real E2E pass is possible; do not push it before
+  then. All files listed above are still present, untouched, on disk.
+
+### 2026-08-21 (later still) — Claude — Incident: browser-worker-scb-business-anywhere-1 crash loop, root-caused and fixed
+
+- Status: Done.
+- Context: Blocked the balance-monitor feature above -- paused that
+  work and treated this as its own incident, per explicit instruction,
+  separate from any feature code. Full root-cause writeup in
+  `docs/PROJECT_PLAN.md`'s decision log; summary here.
+- Root cause: `entrypoint.sh` starts Fluxbox and launches Chromium
+  (`--start-maximized --window-position=0,0`, flags that need a ready
+  window manager) immediately after, with **no readiness wait** --
+  unlike Xvfb just above it, which already polls `xdpyinfo` first. If
+  Fluxbox hasn't finished registering as the window manager yet,
+  Chromium loses that race and exits immediately and silently -- no
+  crash trace anywhere (confirmed: `docker stats` showed ~65MB usage,
+  well below a real running Chromium's footprint, and manually running
+  the exact same `chromium ...` command against an *already-settled*
+  Fluxbox stayed up cleanly every time).
+- Fix: `services/browser-worker/entrypoint.sh` now polls
+  `xprop -root _NET_SUPPORTING_WM_CHECK` (up to 10s) before launching
+  the browser, same style as the existing Xvfb readiness poll.
+- Files: `services/browser-worker/entrypoint.sh`,
+  `docs/PROJECT_PLAN.md` decision log.
+- Verified live, per the requested checklist: lane health green
+  (`cdpReachable: true`, `status: healthy`) across 3 rapid restart
+  cycles in a row (the exact scenario that reliably crashed before);
+  Chromium process count stable across a full unattended 60+s watch,
+  repeated; noVNC reachable; AuthBridge health `ready` after being
+  recreated via its own documented overlay command
+  (`docker compose -f docker-compose.yml -f
+  ../WebOperatorAuthBridge/weboperator-compose.overlay.example.yml up
+  -d auth-bridge` -- D:\WebOperatorAuthBridge itself untouched, only
+  restarted/recreated as explicitly permitted); AuthBridge mock login
+  reached `state: "authenticated"` for real; Reset Mock Session
+  completed correctly; a direct `check-transactions.ts` run connected
+  cleanly (no CDP timeout) and reported a real page state, not a
+  crash.
+- Separate, still-open finding (not fixed this round, already flagged
+  earlier this session): several *rapid, back-to-back* diagnostic
+  `docker compose run` calls (well beyond normal usage pacing) did
+  reproduce a Chromium death again, with a different shape (dies
+  mid-session after running fine for a while, not immediately on
+  startup) -- consistent with the previously-noted, still-unverified
+  "resource pressure from rapid CDP cycling" hypothesis. Normal-paced
+  usage (the way the real UI/queue naturally paces things, serialized
+  through one BullMQ queue at concurrency 1) did not reproduce it in
+  this round's testing.
+- Not yet done: `browser-worker-chrome`/`browser-worker-firefox` build
+  from the *same* Dockerfile/entrypoint.sh and carry the same latent
+  race (never yet observed crashing there, but that doesn't rule it
+  out) -- only the SCB lane's image was rebuilt this round. Worth
+  rebuilding those two at a convenient point too.
+- Next: lane is stable -- resume the paused SCB balance-monitor
+  feature's E2E verification (see the claim entry above), then
+  commit/push that feature once it genuinely passes.
